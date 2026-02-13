@@ -302,73 +302,83 @@ export async function shareInvoiceViaWhatsApp(
   items: SaleItem[],
   customerPhone: string
 ): Promise<void> {
-  const pdfBlob = await generateInvoicePDF(sale, items);
-  const fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
+  try {
+    const pdfBlob = await generateInvoicePDF(sale, items);
+    const fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
 
-  let cleanPhone = customerPhone.replace(/[^0-9]/g, '');
-  if (cleanPhone.startsWith('00')) {
-    cleanPhone = cleanPhone.slice(2);
-  } else if (cleanPhone.startsWith('0')) {
-    cleanPhone = '966' + cleanPhone.slice(1);
-  } else if (!cleanPhone.startsWith('966')) {
-    cleanPhone = '966' + cleanPhone;
-  }
+    let cleanPhone = customerPhone.replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('00')) {
+      cleanPhone = cleanPhone.slice(2);
+    } else if (cleanPhone.startsWith('0')) {
+      cleanPhone = '966' + cleanPhone.slice(1);
+    } else if (!cleanPhone.startsWith('966')) {
+      cleanPhone = '966' + cleanPhone;
+    }
 
-  const { data: settings } = await supabase
-    .from('settings')
-    .select('business_whatsapp')
-    .eq('id', 1)
-    .maybeSingle();
+    const { data: settings } = await supabase
+      .from('settings')
+      .select('business_whatsapp')
+      .eq('id', 1)
+      .maybeSingle();
 
-  const businessWhatsApp = settings?.business_whatsapp || '966XXXXXXXXX';
-  let cleanBusinessPhone = businessWhatsApp.replace(/[^0-9]/g, '');
-  if (cleanBusinessPhone.startsWith('00')) {
-    cleanBusinessPhone = cleanBusinessPhone.slice(2);
-  } else if (cleanBusinessPhone.startsWith('0')) {
-    cleanBusinessPhone = '966' + cleanBusinessPhone.slice(1);
-  } else if (!cleanBusinessPhone.startsWith('966')) {
-    cleanBusinessPhone = '966' + cleanBusinessPhone;
-  }
+    const businessWhatsApp = settings?.business_whatsapp || '966XXXXXXXXX';
+    let cleanBusinessPhone = businessWhatsApp.replace(/[^0-9]/g, '');
+    if (cleanBusinessPhone.startsWith('00')) {
+      cleanBusinessPhone = cleanBusinessPhone.slice(2);
+    } else if (cleanBusinessPhone.startsWith('0')) {
+      cleanBusinessPhone = '966' + cleanBusinessPhone.slice(1);
+    } else if (!cleanBusinessPhone.startsWith('966')) {
+      cleanBusinessPhone = '966' + cleanBusinessPhone;
+    }
 
-  const messageText = `📄 مرفق لكم فاتورة BLOOV رقم ${sale.sale_number}
+    const messageText = `📄 مرفق لكم فاتورة BLOOV رقم ${sale.sale_number}
 💰 المجموع: ${sale.total.toFixed(2)} ر.س (شامل ضريبة القيمة المضافة 15%)
 🌸 شكراً لثقتكم بنا.
 📲 للتواصل السريع: https://wa.me/${cleanBusinessPhone}`;
 
-  if (navigator.share && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-    try {
-      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+    let shareSuccessful = false;
 
-      const shareData: ShareData = {
-        title: `Invoice ${sale.sale_number}`,
-        text: messageText,
-        files: [file]
-      };
+    if (navigator.share && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      try {
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
-      if (navigator.canShare && navigator.canShare(shareData)) {
-        await navigator.share(shareData);
-        return;
+        const shareData: ShareData = {
+          title: `Invoice ${sale.sale_number}`,
+          text: messageText,
+          files: [file]
+        };
+
+        if (navigator.canShare && navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          shareSuccessful = true;
+          return;
+        }
+      } catch (error) {
+        console.log('Web Share API not available or failed, using fallback');
       }
-    } catch (error) {
-      console.error('Error sharing via Web Share API:', error);
     }
+
+    if (!shareSuccessful) {
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setTimeout(() => {
+        const fallbackMessage = `${messageText}\n\n✅ تم تنزيل الفاتورة، يرجى إرفاقها يدوياً في WhatsApp`;
+        const message = encodeURIComponent(fallbackMessage);
+        const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
+        window.open(whatsappUrl, '_blank');
+      }, 500);
+    }
+  } catch (error) {
+    console.error('Error in shareInvoiceViaWhatsApp:', error);
+    throw error;
   }
-
-  const url = URL.createObjectURL(pdfBlob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-
-  setTimeout(() => {
-    const fallbackMessage = `${messageText}\n\nتم تنزيل الفاتورة، يرجى سحبها وإفلاتها في WhatsApp`;
-    const message = encodeURIComponent(fallbackMessage);
-    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
-    window.open(whatsappUrl, '_blank');
-  }, 500);
 }
 
 export async function downloadInvoicePDF(sale: Sale, items: SaleItem[]): Promise<void> {

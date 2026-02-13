@@ -351,7 +351,9 @@ export function Sales() {
       await shareInvoiceViaWhatsApp(sale, formattedItems, phone);
     } catch (error) {
       console.error('Error sharing invoice:', error);
-      alert(isRTL ? 'حدث خطأ أثناء مشاركة الفاتورة' : 'Error sharing invoice');
+      alert(isRTL
+        ? 'حدث خطأ أثناء إنشاء الفاتورة. يرجى المحاولة مرة أخرى أو تحميل الفاتورة PDF يدوياً.'
+        : 'Error generating invoice. Please try again or download the PDF manually.');
     }
   };
 
