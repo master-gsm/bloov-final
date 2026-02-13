@@ -50,10 +50,23 @@ export function Settings() {
 
   const loadSettings = async () => {
     try {
-      const { data, error } = await supabase.from('settings').select('key, value');
-      if (error) throw error;
+      const { data: keyValueSettings, error: kvError } = await supabase.from('settings').select('key, value');
+      const { data: globalSettings, error: gsError } = await supabase
+        .from('settings')
+        .select('salla_api_key, business_whatsapp')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (kvError && kvError.code !== 'PGRST116') throw kvError;
+
       const map: SettingsMap = {};
-      data?.forEach(row => { map[row.key] = row.value; });
+      keyValueSettings?.forEach(row => { map[row.key] = row.value; });
+
+      if (globalSettings) {
+        if (globalSettings.salla_api_key) map['salla_api_key'] = globalSettings.salla_api_key;
+        if (globalSettings.business_whatsapp) map['business_whatsapp'] = globalSettings.business_whatsapp;
+      }
+
       setSettings(map);
     } catch (err) {
       console.error('Error loading settings:', err);
@@ -70,14 +83,31 @@ export function Settings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const updates = Object.entries(settings).map(([key, value]) => ({
-        key,
-        value,
-        updated_by: user?.id,
-        updated_at: new Date().toISOString(),
-      }));
+      const globalSettingsKeys = ['salla_api_key', 'business_whatsapp'];
+      const globalSettingsUpdate: any = {};
+      const keyValueUpdates: any[] = [];
 
-      for (const update of updates) {
+      Object.entries(settings).forEach(([key, value]) => {
+        if (globalSettingsKeys.includes(key)) {
+          globalSettingsUpdate[key] = value;
+        } else {
+          keyValueUpdates.push({
+            key,
+            value,
+            updated_by: user?.id,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      });
+
+      if (Object.keys(globalSettingsUpdate).length > 0) {
+        await supabase
+          .from('settings')
+          .update(globalSettingsUpdate)
+          .eq('id', 1);
+      }
+
+      for (const update of keyValueUpdates) {
         await supabase
           .from('settings')
           .upsert(update, { onConflict: 'key' });
@@ -331,6 +361,14 @@ export function Settings() {
             <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
               <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'معلومات التواصل' : 'Contact Information'}</h3>
               {renderInput('business_phone', 'Phone', 'رقم الهاتف', { dir: 'ltr' })}
+              <div>
+                {renderInput('business_whatsapp', 'WhatsApp Number', 'رقم واتساب للتواصل', { dir: 'ltr', placeholder: '966501234567' })}
+                <p className="text-xs text-gray-500 mt-1">
+                  {isRTL
+                    ? 'سيظهر في الفواتير المرسلة للعملاء. استخدم الرقم بصيغة دولية (مثال: 966501234567)'
+                    : 'Will appear in invoices sent to customers. Use international format (e.g., 966501234567)'}
+                </p>
+              </div>
               {renderInput('business_address', 'Address', 'العنوان', { dir: 'ltr' })}
               {renderInput('business_address_ar', 'Address (Arabic)', 'العنوان (عربي)', { dir: 'rtl' })}
               {renderInput('business_city', 'City', 'المدينة', { dir: 'ltr' })}

@@ -314,13 +314,34 @@ export async function shareInvoiceViaWhatsApp(
     cleanPhone = '966' + cleanPhone;
   }
 
+  const { data: settings } = await supabase
+    .from('settings')
+    .select('business_whatsapp')
+    .eq('id', 1)
+    .maybeSingle();
+
+  const businessWhatsApp = settings?.business_whatsapp || '966XXXXXXXXX';
+  let cleanBusinessPhone = businessWhatsApp.replace(/[^0-9]/g, '');
+  if (cleanBusinessPhone.startsWith('00')) {
+    cleanBusinessPhone = cleanBusinessPhone.slice(2);
+  } else if (cleanBusinessPhone.startsWith('0')) {
+    cleanBusinessPhone = '966' + cleanBusinessPhone.slice(1);
+  } else if (!cleanBusinessPhone.startsWith('966')) {
+    cleanBusinessPhone = '966' + cleanBusinessPhone;
+  }
+
+  const messageText = `📄 مرفق لكم فاتورة BLOOV رقم ${sale.sale_number}
+💰 المجموع: ${sale.total.toFixed(2)} ر.س (شامل ضريبة القيمة المضافة 15%)
+🌸 شكراً لثقتكم بنا.
+📲 للتواصل السريع: https://wa.me/${cleanBusinessPhone}`;
+
   if (navigator.share && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
     try {
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
       const shareData: ShareData = {
         title: `Invoice ${sale.sale_number}`,
-        text: `مرحباً 👋\nشكراً لتسوقك في BLOOV 🌸\n📄 رقم الفاتورة: ${sale.sale_number}\n💰 المجموع: ${sale.total.toFixed(2)} ر.س\nشامل ضريبة القيمة المضافة 15%`,
+        text: messageText,
         files: [file]
       };
 
@@ -343,9 +364,8 @@ export async function shareInvoiceViaWhatsApp(
   URL.revokeObjectURL(url);
 
   setTimeout(() => {
-    const message = encodeURIComponent(
-      `مرحباً 👋\nشكراً لتسوقك في BLOOV 🌸\n📄 رقم الفاتورة: ${sale.sale_number}\n💰 المجموع: ${sale.total.toFixed(2)} ر.س\nشامل ضريبة القيمة المضافة 15%\n\nتم تنزيل الفاتورة، يرجى سحبها وإفلاتها في WhatsApp`
-    );
+    const fallbackMessage = `${messageText}\n\nتم تنزيل الفاتورة، يرجى سحبها وإفلاتها في WhatsApp`;
+    const message = encodeURIComponent(fallbackMessage);
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
     window.open(whatsappUrl, '_blank');
   }, 500);
