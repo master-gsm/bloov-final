@@ -26,26 +26,22 @@ interface Sale {
 
 interface CompanyInfo {
   name: string;
-  nameAr: string;
   vatNumber: string;
   address: string;
-  addressAr: string;
   phone: string;
   email: string;
 }
 
 const COMPANY_INFO: CompanyInfo = {
   name: 'BLOOV',
-  nameAr: 'بلوف',
   vatNumber: '300000000000003',
   address: 'Riyadh, Saudi Arabia',
-  addressAr: 'الرياض، المملكة العربية السعودية',
   phone: '+966 XX XXX XXXX',
   email: 'info@bloov.com'
 };
 
 function generateZATCAQRCode(sale: Sale, companyInfo: CompanyInfo): string {
-  const sellerName = companyInfo.nameAr;
+  const sellerName = companyInfo.name;
   const vatNumber = companyInfo.vatNumber;
   const timestamp = new Date(sale.sale_date).toISOString();
   const totalWithVAT = sale.total.toFixed(2);
@@ -90,17 +86,14 @@ export async function generateInvoicePDF(
     pdf.setFontSize(28);
     pdf.setFont('helvetica', 'bold');
     pdf.text('BLOOV', margin, 15);
-    pdf.setFontSize(16);
-    pdf.text('BLOOV', margin, 25);
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('Elegant Flowers & Gifts', margin, 25);
 
-  pdf.setFontSize(10);
-  pdf.setFont('helvetica', 'normal');
-  pdf.text('Elegant Flowers & Gifts', margin, 30);
+    pdf.setFillColor(255, 255, 255);
+    pdf.setTextColor(0, 0, 0);
 
-  pdf.setFillColor(255, 255, 255);
-  pdf.setTextColor(0, 0, 0);
-
-  yPos = 45;
+    yPos = 45;
 
     pdf.setFontSize(18);
     pdf.setFont('helvetica', 'bold');
@@ -298,7 +291,10 @@ export async function shareInvoiceViaWhatsApp(
   customerPhone: string
 ): Promise<void> {
   try {
+    console.log('Starting PDF generation...');
     const pdfBlob = await generateInvoicePDF(sale, items);
+    console.log('PDF generated successfully, size:', pdfBlob.size);
+
     const fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
 
     let cleanPhone = customerPhone.replace(/[^0-9]/g, '');
@@ -326,16 +322,17 @@ export async function shareInvoiceViaWhatsApp(
       cleanBusinessPhone = '966' + cleanBusinessPhone;
     }
 
-    const messageText = `📄 مرفق لكم فاتورة BLOOV رقم ${sale.sale_number}
-💰 المجموع: ${sale.total.toFixed(2)} ر.س (شامل ضريبة القيمة المضافة 15%)
-🌸 شكراً لثقتكم بنا.
-📲 للتواصل السريع: https://wa.me/${cleanBusinessPhone}`;
+    const messageText = `BLOOV Invoice #${sale.sale_number}
+Total: ${sale.total.toFixed(2)} SAR (Including 15% VAT)
+Thank you for your business!
+Contact us: https://wa.me/${cleanBusinessPhone}`;
 
     let shareSuccessful = false;
 
-    if (navigator.share && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    if (navigator.share) {
       try {
         const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        console.log('File created:', file.name, file.size, file.type);
 
         const shareData: ShareData = {
           title: `Invoice ${sale.sale_number}`,
@@ -344,12 +341,21 @@ export async function shareInvoiceViaWhatsApp(
         };
 
         if (navigator.canShare && navigator.canShare(shareData)) {
+          console.log('Share API available, opening share dialog...');
           await navigator.share(shareData);
           shareSuccessful = true;
+          console.log('Share successful!');
+          return;
+        } else {
+          console.log('Cannot share with files, falling back...');
+        }
+      } catch (error: any) {
+        console.error('Share API error:', error);
+        if (error.name !== 'AbortError') {
+          console.log('Using fallback due to error');
+        } else {
           return;
         }
-      } catch (error) {
-        console.log('Web Share API not available or failed, using fallback');
       }
     }
 
