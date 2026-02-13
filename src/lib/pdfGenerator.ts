@@ -1,5 +1,6 @@
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
+import { supabase } from './supabase';
 
 interface SaleItem {
   product_name: string;
