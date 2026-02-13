@@ -21,31 +21,46 @@ interface SidebarProps {
   setActiveSection: (section: string) => void;
 }
 
+const MENU_ACCESS: Record<string, string[]> = {
+  dashboard: ['admin', 'viewer'],
+  sales: ['admin', 'accountant', 'salesperson', 'viewer'],
+  purchases: ['admin', 'accountant', 'viewer'],
+  expenses: ['admin', 'accountant', 'viewer'],
+  products: ['admin', 'accountant', 'salesperson', 'viewer'],
+  inventory: ['admin', 'accountant', 'salesperson', 'viewer'],
+  customers: ['admin', 'accountant', 'viewer'],
+  suppliers: ['admin', 'accountant', 'viewer'],
+  partners: ['admin', 'viewer'],
+  cashregister: ['admin', 'accountant', 'viewer'],
+  reports: ['admin', 'accountant', 'viewer'],
+  users: ['admin'],
+  settings: ['admin'],
+};
+
 export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
   const { t, isRTL } = useLanguage();
-  const { hasPermission, isAdmin } = useAuth();
+  const { profile } = useAuth();
 
   const menuItems = [
-    { id: 'dashboard', icon: LayoutDashboard, label: t('nav.dashboard'), permission: 'admin_only' },
-    { id: 'sales', icon: ShoppingCart, label: t('nav.sales'), permission: 'view_sales' },
-    { id: 'purchases', icon: ShoppingBag, label: t('nav.purchases'), permission: 'view_purchases' },
-    { id: 'expenses', icon: Receipt, label: isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses', permission: 'view_purchases' },
-    { id: 'products', icon: Package, label: t('nav.products'), permission: 'view_inventory' },
-    { id: 'inventory', icon: Warehouse, label: t('nav.inventory'), permission: 'view_inventory' },
-    { id: 'customers', icon: Users, label: t('nav.customers'), permission: 'view_customers' },
-    { id: 'suppliers', icon: Truck, label: t('nav.suppliers'), permission: 'view_suppliers' },
-    { id: 'partners', icon: UsersRound, label: t('nav.partners'), permission: 'admin_only' },
-    { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register', permission: 'view_cash_register' },
-    { id: 'reports', icon: FileText, label: t('nav.reports'), permission: 'view_reports' },
-    { id: 'users', icon: UserCog, label: t('nav.users'), permission: 'manage_users' },
-    { id: 'settings', icon: Settings, label: t('nav.settings'), permission: 'manage_settings' },
+    { id: 'dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
+    { id: 'sales', icon: ShoppingCart, label: t('nav.sales') },
+    { id: 'purchases', icon: ShoppingBag, label: t('nav.purchases') },
+    { id: 'expenses', icon: Receipt, label: isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses' },
+    { id: 'products', icon: Package, label: t('nav.products') },
+    { id: 'inventory', icon: Warehouse, label: t('nav.inventory') },
+    { id: 'customers', icon: Users, label: t('nav.customers') },
+    { id: 'suppliers', icon: Truck, label: t('nav.suppliers') },
+    { id: 'partners', icon: UsersRound, label: t('nav.partners') },
+    { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
+    { id: 'reports', icon: FileText, label: t('nav.reports') },
+    { id: 'users', icon: UserCog, label: t('nav.users') },
+    { id: 'settings', icon: Settings, label: t('nav.settings') },
   ];
 
   const visibleItems = menuItems.filter(item => {
-    if (item.permission === 'admin_only') {
-      return isAdmin;
-    }
-    return item.permission === null || hasPermission(item.permission);
+    const allowedRoles = MENU_ACCESS[item.id];
+    if (!allowedRoles || !profile) return false;
+    return allowedRoles.includes(profile.role);
   });
 
   return (

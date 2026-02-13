@@ -3,7 +3,7 @@ import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 interface UserProfile {
-  role: 'admin' | 'accountant' | 'viewer' | 'observer';
+  role: 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer';
   permissions: Record<string, boolean>;
 }
 
@@ -16,6 +16,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   hasPermission: (key: string) => boolean;
   isAdmin: boolean;
+  isViewer: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -80,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isAdmin = profile?.role === 'admin';
+  const isViewer = profile?.role === 'viewer';
 
   const hasPermission = (key: string): boolean => {
     if (isAdmin) return true;
@@ -87,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, hasPermission, isAdmin }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, hasPermission, isAdmin, isViewer }}>
       {children}
     </AuthContext.Provider>
   );

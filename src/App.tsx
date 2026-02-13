@@ -22,20 +22,20 @@ import { Settings } from './components/Settings';
 import { CashRegister } from './components/CashRegister';
 import { supabase } from './lib/supabase';
 
-const SECTION_PERMISSIONS: Record<string, string | null> = {
-  dashboard: 'admin_only',
-  sales: 'view_sales',
-  purchases: 'view_purchases',
-  expenses: 'view_purchases',
-  products: 'view_inventory',
-  inventory: 'view_inventory',
-  customers: 'view_customers',
-  suppliers: 'view_suppliers',
-  partners: 'admin_only',
-  cashregister: 'view_cash_register',
-  reports: 'view_reports',
-  users: 'manage_users',
-  settings: 'manage_settings',
+const SECTION_PERMISSIONS: Record<string, string[]> = {
+  dashboard: ['admin', 'viewer'],
+  sales: ['admin', 'accountant', 'salesperson', 'viewer'],
+  purchases: ['admin', 'accountant', 'viewer'],
+  expenses: ['admin', 'accountant', 'viewer'],
+  products: ['admin', 'accountant', 'salesperson', 'viewer'],
+  inventory: ['admin', 'accountant', 'salesperson', 'viewer'],
+  customers: ['admin', 'accountant', 'viewer'],
+  suppliers: ['admin', 'accountant', 'viewer'],
+  partners: ['admin', 'viewer'],
+  cashregister: ['admin', 'accountant', 'viewer'],
+  reports: ['admin', 'accountant', 'viewer'],
+  users: ['admin'],
+  settings: ['admin'],
 };
 
 function AppContent() {
@@ -110,19 +110,26 @@ function AppContent() {
     return <LoginForm />;
   }
 
+  const canAccessSection = (section: string): boolean => {
+    const allowedRoles = SECTION_PERMISSIONS[section];
+    if (!allowedRoles) return false;
+    if (!profile) return false;
+    return allowedRoles.includes(profile.role);
+  };
+
   const handleSetActiveSection = (section: string) => {
-    const perm = SECTION_PERMISSIONS[section];
-    if (perm === null || perm === 'admin_only' && isAdmin || perm !== 'admin_only' && hasPermission(perm)) {
+    if (canAccessSection(section)) {
       setActiveSection(section);
     }
   };
 
   const renderSection = () => {
-    const perm = SECTION_PERMISSIONS[activeSection];
-    if (perm === 'admin_only' && !isAdmin) {
-      return <Sales />;
-    }
-    if (perm !== null && perm !== 'admin_only' && !hasPermission(perm)) {
+    if (!canAccessSection(activeSection)) {
+      // إذا لم يكن لديه صلاحية للقسم الحالي، اعرض أول قسم متاح
+      const firstAvailableSection = Object.keys(SECTION_PERMISSIONS).find(s => canAccessSection(s));
+      if (firstAvailableSection && firstAvailableSection !== activeSection) {
+        setActiveSection(firstAvailableSection);
+      }
       return <Sales />;
     }
 
