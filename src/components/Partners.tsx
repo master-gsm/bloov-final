@@ -4,7 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getSignedUrl } from '../lib/fileUpload';
 import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
-import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet, Paperclip, Download } from 'lucide-react';
+import { ContributionReceipt } from './ContributionReceipt';
+import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet, Paperclip, Download, Receipt } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface Partner {
@@ -71,6 +72,7 @@ export function Partners() {
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleteSettlementConfirm, setDeleteSettlementConfirm] = useState<string | null>(null);
+  const [showReceipt, setShowReceipt] = useState<{ contribution: Contribution; partner: Partner } | null>(null);
 
   useEffect(() => {
     checkAdminAndLoad();
@@ -609,19 +611,31 @@ export function Partners() {
                           <td className="py-2.5 px-4 text-xs text-gray-600">{formatDate(contrib.contribution_date)}</td>
                           <td className="py-2.5 px-4 text-xs text-gray-700">{isRTL ? (contrib.description_ar || contrib.description) : contrib.description}</td>
                           <td className="py-2.5 px-4 text-xs font-bold text-gray-900 text-right">{formatCurrency(Number(contrib.amount))} {isRTL ? 'ر.س' : 'SAR'}</td>
-                          <td className="py-2.5 px-4 w-10">
-                            {contrib.attachment_url && (
+                          <td className="py-2.5 px-4">
+                            <div className="flex items-center gap-1">
                               <button
-                                onClick={async () => {
-                                  const url = await getSignedUrl(contrib.attachment_url!);
-                                  if (url) window.open(url, '_blank');
+                                onClick={() => {
+                                  const partner = partners.find(p => p.id === contrib.partner_id);
+                                  if (partner) setShowReceipt({ contribution: contrib, partner });
                                 }}
-                                className="p-1 text-blue-500 hover:bg-blue-50 rounded transition"
-                                title={isRTL ? 'تحميل الإيصال' : 'Download receipt'}
+                                className="p-1 text-teal-600 hover:bg-teal-50 rounded transition"
+                                title={isRTL ? 'عرض الإيصال' : 'View receipt'}
                               >
-                                <Download className="w-3.5 h-3.5" />
+                                <Receipt className="w-3.5 h-3.5" />
                               </button>
-                            )}
+                              {contrib.attachment_url && (
+                                <button
+                                  onClick={async () => {
+                                    const url = await getSignedUrl(contrib.attachment_url!);
+                                    if (url) window.open(url, '_blank');
+                                  }}
+                                  className="p-1 text-blue-500 hover:bg-blue-50 rounded transition"
+                                  title={isRTL ? 'تحميل المرفق' : 'Download attachment'}
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2.5 px-4 w-10">
                             <button
@@ -689,19 +703,31 @@ export function Partners() {
                           <td className="py-2.5 px-4 text-xs text-gray-600">{formatDate(contrib.contribution_date)}</td>
                           <td className="py-2.5 px-4 text-xs text-gray-700">{isRTL ? (contrib.description_ar || contrib.description) : contrib.description}</td>
                           <td className="py-2.5 px-4 text-xs font-bold text-gray-900 text-right">{formatCurrency(Number(contrib.amount))} {isRTL ? 'ر.س' : 'SAR'}</td>
-                          <td className="py-2.5 px-4 w-10">
-                            {contrib.attachment_url && (
+                          <td className="py-2.5 px-4">
+                            <div className="flex items-center gap-1">
                               <button
-                                onClick={async () => {
-                                  const url = await getSignedUrl(contrib.attachment_url!);
-                                  if (url) window.open(url, '_blank');
+                                onClick={() => {
+                                  const partner = partners.find(p => p.id === contrib.partner_id);
+                                  if (partner) setShowReceipt({ contribution: contrib, partner });
                                 }}
-                                className="p-1 text-blue-500 hover:bg-blue-50 rounded transition"
-                                title={isRTL ? 'تحميل الإيصال' : 'Download receipt'}
+                                className="p-1 text-teal-600 hover:bg-teal-50 rounded transition"
+                                title={isRTL ? 'عرض الإيصال' : 'View receipt'}
                               >
-                                <Download className="w-3.5 h-3.5" />
+                                <Receipt className="w-3.5 h-3.5" />
                               </button>
-                            )}
+                              {contrib.attachment_url && (
+                                <button
+                                  onClick={async () => {
+                                    const url = await getSignedUrl(contrib.attachment_url!);
+                                    if (url) window.open(url, '_blank');
+                                  }}
+                                  className="p-1 text-blue-500 hover:bg-blue-50 rounded transition"
+                                  title={isRTL ? 'تحميل المرفق' : 'Download attachment'}
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2.5 px-4 w-10">
                             <button
@@ -1110,6 +1136,14 @@ export function Partners() {
             </div>
           </div>
         </div>
+      )}
+
+      {showReceipt && (
+        <ContributionReceipt
+          contribution={showReceipt.contribution}
+          partner={showReceipt.partner}
+          onClose={() => setShowReceipt(null)}
+        />
       )}
     </div>
   );
