@@ -7,6 +7,7 @@ interface OfflineContextType {
   isSyncing: boolean;
   pendingOperationsCount: number;
   lastSyncTime: number | null;
+  lastBackupTime: number | null;
   syncError: string | null;
   syncNow: () => Promise<void>;
   addPendingOperation: (table: string, operation: 'insert' | 'update' | 'delete', data: any) => Promise<string>;
@@ -19,6 +20,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingOperationsCount, setPendingOperationsCount] = useState(0);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [lastBackupTime, setLastBackupTime] = useState<number | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [wasOffline, setWasOffline] = useState(false);
 
@@ -47,7 +49,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           } catch (error) {
             console.error('Auto-sync failed:', error);
           }
-        }, 500);
+        }, 300);
       } else if (!online) {
         setWasOffline(true);
         setSyncError('No internet connection');
@@ -61,6 +63,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       setIsSyncing(status.isSyncing);
       setPendingOperationsCount(status.pendingCount);
       setLastSyncTime(status.lastSyncTime);
+      setLastBackupTime(status.lastBackupTime);
       setSyncError(status.error);
     });
 
@@ -69,6 +72,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       setPendingOperationsCount(count);
       setIsSyncing(syncManager.getIsSyncing());
       setLastSyncTime(syncManager.getLastSyncTime());
+      setLastBackupTime(syncManager.getLastBackupTime());
     }, 3000);
 
     const savedSyncInterval = localStorage.getItem('autoSyncInterval');
@@ -120,7 +124,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     if (navigator.onLine && count > 0) {
       setTimeout(() => {
         syncManager.syncPendingOperations().catch(console.error);
-      }, 2000);
+      }, 500);
     }
 
     return id;
@@ -133,6 +137,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         isSyncing,
         pendingOperationsCount,
         lastSyncTime,
+        lastBackupTime,
         syncError,
         syncNow,
         addPendingOperation,

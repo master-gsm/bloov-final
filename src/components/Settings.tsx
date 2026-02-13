@@ -20,7 +20,7 @@ type Tab = typeof TABS[number];
 export function Settings() {
   const { language, setLanguage } = useLanguage();
   const { user } = useAuth();
-  const { isOnline, isSyncing, pendingOperationsCount, syncNow } = useOffline();
+  const { isOnline, isSyncing, pendingOperationsCount, lastBackupTime, syncNow } = useOffline();
   const isRTL = language === 'ar';
 
   const [settings, setSettings] = useState<SettingsMap>({});
@@ -680,6 +680,23 @@ export function Settings() {
                   )}
                 </div>
               </div>
+
+              {lastBackupTime && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm text-green-800 font-medium">{isRTL ? 'آخر نسخة احتياطية' : 'Last Backup'}</p>
+                  <p className="text-xs text-green-700 mt-1">
+                    {new Date(lastBackupTime).toLocaleString(isRTL ? 'ar-SA' : 'en-US', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: true
+                    })}
+                  </p>
+                </div>
+              )}
 
               {pendingOperationsCount > 0 && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-2">

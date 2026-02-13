@@ -4,6 +4,7 @@ import { offlineStorage, PendingOperation } from './offlineStorage';
 export interface SyncStatus {
   isSyncing: boolean;
   lastSyncTime: number | null;
+  lastBackupTime: number | null;
   pendingCount: number;
   error: string | null;
 }
@@ -12,7 +13,15 @@ class SyncManager {
   private isSyncing = false;
   private syncInterval: NodeJS.Timeout | null = null;
   private lastSyncTime: number | null = null;
+  private lastBackupTime: number | null = null;
   private syncCallbacks: Array<(status: SyncStatus) => void> = [];
+
+  constructor() {
+    const savedBackupTime = localStorage.getItem('bloov_last_cloud_backup');
+    if (savedBackupTime) {
+      this.lastBackupTime = parseInt(savedBackupTime);
+    }
+  }
 
   onSyncStatusChange(callback: (status: SyncStatus) => void): () => void {
     this.syncCallbacks.push(callback);
@@ -25,6 +34,7 @@ class SyncManager {
     const status: SyncStatus = {
       isSyncing: this.isSyncing,
       lastSyncTime: this.lastSyncTime,
+      lastBackupTime: this.lastBackupTime,
       pendingCount: 0,
       error,
     };
@@ -33,6 +43,12 @@ class SyncManager {
       status.pendingCount = count;
       this.syncCallbacks.forEach(callback => callback(status));
     });
+  }
+
+  private updateBackupTime(): void {
+    this.lastBackupTime = Date.now();
+    localStorage.setItem('bloov_last_cloud_backup', this.lastBackupTime.toString());
+    localStorage.setItem('bloov_latest_backup_time', new Date(this.lastBackupTime).toISOString());
   }
 
   async startAutoSync(intervalMinutes: number = 5): Promise<void> {
@@ -79,6 +95,7 @@ class SyncManager {
 
       if (operations.length === 0) {
         this.lastSyncTime = Date.now();
+        this.updateBackupTime();
         return { success: 0, failed: 0 };
       }
 
@@ -103,6 +120,11 @@ class SyncManager {
       }
 
       this.lastSyncTime = Date.now();
+
+      if (successCount > 0) {
+        this.updateBackupTime();
+      }
+
       this.notifySyncStatus();
     } catch (error) {
       console.error('Error syncing pending operations:', error);
@@ -216,6 +238,10 @@ class SyncManager {
 
   getLastSyncTime(): number | null {
     return this.lastSyncTime;
+  }
+
+  getLastBackupTime(): number | null {
+    return this.lastBackupTime;
   }
 }
 

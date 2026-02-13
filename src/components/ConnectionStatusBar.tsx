@@ -4,7 +4,7 @@ import { Wifi, WifiOff, RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucid
 import { useEffect, useState } from 'react';
 
 export function ConnectionStatusBar() {
-  const { isOnline, isSyncing, pendingOperationsCount, lastSyncTime, syncError } = useOffline();
+  const { isOnline, isSyncing, pendingOperationsCount, lastSyncTime, lastBackupTime, syncError } = useOffline();
   const { language } = useLanguage();
   const isRTL = language === 'ar';
   const [showBar, setShowBar] = useState(false);
@@ -14,7 +14,7 @@ export function ConnectionStatusBar() {
   }, [isOnline, isSyncing, pendingOperationsCount, syncError]);
 
   const formatLastSync = (timestamp: number | null) => {
-    if (!timestamp) return isRTL ? 'لم يتم المزامنة بعد' : 'Not synced yet';
+    if (!timestamp) return isRTL ? 'لم يتم النسخ الاحتياطي بعد' : 'Not backed up yet';
 
     const now = Date.now();
     const diff = now - timestamp;
@@ -36,10 +36,10 @@ export function ConnectionStatusBar() {
           ) : (
             <WifiOff className="w-4 h-4 text-red-600" />
           )}
-          {lastSyncTime && (
+          {lastBackupTime && (
             <span className="text-xs text-gray-500 flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              {formatLastSync(lastSyncTime)}
+              {formatLastSync(lastBackupTime)}
             </span>
           )}
         </div>
@@ -119,11 +119,11 @@ export function ConnectionStatusBar() {
                 <CheckCircle className="w-5 h-5 text-green-600" />
                 <div>
                   <p className="text-sm font-medium text-green-900">
-                    {isRTL ? 'متصل ومتزامن' : 'Connected & Synced'}
+                    {isRTL ? 'متصل ومحفوظ' : 'Connected & Backed Up'}
                   </p>
-                  {lastSyncTime && (
+                  {lastBackupTime && (
                     <p className="text-xs text-green-700">
-                      {isRTL ? 'آخر مزامنة:' : 'Last sync:'} {formatLastSync(lastSyncTime)}
+                      {isRTL ? 'آخر نسخة احتياطية:' : 'Last backup:'} {formatLastSync(lastBackupTime)}
                     </p>
                   )}
                 </div>
