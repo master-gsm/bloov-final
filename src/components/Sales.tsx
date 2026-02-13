@@ -3,8 +3,9 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
-import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck } from 'lucide-react';
+import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
+import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
 
 interface Product {
   id: string;
@@ -314,36 +315,48 @@ export function Sales() {
     setPrintItems(data || []);
   };
 
-  const sendWhatsApp = (sale: Sale) => {
+  const sendWhatsApp = async (sale: Sale) => {
     const phone = sale.customer_phone || sale.customers?.phone;
     if (!phone) {
       alert(isRTL ? 'لا يوجد رقم جوال للعميل' : 'No phone number available for this customer');
       return;
     }
 
-    const invoiceLink = `${window.location.origin}/?invoice=${sale.id}`;
+    const { data: items } = await supabase
+      .from('sale_items')
+      .select('product_id, product_name, quantity, unit_price, discount, total')
+      .eq('sale_id', sale.id);
 
-    const msg = `مرحباً 👋
-شكراً لتسوقك في BLOOV 🌸
-📄 رقم الفاتورة: ${sale.sale_number}
-�� المجموع: ${formatCurrency(sale.total)} ر.س
-شامل ضريبة القيمة المضافة 15%
-نتطلع لخدمتك مجدداً!
-يمكنك عرض الفاتورة الرسمية من هنا: ${invoiceLink}`;
-
-    let cleanPhone = phone.replace(/[^0-9]/g, '');
-
-    if (cleanPhone.startsWith('00')) {
-      cleanPhone = cleanPhone.slice(2);
-    } else if (cleanPhone.startsWith('0')) {
-      cleanPhone = '966' + cleanPhone.slice(1);
-    } else if (!cleanPhone.startsWith('966')) {
-      cleanPhone = '966' + cleanPhone;
+    if (!items || items.length === 0) {
+      alert(isRTL ? 'لا توجد عناصر في الفاتورة' : 'No items found in this invoice');
+      return;
     }
 
-    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+    try {
+      await shareInvoiceViaWhatsApp(sale, items, phone);
+    } catch (error) {
+      console.error('Error sharing invoice:', error);
+      alert(isRTL ? 'حدث خطأ أثناء مشاركة الفاتورة' : 'Error sharing invoice');
+    }
+  };
 
-    window.open(whatsappUrl, '_blank');
+  const downloadPDF = async (sale: Sale) => {
+    const { data: items } = await supabase
+      .from('sale_items')
+      .select('product_id, product_name, quantity, unit_price, discount, total')
+      .eq('sale_id', sale.id);
+
+    if (!items || items.length === 0) {
+      alert(isRTL ? 'لا توجد عناصر في الفاتورة' : 'No items found in this invoice');
+      return;
+    }
+
+    try {
+      await downloadInvoicePDF(sale, items);
+    } catch (error) {
+      console.error('Error downloading invoice:', error);
+      alert(isRTL ? 'حدث خطأ أثناء تنزيل الفاتورة' : 'Error downloading invoice');
+    }
   };
 
   const updateSaleStatus = async (saleId: string, status: string) => {
@@ -672,6 +685,9 @@ export function Sales() {
                         <button onClick={() => openPrintView(sale)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition" title={isRTL ? 'طباعة' : 'Print'}>
                           <Printer className="w-4 h-4" />
                         </button>
+                        <button onClick={() => downloadPDF(sale)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition" title={isRTL ? 'تحميل PDF' : 'Download PDF'}>
+                          <Download className="w-4 h-4" />
+                        </button>
                         {(sale.customer_phone || sale.customers?.phone) && (
                           <button onClick={() => sendWhatsApp(sale)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition" title="WhatsApp">
                             <MessageCircle className="w-4 h-4" />
@@ -740,6 +756,9 @@ export function Sales() {
               <div className="flex gap-3 pt-2">
                 <button onClick={() => { setViewingSale(null); openPrintView(viewingSale); }} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium">
                   <Printer className="w-4 h-4" /> {isRTL ? 'طباعة' : 'Print'}
+                </button>
+                <button onClick={() => downloadPDF(viewingSale)} className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white py-2.5 rounded-lg hover:bg-purple-700 transition font-medium">
+                  <Download className="w-4 h-4" /> PDF
                 </button>
                 {(viewingSale.customer_phone || viewingSale.customers?.phone) && (
                   <button onClick={() => sendWhatsApp(viewingSale)} className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition font-medium">
