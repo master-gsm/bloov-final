@@ -453,24 +453,39 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
     console.log('[generateInvoiceImage] Converting canvas to blob...');
 
     try {
+      console.log('[generateInvoiceImage] Calling canvas.toDataURL...');
       const dataUrl = canvas.toDataURL('image/png', 0.95);
       console.log('[generateInvoiceImage] Data URL created, length:', dataUrl.length);
 
+      console.log('[generateInvoiceImage] Splitting base64 data...');
       const base64Data = dataUrl.split(',')[1];
+      if (!base64Data) {
+        throw new Error('Invalid data URL format');
+      }
+      console.log('[generateInvoiceImage] Base64 data length:', base64Data.length);
+
+      console.log('[generateInvoiceImage] Decoding base64...');
       const binaryString = atob(base64Data);
+      console.log('[generateInvoiceImage] Binary string length:', binaryString.length);
+
+      console.log('[generateInvoiceImage] Creating byte array...');
       const bytes = new Uint8Array(binaryString.length);
 
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
+      console.log('[generateInvoiceImage] Byte array created, length:', bytes.length);
 
+      console.log('[generateInvoiceImage] Creating blob...');
       const blob = new Blob([bytes], { type: 'image/png' });
       console.log('[generateInvoiceImage] Blob created successfully, size:', blob.size);
 
       return blob;
-    } catch (err) {
+    } catch (err: any) {
       console.error('[generateInvoiceImage] Canvas conversion error:', err);
-      throw err;
+      console.error('[generateInvoiceImage] Error name:', err?.name);
+      console.error('[generateInvoiceImage] Error message:', err?.message);
+      throw new Error(`فشل تحويل Canvas إلى صورة: ${err?.message || 'خطأ غير معروف'}`);
     }
   } catch (error) {
     console.error('[generateInvoiceImage] Error:', error);
@@ -523,9 +538,14 @@ export async function shareInvoiceViaWhatsApp(
   customerPhone: string
 ): Promise<void> {
   try {
-    console.log('Starting invoice image generation...');
+    console.log('[shareInvoiceViaWhatsApp] Starting...');
+    console.log('[shareInvoiceViaWhatsApp] Sale:', sale.id, sale.sale_number);
+    console.log('[shareInvoiceViaWhatsApp] Items count:', items.length);
+    console.log('[shareInvoiceViaWhatsApp] Customer phone:', customerPhone);
+
+    console.log('[shareInvoiceViaWhatsApp] Calling generateInvoiceImage...');
     const imageBlob = await generateInvoiceImage(sale, items);
-    console.log('Invoice image generated successfully, size:', imageBlob.size);
+    console.log('[shareInvoiceViaWhatsApp] Image generated successfully, size:', imageBlob.size);
 
     const fileName = `BLOOV-Invoice-${sale.sale_number}.png`;
 

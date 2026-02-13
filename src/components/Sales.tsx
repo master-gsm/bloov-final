@@ -348,12 +348,16 @@ export function Sales() {
     }));
 
     try {
+      console.log('[Sales] Starting WhatsApp share for sale:', sale.id);
       await shareInvoiceViaWhatsApp(sale, formattedItems, phone);
-    } catch (error) {
-      console.error('Error sharing invoice:', error);
+      console.log('[Sales] WhatsApp share completed successfully');
+    } catch (error: any) {
+      console.error('[Sales] Error sharing invoice:', error);
+      console.error('[Sales] Error message:', error?.message);
+      console.error('[Sales] Error stack:', error?.stack);
       alert(isRTL
-        ? 'حدث خطأ أثناء إنشاء الفاتورة. يرجى المحاولة مرة أخرى أو تحميل الفاتورة PDF يدوياً.'
-        : 'Error generating invoice. Please try again or download the PDF manually.');
+        ? `حدث خطأ أثناء إنشاء الفاتورة: ${error?.message || 'خطأ غير معروف'}\n\nيرجى فتح Console (F12) لمزيد من التفاصيل.`
+        : `Error generating invoice: ${error?.message || 'Unknown error'}\n\nPlease open Console (F12) for more details.`);
     }
   };
 
