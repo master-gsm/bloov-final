@@ -81,6 +81,9 @@ export function Sales() {
   const [taxRate, setTaxRate] = useState(0.15);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [saleSource, setSaleSource] = useState<'store' | 'salla'>('store');
+  const [sallaShippingCost, setSallaShippingCost] = useState(0);
+  const [sallaPaymentFee, setSallaPaymentFee] = useState(0);
 
   useEffect(() => {
     loadData();
@@ -143,6 +146,9 @@ export function Sales() {
     setDeliveryAddress('');
     setCardMessage('');
     setShowDelivery(false);
+    setSaleSource('store');
+    setSallaShippingCost(0);
+    setSallaPaymentFee(0);
     setError('');
     setShowForm(true);
   };
@@ -179,6 +185,9 @@ export function Sales() {
           payment_status: isCredit ? 'unpaid' : 'paid',
           payment_method: paymentMethod,
           notes: saleNotes || null,
+          source: saleSource,
+          salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
+          salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
           created_by: user?.id,
         })
         .select('*, customers(name, name_ar, phone)')
@@ -470,12 +479,34 @@ export function Sales() {
               )}
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'مصدر البيع' : 'Sale Source'}</label>
+                <select value={saleSource} onChange={(e) => setSaleSource(e.target.value as 'store' | 'salla')} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm bg-white" disabled={!canEdit}>
+                  <option value="store">{isRTL ? '🏪 مبيعات المحل' : '🏪 Store Sales'}</option>
+                  <option value="salla">{isRTL ? '🛒 مبيعات المتجر الإلكتروني (سلة)' : '🛒 Online Sales (Salla)'}</option>
+                </select>
+              </div>
+
+              {saleSource === 'salla' && (
+                <div className="space-y-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{isRTL ? 'تكلفة الشحن' : 'Shipping Cost'}</label>
+                    <input type="number" step="0.01" min="0" value={sallaShippingCost} onChange={(e) => setSallaShippingCost(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm" disabled={!canEdit} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{isRTL ? 'رسوم بوابة الدفع' : 'Payment Gateway Fee'}</label>
+                    <input type="number" step="0.01" min="0" value={sallaPaymentFee} onChange={(e) => setSallaPaymentFee(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm" disabled={!canEdit} />
+                  </div>
+                </div>
+              )}
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'طريقة الدفع' : 'Payment'}</label>
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm">
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" disabled={!canEdit}>
                   <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
                   <option value="card">{isRTL ? 'شبكة' : 'Card'}</option>
                   <option value="transfer">{isRTL ? 'تحويل' : 'Transfer'}</option>
                   <option value="credit">{isRTL ? 'آجل' : 'Credit'}</option>
+                  {saleSource === 'salla' && <option value="online">{isRTL ? 'دفع إلكتروني' : 'Online Payment'}</option>}
                 </select>
                 {paymentMethod === 'credit' && !selectedCustomer && (
                   <p className="text-xs text-amber-600 mt-1">{isRTL ? 'يجب اختيار عميل مسجل للبيع الآجل' : 'Select a registered customer for credit sales'}</p>

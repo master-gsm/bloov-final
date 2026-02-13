@@ -24,6 +24,8 @@ export function Dashboard() {
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [stats, setStats] = useState({
     totalSales: 0,
+    storeSales: 0,
+    sallaSales: 0,
     totalPurchases: 0,
     netProfit: 0,
     inventoryValue: 0,
@@ -38,7 +40,7 @@ export function Dashboard() {
     try {
       const [partnersRes, salesRes, purchasesRes, inventoryRes, recentSalesRes] = await Promise.all([
         supabase.from('partners').select('*').eq('is_active', true).order('share_percentage', { ascending: false }),
-        supabase.from('sales').select('total').eq('status', 'confirmed'),
+        supabase.from('sales').select('total, source').eq('status', 'confirmed'),
         supabase.from('purchases').select('total').in('status', ['confirmed', 'received']),
         supabase.from('inventory').select('quantity, products(purchase_price)'),
         supabase.from('sales').select('id, sale_number, total, sale_date, customers(name, name_ar)').eq('status', 'confirmed').order('sale_date', { ascending: false }).limit(5),
@@ -47,7 +49,9 @@ export function Dashboard() {
       if (partnersRes.data) setPartners(partnersRes.data);
       if (recentSalesRes.data) setRecentSales(recentSalesRes.data as any);
 
-      const totalSales = salesRes.data?.reduce((sum, s) => sum + (s.total || 0), 0) || 0;
+      const storeSales = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
+      const sallaSales = salesRes.data?.filter(s => s.source === 'salla').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
+      const totalSales = storeSales + sallaSales;
       const totalPurchases = purchasesRes.data?.reduce((sum, p) => sum + (p.total || 0), 0) || 0;
       const inventoryValue = inventoryRes.data?.reduce((sum, item: any) => {
         return sum + (item.quantity * (item.products?.purchase_price || 0));
@@ -55,6 +59,8 @@ export function Dashboard() {
 
       setStats({
         totalSales,
+        storeSales,
+        sallaSales,
         totalPurchases,
         netProfit: totalSales - totalPurchases,
         inventoryValue,
@@ -67,10 +73,42 @@ export function Dashboard() {
   };
 
   const statCards = [
-    { title: t('dashboard.totalSales'), value: stats.totalSales, icon: DollarSign, color: 'from-green-500 to-green-600' },
-    { title: t('dashboard.totalPurchases'), value: stats.totalPurchases, icon: TrendingDown, color: 'from-red-500 to-red-600' },
-    { title: t('dashboard.netProfit'), value: stats.netProfit, icon: TrendingUp, color: 'from-blue-500 to-blue-600' },
-    { title: t('dashboard.inventory'), value: stats.inventoryValue, icon: Package, color: 'from-teal-500 to-teal-600' },
+    {
+      title: isRTL ? '🏪 مبيعات المحل' : '🏪 Store Sales',
+      value: stats.storeSales,
+      icon: ShoppingCart,
+      color: 'from-teal-500 to-teal-600'
+    },
+    {
+      title: isRTL ? '🛒 مبيعات المتجر الإلكتروني' : '🛒 Online Sales (Salla)',
+      value: stats.sallaSales,
+      icon: ShoppingCart,
+      color: 'from-blue-500 to-blue-600'
+    },
+    {
+      title: isRTL ? '💰 إجمالي المبيعات' : '💰 Total Revenue',
+      value: stats.totalSales,
+      icon: DollarSign,
+      color: 'from-green-500 to-green-600'
+    },
+    {
+      title: t('dashboard.totalPurchases'),
+      value: stats.totalPurchases,
+      icon: TrendingDown,
+      color: 'from-red-500 to-red-600'
+    },
+    {
+      title: t('dashboard.netProfit'),
+      value: stats.netProfit,
+      icon: TrendingUp,
+      color: 'from-purple-500 to-purple-600'
+    },
+    {
+      title: t('dashboard.inventory'),
+      value: stats.inventoryValue,
+      icon: Package,
+      color: 'from-orange-500 to-orange-600'
+    },
   ];
 
   const formatCurrency = (amount: number) =>
@@ -101,7 +139,7 @@ export function Dashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {statCards.map((card) => {
           const Icon = card.icon;
           return (

@@ -111,7 +111,7 @@ export function Partners() {
         supabase.from('partners').select('*').eq('is_active', true).order('share_percentage', { ascending: false }),
         supabase.from('partner_contributions').select('*').order('contribution_date', { ascending: false }),
         supabase.from('partner_settlements').select('*').order('settlement_date', { ascending: false }),
-        supabase.from('sales').select('total, status'),
+        supabase.from('sales').select('total, status, salla_shipping_cost, salla_payment_gateway_fee'),
         supabase.from('purchases').select('total'),
         supabase.from('operating_expenses').select('amount'),
       ]);
@@ -134,7 +134,15 @@ export function Partners() {
           .filter((sale) => sale.status === 'completed' || sale.status === 'paid')
           .reduce((sum, sale) => sum + Number(sale.total || 0), 0);
 
-        const profit = revenue - totalPurchases - totalExpenses;
+        const sallaCosts = salesRes.data
+          .filter((sale) => sale.status === 'completed' || sale.status === 'paid')
+          .reduce((sum, sale) => {
+            const shipping = Number(sale.salla_shipping_cost || 0);
+            const gatewayFee = Number(sale.salla_payment_gateway_fee || 0);
+            return sum + shipping + gatewayFee;
+          }, 0);
+
+        const profit = revenue - totalPurchases - totalExpenses - sallaCosts;
         setTotalProfit(profit);
       }
     } catch (err) {

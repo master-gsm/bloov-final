@@ -5,6 +5,8 @@ import { FileText, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3 } f
 
 interface SalesData {
   total: number;
+  storeTotal: number;
+  sallaTotal: number;
   count: number;
 }
 
@@ -25,7 +27,7 @@ export function Reports() {
   const isRTL = language === 'ar';
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'today' | 'week' | 'month' | 'year'>('month');
-  const [salesData, setSalesData] = useState<SalesData>({ total: 0, count: 0 });
+  const [salesData, setSalesData] = useState<SalesData>({ total: 0, storeTotal: 0, sallaTotal: 0, count: 0 });
   const [purchasesData, setPurchasesData] = useState<PurchasesData>({ total: 0, count: 0 });
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [recentSales, setRecentSales] = useState<any[]>([]);
@@ -54,7 +56,7 @@ export function Reports() {
       const [salesRes, purchasesRes, recentRes] = await Promise.all([
         supabase
           .from('sales')
-          .select('total')
+          .select('total, source')
           .eq('status', 'confirmed')
           .gte('sale_date', start)
           .lte('sale_date', end),
@@ -72,10 +74,12 @@ export function Reports() {
           .limit(10),
       ]);
 
-      const salesTotalAmount = salesRes.data?.reduce((sum, s) => sum + (s.total || 0), 0) || 0;
+      const storeTotalAmount = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
+      const sallaTotalAmount = salesRes.data?.filter(s => s.source === 'salla').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
+      const salesTotalAmount = storeTotalAmount + sallaTotalAmount;
       const purchasesTotalAmount = purchasesRes.data?.reduce((sum, p) => sum + (p.total || 0), 0) || 0;
 
-      setSalesData({ total: salesTotalAmount, count: salesRes.data?.length || 0 });
+      setSalesData({ total: salesTotalAmount, storeTotal: storeTotalAmount, sallaTotal: sallaTotalAmount, count: salesRes.data?.length || 0 });
       setPurchasesData({ total: purchasesTotalAmount, count: purchasesRes.data?.length || 0 });
       setRecentSales(recentRes.data || []);
 
@@ -162,13 +166,35 @@ export function Reports() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 bg-teal-100 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-teal-600" />
+            </div>
+            <p className="text-sm text-gray-500">{isRTL ? '🏪 مبيعات المحل' : '🏪 Store Sales'}</p>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.storeTotal)}</p>
+          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'مبيعات محلية' : 'Local sales'}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 bg-blue-100 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-blue-600" />
+            </div>
+            <p className="text-sm text-gray-500">{isRTL ? '🛒 مبيعات المتجر الإلكتروني' : '🛒 Online Sales'}</p>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.sallaTotal)}</p>
+          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'مبيعات سلة' : 'Salla sales'}</p>
+        </div>
+
         <div className="bg-white rounded-xl shadow-sm border p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2.5 bg-green-100 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-green-600" />
+              <DollarSign className="w-5 h-5 text-green-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'إجمالي المبيعات' : 'Total Sales'}</p>
+            <p className="text-sm text-gray-500">{isRTL ? '💰 إجمالي الإيرادات' : '💰 Total Revenue'}</p>
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.total)}</p>
           <p className="text-xs text-gray-400 mt-1">{salesData.count} {isRTL ? 'عملية' : 'transactions'}</p>
