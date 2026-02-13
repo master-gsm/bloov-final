@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
-import { Receipt, Plus, Trash2, Search, Calendar, DollarSign, FileText, Filter, Download, Users } from 'lucide-react';
+import { uploadFile, getFileUrl } from '../lib/fileUpload';
+import { Receipt, Plus, Trash2, Search, Calendar, DollarSign, FileText, Filter, Download, Users, Paperclip, Camera, Printer, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface OperatingExpense {
@@ -18,6 +19,7 @@ interface OperatingExpense {
   notes?: string;
   notes_ar?: string;
   partner_contribution_id?: string | null;
+  attachment_url?: string | null;
   created_at: string;
 }
 
@@ -32,6 +34,10 @@ export default function Expenses() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<{ url: string; type: string } | null>(null);
+  const attachmentFileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentCameraInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     expense_type: 'other',
@@ -70,6 +76,23 @@ export default function Expenses() {
     return data;
   };
 
+  const handleViewAttachment = (attachmentPath: string) => {
+    const url = getFileUrl(attachmentPath);
+    const fileType = attachmentPath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
+    setViewingAttachment({ url, type: fileType });
+  };
+
+  const handlePrintAttachment = () => {
+    if (!viewingAttachment) return;
+
+    const printWindow = window.open(viewingAttachment.url, '_blank');
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -80,6 +103,14 @@ export default function Expenses() {
 
     try {
       const expenseNumber = await generateExpenseNumber();
+
+      let attachmentUrl = null;
+      if (attachmentFile) {
+        attachmentUrl = await uploadFile(attachmentFile, 'operating_expenses');
+        if (!attachmentUrl) {
+          console.warn('File upload failed, continuing without attachment');
+        }
+      }
 
       const { error } = await supabase.from('operating_expenses').insert([
         {
@@ -92,6 +123,7 @@ export default function Expenses() {
           payment_method: formData.payment_method,
           notes: formData.notes,
           notes_ar: formData.notes_ar,
+          attachment_url: attachmentUrl,
           created_by: user?.id,
         },
       ]);
@@ -108,6 +140,7 @@ export default function Expenses() {
         notes: '',
         notes_ar: '',
       });
+      setAttachmentFile(null);
       setShowForm(false);
       loadExpenses();
     } catch (err) {
@@ -304,6 +337,51 @@ export default function Expenses() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
                 />
               </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Paperclip className="w-4 h-4 inline mr-1" />
+                  {isRTL ? 'إرفاق إيصال' : 'Attach Receipt'}
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => attachmentFileInputRef.current?.click()}
+                    className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                    {isRTL ? 'رفع ملف' : 'Upload File'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => attachmentCameraInputRef.current?.click()}
+                    className="flex-1 px-4 py-2.5 border border-orange-300 bg-orange-50 rounded-lg hover:bg-orange-100 flex items-center justify-center gap-2 text-sm text-orange-700"
+                  >
+                    <Camera className="w-4 h-4" />
+                    {isRTL ? 'التقاط صورة' : 'Take Photo'}
+                  </button>
+                </div>
+                <input
+                  ref={attachmentFileInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <input
+                  ref={attachmentCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                {attachmentFile && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {isRTL ? 'الملف المحدد: ' : 'Selected: '}{attachmentFile.name}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-3 justify-end">
@@ -385,6 +463,7 @@ export default function Expenses() {
                 <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'الوصف' : 'Description'}</th>
                 <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'المبلغ' : 'Amount'}</th>
                 <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'طريقة الدفع' : 'Payment'}</th>
+                <th className="text-center py-3 px-4 font-semibold text-gray-700">{isRTL ? 'المرفق' : 'Attachment'}</th>
                 <th className="text-center py-3 px-4 font-semibold text-gray-700">{isRTL ? 'إجراءات' : 'Actions'}</th>
               </tr>
             </thead>
@@ -413,6 +492,17 @@ export default function Expenses() {
                     {formatCurrency(Number(exp.amount))} {isRTL ? 'ر.س' : 'SAR'}
                   </td>
                   <td className="py-3 px-4 text-gray-600">{exp.payment_method}</td>
+                  <td className="py-3 px-4 text-center">
+                    {exp.attachment_url && (
+                      <button
+                        onClick={() => handleViewAttachment(exp.attachment_url!)}
+                        className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
+                        title={isRTL ? 'عرض المرفق' : 'View attachment'}
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    )}
+                  </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center gap-2">
                       {exp.partner_contribution_id ? (
@@ -460,6 +550,62 @@ export default function Expenses() {
           )}
         </div>
       </div>
+
+      {viewingAttachment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setViewingAttachment(null)}>
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-bold">{isRTL ? 'عرض المرفق' : 'View Attachment'}</h3>
+              <button
+                onClick={() => setViewingAttachment(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              {viewingAttachment.type === 'image' ? (
+                <img
+                  src={viewingAttachment.url}
+                  alt="Attachment"
+                  className="w-full h-auto rounded-lg"
+                />
+              ) : (
+                <iframe
+                  src={viewingAttachment.url}
+                  className="w-full h-[70vh] rounded-lg border"
+                  title="Document Viewer"
+                />
+              )}
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <button
+                onClick={handlePrintAttachment}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                <Printer className="w-4 h-4 inline mr-2" />
+                {isRTL ? 'طباعة' : 'Print'}
+              </button>
+              <a
+                href={viewingAttachment.url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Download className="w-4 h-4 inline mr-2" />
+                {isRTL ? 'تحميل' : 'Download'}
+              </a>
+              <button
+                onClick={() => setViewingAttachment(null)}
+                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+              >
+                {isRTL ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

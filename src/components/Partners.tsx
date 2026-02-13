@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getSignedUrl, getFileUrl } from '../lib/fileUpload';
 import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
 import { ContributionReceipt } from './ContributionReceipt';
-import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet, Paperclip, Download, Receipt } from 'lucide-react';
+import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet, Paperclip, Download, Receipt, Printer, Camera } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface Partner {
@@ -74,6 +74,10 @@ export function Partners() {
   const [deleteSettlementConfirm, setDeleteSettlementConfirm] = useState<string | null>(null);
   const [showReceipt, setShowReceipt] = useState<{ contribution: Contribution; partner: Partner } | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<{ url: string; type: string } | null>(null);
+  const contributionFileInputRef = useRef<HTMLInputElement>(null);
+  const contributionCameraInputRef = useRef<HTMLInputElement>(null);
+  const settlementFileInputRef = useRef<HTMLInputElement>(null);
+  const settlementCameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     checkAdminAndLoad();
@@ -142,6 +146,17 @@ export function Partners() {
     const url = getFileUrl(attachmentPath);
     const fileType = attachmentPath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
     setViewingAttachment({ url, type: fileType });
+  };
+
+  const handlePrintAttachment = () => {
+    if (!viewingAttachment) return;
+
+    const printWindow = window.open(viewingAttachment.url, '_blank');
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
   };
 
   const handleAddContribution = async (e: React.FormEvent) => {
@@ -923,11 +938,38 @@ export function Partners() {
                   <Paperclip className="w-4 h-4 inline mr-1" />
                   {isRTL ? 'إرفاق إيصال' : 'Attach Receipt'}
                 </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => contributionFileInputRef.current?.click()}
+                    className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                    {isRTL ? 'رفع ملف' : 'Upload File'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => contributionCameraInputRef.current?.click()}
+                    className="flex-1 px-4 py-2.5 border border-teal-300 bg-teal-50 rounded-lg hover:bg-teal-100 flex items-center justify-center gap-2 text-sm text-teal-700"
+                  >
+                    <Camera className="w-4 h-4" />
+                    {isRTL ? 'التقاط صورة' : 'Take Photo'}
+                  </button>
+                </div>
                 <input
+                  ref={contributionFileInputRef}
                   type="file"
                   accept="image/*,application/pdf"
                   onChange={(e) => setContributionFile(e.target.files?.[0] || null)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                  className="hidden"
+                />
+                <input
+                  ref={contributionCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => setContributionFile(e.target.files?.[0] || null)}
+                  className="hidden"
                 />
                 {contributionFile && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -1046,11 +1088,38 @@ export function Partners() {
                   <Paperclip className="w-4 h-4 inline mr-1" />
                   {isRTL ? 'إرفاق إيصال' : 'Attach Receipt'}
                 </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => settlementFileInputRef.current?.click()}
+                    className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                    {isRTL ? 'رفع ملف' : 'Upload File'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => settlementCameraInputRef.current?.click()}
+                    className="flex-1 px-4 py-2.5 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 flex items-center justify-center gap-2 text-sm text-amber-700"
+                  >
+                    <Camera className="w-4 h-4" />
+                    {isRTL ? 'التقاط صورة' : 'Take Photo'}
+                  </button>
+                </div>
                 <input
+                  ref={settlementFileInputRef}
                   type="file"
                   accept="image/*,application/pdf"
                   onChange={(e) => setSettlementFile(e.target.files?.[0] || null)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                  className="hidden"
+                />
+                <input
+                  ref={settlementCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => setSettlementFile(e.target.files?.[0] || null)}
+                  className="hidden"
                 />
                 {settlementFile && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -1172,6 +1241,13 @@ export function Partners() {
               )}
             </div>
             <div className="p-4 border-t flex justify-end gap-2">
+              <button
+                onClick={handlePrintAttachment}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                <Printer className="w-4 h-4 inline mr-2" />
+                {isRTL ? 'طباعة' : 'Print'}
+              </button>
               <a
                 href={viewingAttachment.url}
                 download
