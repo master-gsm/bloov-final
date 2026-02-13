@@ -520,76 +520,159 @@ export async function shareInvoiceViaWhatsApp(
       cleanPhone = '966' + cleanPhone;
     }
 
-    if (!navigator.share || !navigator.canShare) {
-      console.warn('Share API not available, opening WhatsApp directly');
+    // Check if Web Share API is available
+    const hasShareAPI = typeof navigator.share === 'function';
+    console.log('[shareInvoiceViaWhatsApp] Web Share API available:', hasShareAPI);
+
+    if (!hasShareAPI) {
+      console.warn('[shareInvoiceViaWhatsApp] Share API not available, opening WhatsApp with text only');
       const message = encodeURIComponent(cleanMessageText);
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
       window.open(whatsappUrl, '_blank');
       return;
     }
 
+    // Try to generate invoice file
     let fileToShare: File | null = null;
     let fileName = '';
+    let fileType: 'pdf' | 'image' = 'pdf';
 
     try {
       console.log('[shareInvoiceViaWhatsApp] Attempting to generate PDF...');
       const pdfBlob = await generateInvoicePDF(sale, items);
 
       if (pdfBlob && pdfBlob.size > 0) {
-        console.log('[shareInvoiceViaWhatsApp] PDF generated successfully, size:', pdfBlob.size);
+        console.log('[shareInvoiceViaWhatsApp] PDF generated successfully, size:', pdfBlob.size, 'bytes');
         fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
-        fileToShare = new File([pdfBlob], fileName, { type: 'application/pdf' });
-        console.log('[shareInvoiceViaWhatsApp] PDF file created:', fileToShare.name, fileToShare.size);
+        fileToShare = new File([pdfBlob], fileName, {
+          type: 'application/pdf',
+          lastModified: Date.now()
+        });
+        fileType = 'pdf';
+        console.log('[shareInvoiceViaWhatsApp] PDF File object created:', {
+          name: fileToShare.name,
+          size: fileToShare.size,
+          type: fileToShare.type
+        });
       } else {
         throw new Error('PDF blob is empty or invalid');
       }
     } catch (pdfError) {
-      console.warn('[shareInvoiceViaWhatsApp] PDF generation failed, falling back to image:', pdfError);
+      console.warn('[shareInvoiceViaWhatsApp] PDF generation failed, trying image fallback:', pdfError);
 
       try {
-        console.log('[shareInvoiceViaWhatsApp] Generating high-quality image...');
+        console.log('[shareInvoiceViaWhatsApp] Generating high-quality PNG image...');
         const imageBlob = await generateInvoiceImage(sale, items);
 
         if (imageBlob && imageBlob.size > 0) {
-          console.log('[shareInvoiceViaWhatsApp] Image generated successfully, size:', imageBlob.size);
+          console.log('[shareInvoiceViaWhatsApp] Image generated successfully, size:', imageBlob.size, 'bytes');
           fileName = `BLOOV-Invoice-${sale.sale_number}.png`;
-          fileToShare = new File([imageBlob], fileName, { type: 'image/png' });
-          console.log('[shareInvoiceViaWhatsApp] Image file created:', fileToShare.name, fileToShare.size);
+          fileToShare = new File([imageBlob], fileName, {
+            type: 'image/png',
+            lastModified: Date.now()
+          });
+          fileType = 'image';
+          console.log('[shareInvoiceViaWhatsApp] PNG File object created:', {
+            name: fileToShare.name,
+            size: fileToShare.size,
+            type: fileToShare.type
+          });
         } else {
           throw new Error('Image blob is empty or invalid');
         }
       } catch (imageError) {
         console.error('[shareInvoiceViaWhatsApp] Image generation also failed:', imageError);
-        throw new Error('فشل توليد الفاتورة. حاول مرة أخرى.');
+        // If both fail, open WhatsApp with text only
+        console.warn('[shareInvoiceViaWhatsApp] Both PDF and Image failed, opening WhatsApp with text only');
+        const message = encodeURIComponent(cleanMessageText);
+        const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
+        window.open(whatsappUrl, '_blank');
+        return;
       }
     }
 
     if (!fileToShare) {
-      throw new Error('فشل إنشاء ملف الفاتورة');
-    }
-
-    const shareData: ShareData = {
-      files: [fileToShare],
-      text: cleanMessageText
-    };
-
-    if (!navigator.canShare(shareData)) {
-      console.warn('[shareInvoiceViaWhatsApp] Cannot share file, opening WhatsApp with text only');
+      console.warn('[shareInvoiceViaWhatsApp] No file generated, opening WhatsApp with text only');
       const message = encodeURIComponent(cleanMessageText);
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
       window.open(whatsappUrl, '_blank');
       return;
     }
 
-    console.log('[shareInvoiceViaWhatsApp] Opening share sheet with file...');
+    // Prepare share data with file
+    const shareData: ShareData = {
+      files: [fileToShare],
+      text: cleanMessageText,
+      title: `Invoice ${sale.sale_number}`
+    };
+
+    // Check if we can share this data
+    const canShare = navigator.canShare && navigator.canShare(shareData);
+    console.log('[shareInvoiceViaWhatsApp] Can share data with file:', canShare);
+    console.log('[shareInvoiceViaWhatsApp] Share data:', {
+      filesCount: shareData.files?.length,
+      fileName: fileToShare.name,
+      fileSize: fileToShare.size,
+      fileType: fileToShare.type,
+      textLength: shareData.text?.length
+    });
+
+    if (!canShare) {
+      console.warn('[shareInvoiceViaWhatsApp] Cannot share file with this browser/device');
+
+      // Try without title
+      const simpleShareData: ShareData = {
+        files: [fileToShare],
+        text: cleanMessageText
+      };
+
+      const canShareSimple = navigator.canShare && navigator.canShare(simpleShareData);
+      console.log('[shareInvoiceViaWhatsApp] Can share without title:', canShareSimple);
+
+      if (canShareSimple) {
+        console.log('[shareInvoiceViaWhatsApp] Opening share sheet (without title)...');
+        await navigator.share(simpleShareData);
+        console.log('[shareInvoiceViaWhatsApp] Share completed!');
+        return;
+      }
+
+      // If still can't share, fall back to WhatsApp direct link
+      console.warn('[shareInvoiceViaWhatsApp] File sharing not supported, opening WhatsApp with text');
+      const message = encodeURIComponent(cleanMessageText);
+      const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
+      window.open(whatsappUrl, '_blank');
+
+      // Also download the file separately
+      const url = URL.createObjectURL(fileToShare);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      console.log('[shareInvoiceViaWhatsApp] File downloaded separately');
+      return;
+    }
+
+    // Try to share
+    console.log('[shareInvoiceViaWhatsApp] Opening native share sheet...');
+    console.log('[shareInvoiceViaWhatsApp] File format:', fileType.toUpperCase());
     await navigator.share(shareData);
     console.log('[shareInvoiceViaWhatsApp] Share completed successfully!');
 
   } catch (error: any) {
     console.error('[shareInvoiceViaWhatsApp] Error:', error);
+    console.error('[shareInvoiceViaWhatsApp] Error details:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack
+    });
 
+    // User cancelled the share
     if (error.name === 'AbortError') {
-      console.log('[shareInvoiceViaWhatsApp] User cancelled share');
+      console.log('[shareInvoiceViaWhatsApp] User cancelled the share dialog');
       return;
     }
 
