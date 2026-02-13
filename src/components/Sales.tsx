@@ -316,24 +316,30 @@ export function Sales() {
 
   const sendWhatsApp = (sale: Sale) => {
     const phone = sale.customer_phone || sale.customers?.phone;
-    if (!phone) return;
+    if (!phone) {
+      alert(isRTL ? 'لا يوجد رقم جوال للعميل' : 'No phone number available for this customer');
+      return;
+    }
 
     const custName = sale.customer_name || (sale.customers ? (isRTL ? sale.customers.name_ar || sale.customers.name : sale.customers.name) : '');
+
     const msg = isRTL
-      ? `مرحباً ${custName}، شكراً لتسوقك في BLOOV!\n\nرقم الفاتورة: ${sale.sale_number}\nالمجموع: ${formatCurrency(sale.total)} ر.س\n(شامل ضريبة القيمة المضافة 15%)\n\nنتطلع لخدمتك مجدداً!`
-      : `Hello ${custName}, thank you for shopping at BLOOV!\n\nInvoice: ${sale.sale_number}\nTotal: ${formatCurrency(sale.total)} SAR\n(Including 15% VAT)\n\nWe look forward to serving you again!`;
+      ? `مرحباً ${custName} 👋\n\nشكراً لتسوقك في *BLOOV* 🌸\n\n📋 *رقم الفاتورة:* ${sale.sale_number}\n💰 *المجموع:* ${formatCurrency(sale.total)} ر.س\n\n_شامل ضريبة القيمة المضافة 15%_\n\nنتطلع لخدمتك مجدداً! 💚`
+      : `Hello ${custName} 👋\n\nThank you for shopping at *BLOOV* 🌸\n\n📋 *Invoice:* ${sale.sale_number}\n💰 *Total:* ${formatCurrency(sale.total)} SAR\n\n_Including 15% VAT_\n\nWe look forward to serving you again! 💚`;
 
-    const cleanPhone = phone.replace(/[^0-9+]/g, '');
-    const phoneNumber = cleanPhone.startsWith('+') ? cleanPhone.slice(1) : cleanPhone;
+    let cleanPhone = phone.replace(/[^0-9]/g, '');
 
-    const desktopUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(msg)}`;
-    const webUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(msg)}`;
+    if (cleanPhone.startsWith('00')) {
+      cleanPhone = cleanPhone.slice(2);
+    } else if (cleanPhone.startsWith('0')) {
+      cleanPhone = '966' + cleanPhone.slice(1);
+    } else if (!cleanPhone.startsWith('966')) {
+      cleanPhone = '966' + cleanPhone;
+    }
 
-    window.location.href = desktopUrl;
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
 
-    setTimeout(() => {
-      window.open(webUrl, '_blank');
-    }, 1000);
+    window.open(whatsappUrl, '_blank');
   };
 
   const updateSaleStatus = async (saleId: string, status: string) => {
