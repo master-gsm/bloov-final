@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
-import { Package, Plus, Edit, Trash2, Search, X, Filter } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Search, X, Filter, ClipboardList } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -12,7 +12,8 @@ interface Product {
   description: string | null;
   description_ar: string | null;
   category_id: string | null;
-  type: 'natural' | 'artificial';
+  type: 'natural' | 'artificial' | 'preserved' | 'greenery' | 'indoor_plants' | 'dried';
+  classification: 'ready_bouquets' | 'vases' | 'gifts' | 'wrapping' | 'cards' | 'services' | 'vases_glass' | 'wrapping_paper' | 'ribbons' | 'floral_tools' | 'gift_boxes' | null;
   unit: string;
   unit_ar: string;
   sale_price: number;
@@ -28,6 +29,15 @@ interface Category {
   type: string;
 }
 
+interface ProductRecipe {
+  id: string;
+  product_id: string;
+  material_id: string;
+  quantity: number;
+  notes: string | null;
+  material?: Product;
+}
+
 const emptyForm = {
   sku: '',
   name: '',
@@ -35,7 +45,8 @@ const emptyForm = {
   description: '',
   description_ar: '',
   category_id: '',
-  type: 'natural' as 'natural' | 'artificial',
+  type: 'natural' as 'natural' | 'artificial' | 'preserved' | 'greenery' | 'indoor_plants' | 'dried',
+  classification: null as 'ready_bouquets' | 'vases' | 'gifts' | 'wrapping' | 'cards' | 'services' | 'vases_glass' | 'wrapping_paper' | 'ribbons' | 'floral_tools' | 'gift_boxes' | null,
   unit: 'piece',
   unit_ar: 'قطعة',
   sale_price: 0,
@@ -52,12 +63,18 @@ export function Products() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [classificationFilter, setClassificationFilter] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [showRecipeModal, setShowRecipeModal] = useState(false);
+  const [recipeProduct, setRecipeProduct] = useState<Product | null>(null);
+  const [recipes, setRecipes] = useState<ProductRecipe[]>([]);
+  const [selectedMaterial, setSelectedMaterial] = useState('');
+  const [materialQuantity, setMaterialQuantity] = useState(1);
 
   useEffect(() => {
     loadData();
@@ -100,6 +117,7 @@ export function Products() {
       description_ar: product.description_ar || '',
       category_id: product.category_id || '',
       type: product.type,
+      classification: product.classification,
       unit: product.unit,
       unit_ar: product.unit_ar,
       sale_price: product.sale_price,
@@ -124,6 +142,7 @@ export function Products() {
         description_ar: formData.description_ar || null,
         category_id: formData.category_id || null,
         type: formData.type,
+        classification: formData.classification || null,
         unit: formData.unit,
         unit_ar: formData.unit_ar,
         sale_price: formData.sale_price,
@@ -159,16 +178,99 @@ export function Products() {
     }
   };
 
+  const openRecipeModal = async (product: Product) => {
+    setRecipeProduct(product);
+    setShowRecipeModal(true);
+    await loadRecipes(product.id);
+  };
+
+  const loadRecipes = async (productId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('product_recipes')
+        .select('*, material:products!product_recipes_material_id_fkey(*)')
+        .eq('product_id', productId);
+
+      if (error) throw error;
+      setRecipes(data || []);
+    } catch (err) {
+      console.error('Error loading recipes:', err);
+    }
+  };
+
+  const addRecipeItem = async () => {
+    if (!selectedMaterial || !recipeProduct || materialQuantity <= 0) return;
+
+    try {
+      const { error } = await supabase.from('product_recipes').insert({
+        product_id: recipeProduct.id,
+        material_id: selectedMaterial,
+        quantity: materialQuantity,
+      });
+
+      if (error) throw error;
+      await loadRecipes(recipeProduct.id);
+      setSelectedMaterial('');
+      setMaterialQuantity(1);
+    } catch (err: any) {
+      console.error('Error adding recipe item:', err);
+      alert(err.message || 'Failed to add material');
+    }
+  };
+
+  const removeRecipeItem = async (recipeId: string) => {
+    if (!recipeProduct) return;
+
+    try {
+      const { error } = await supabase.from('product_recipes').delete().eq('id', recipeId);
+      if (error) throw error;
+      await loadRecipes(recipeProduct.id);
+    } catch (err) {
+      console.error('Error removing recipe item:', err);
+    }
+  };
+
   const filteredProducts = products.filter((p) => {
     if (!p.is_active) return false;
     if (typeFilter !== 'all' && p.type !== typeFilter) return false;
+    if (classificationFilter !== 'all' && p.classification !== classificationFilter) return false;
     const s = searchTerm.toLowerCase();
     return (
       p.name.toLowerCase().includes(s) ||
       p.name_ar.includes(searchTerm) ||
-      p.sku.toLowerCase().includes(s)
+      p.sku.toLowerCase().includes(s) ||
+      (p.classification && getClassificationLabel(p.classification).toLowerCase().includes(s))
     );
   });
+
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, { en: string, ar: string }> = {
+      natural: { en: 'Natural Flowers', ar: 'ورد طبيعي' },
+      artificial: { en: 'Artificial Flowers', ar: 'ورد صناعي' },
+      preserved: { en: 'Preserved Flowers', ar: 'ورد دائم' },
+      greenery: { en: 'Greenery', ar: 'أوراق خضراء' },
+      indoor_plants: { en: 'Indoor Plants', ar: 'نباتات داخلية' },
+      dried: { en: 'Dried Flowers', ar: 'ورد مجفف' },
+    };
+    return isRTL ? labels[type]?.ar || type : labels[type]?.en || type;
+  };
+
+  const getClassificationLabel = (classification: string) => {
+    const labels: Record<string, { en: string, ar: string }> = {
+      ready_bouquets: { en: 'Ready Bouquets', ar: 'باقات جاهزة' },
+      vases: { en: 'Vases & Arrangements', ar: 'فازات وتنسيقات' },
+      gifts: { en: 'Gifts & Additions', ar: 'هدايا وإضافات' },
+      wrapping: { en: 'Wrapping Materials', ar: 'مواد تغليف' },
+      cards: { en: 'Greeting Cards', ar: 'كروت إهداء' },
+      services: { en: 'Services', ar: 'خدمات' },
+      vases_glass: { en: 'Vases & Glassware', ar: 'فازات وزجاجيات' },
+      wrapping_paper: { en: 'Wrapping Paper', ar: 'ورق تغليف' },
+      ribbons: { en: 'Ribbons & Accessories', ar: 'شرائط وإكسسوارات' },
+      floral_tools: { en: 'Floral Tools', ar: 'أدوات تنسيق' },
+      gift_boxes: { en: 'Gift Boxes', ar: 'صناديق هدايا' },
+    };
+    return isRTL ? labels[classification]?.ar || classification : labels[classification]?.en || classification;
+  };
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat(isRTL ? 'ar-SA' : 'en-US', { style: 'decimal', minimumFractionDigits: 2 }).format(amount);
@@ -221,9 +323,31 @@ export function Products() {
               onChange={(e) => setTypeFilter(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
             >
-              <option value="all">{isRTL ? 'الكل' : 'All Types'}</option>
-              <option value="natural">{t('products.natural')}</option>
-              <option value="artificial">{t('products.artificial')}</option>
+              <option value="all">{isRTL ? 'كل الأنواع' : 'All Types'}</option>
+              <option value="natural">{isRTL ? 'ورد طبيعي' : 'Natural Flowers'}</option>
+              <option value="artificial">{isRTL ? 'ورد صناعي' : 'Artificial Flowers'}</option>
+              <option value="preserved">{isRTL ? 'ورد دائم' : 'Preserved Flowers'}</option>
+              <option value="greenery">{isRTL ? 'أوراق خضراء' : 'Greenery'}</option>
+              <option value="indoor_plants">{isRTL ? 'نباتات داخلية' : 'Indoor Plants'}</option>
+              <option value="dried">{isRTL ? 'ورد مجفف' : 'Dried Flowers'}</option>
+            </select>
+            <select
+              value={classificationFilter}
+              onChange={(e) => setClassificationFilter(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+            >
+              <option value="all">{isRTL ? 'كل التصنيفات' : 'All Classifications'}</option>
+              <option value="ready_bouquets">{isRTL ? 'باقات جاهزة' : 'Ready Bouquets'}</option>
+              <option value="vases">{isRTL ? 'فازات وتنسيقات' : 'Vases & Arrangements'}</option>
+              <option value="gifts">{isRTL ? 'هدايا وإضافات' : 'Gifts & Additions'}</option>
+              <option value="wrapping">{isRTL ? 'مواد تغليف' : 'Wrapping Materials'}</option>
+              <option value="cards">{isRTL ? 'كروت إهداء' : 'Greeting Cards'}</option>
+              <option value="services">{isRTL ? 'خدمات' : 'Services'}</option>
+              <option value="vases_glass">{isRTL ? 'فازات وزجاجيات' : 'Vases & Glassware'}</option>
+              <option value="wrapping_paper">{isRTL ? 'ورق تغليف' : 'Wrapping Paper'}</option>
+              <option value="ribbons">{isRTL ? 'شرائط وإكسسوارات' : 'Ribbons & Accessories'}</option>
+              <option value="floral_tools">{isRTL ? 'أدوات تنسيق' : 'Floral Tools'}</option>
+              <option value="gift_boxes">{isRTL ? 'صناديق هدايا' : 'Gift Boxes'}</option>
             </select>
           </div>
         </div>
@@ -235,6 +359,7 @@ export function Products() {
                 <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">SKU</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'الاسم' : 'Name'}</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'النوع' : 'Type'}</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'التصنيف' : 'Classification'}</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'سعر الشراء' : 'Purchase'}</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'سعر البيع' : 'Sale'}</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'الربح' : 'Margin'}</th>
@@ -244,7 +369,7 @@ export function Products() {
             <tbody>
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-500">
+                  <td colSpan={8} className="text-center py-12 text-gray-500">
                     <Package className="w-16 h-16 mx-auto mb-3 opacity-30" />
                     <p className="text-lg font-medium">{isRTL ? 'لا توجد منتجات' : 'No products found'}</p>
                   </td>
@@ -266,10 +391,22 @@ export function Products() {
                       </td>
                       <td className="py-3.5 px-4">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                          product.type === 'natural' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                          product.type === 'natural' ? 'bg-green-100 text-green-700' :
+                          product.type === 'artificial' ? 'bg-blue-100 text-blue-700' :
+                          product.type === 'preserved' ? 'bg-purple-100 text-purple-700' :
+                          product.type === 'greenery' ? 'bg-emerald-100 text-emerald-700' :
+                          product.type === 'indoor_plants' ? 'bg-teal-100 text-teal-700' :
+                          'bg-amber-100 text-amber-700'
                         }`}>
-                          {product.type === 'natural' ? t('products.natural') : t('products.artificial')}
+                          {getTypeLabel(product.type)}
                         </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {product.classification && (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                            {getClassificationLabel(product.classification)}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-gray-700">{formatCurrency(product.purchase_price)}</td>
                       <td className="py-3.5 px-4 font-medium text-gray-900">{formatCurrency(product.sale_price)}</td>
@@ -282,6 +419,13 @@ export function Products() {
                         <div className="flex items-center gap-1">
                           {canEdit && (
                             <>
+                              <button
+                                onClick={() => openRecipeModal(product)}
+                                className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition"
+                                title={isRTL ? 'إدارة المكونات' : 'Manage Recipe'}
+                              >
+                                <ClipboardList className="w-4 h-4" />
+                              </button>
                               <button onClick={() => openEditModal(product)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition">
                                 <Edit className="w-4 h-4" />
                               </button>
@@ -345,11 +489,33 @@ export function Products() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'النوع' : 'Type'}</label>
-                  <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as any })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
-                    <option value="natural">{t('products.natural')}</option>
-                    <option value="artificial">{t('products.artificial')}</option>
+                  <select required value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as any })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                    <option value="natural">{isRTL ? 'ورد طبيعي' : 'Natural Flowers'}</option>
+                    <option value="artificial">{isRTL ? 'ورد صناعي' : 'Artificial Flowers'}</option>
+                    <option value="preserved">{isRTL ? 'ورد دائم' : 'Preserved Flowers'}</option>
+                    <option value="greenery">{isRTL ? 'أوراق خضراء' : 'Greenery'}</option>
+                    <option value="indoor_plants">{isRTL ? 'نباتات داخلية' : 'Indoor Plants'}</option>
+                    <option value="dried">{isRTL ? 'ورد مجفف' : 'Dried Flowers'}</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'التصنيف' : 'Classification'}</label>
+                <select value={formData.classification || ''} onChange={(e) => setFormData({ ...formData, classification: e.target.value as any || null })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                  <option value="">{isRTL ? 'بدون تصنيف' : 'No Classification'}</option>
+                  <option value="ready_bouquets">{isRTL ? 'باقات جاهزة' : 'Ready Bouquets'}</option>
+                  <option value="vases">{isRTL ? 'فازات وتنسيقات' : 'Vases & Arrangements'}</option>
+                  <option value="gifts">{isRTL ? 'هدايا وإضافات' : 'Gifts & Additions'}</option>
+                  <option value="wrapping">{isRTL ? 'مواد تغليف' : 'Wrapping Materials'}</option>
+                  <option value="cards">{isRTL ? 'كروت إهداء' : 'Greeting Cards'}</option>
+                  <option value="services">{isRTL ? 'خدمات' : 'Services'}</option>
+                  <option value="vases_glass">{isRTL ? 'فازات وزجاجيات' : 'Vases & Glassware'}</option>
+                  <option value="wrapping_paper">{isRTL ? 'ورق تغليف' : 'Wrapping Paper'}</option>
+                  <option value="ribbons">{isRTL ? 'شرائط وإكسسوارات' : 'Ribbons & Accessories'}</option>
+                  <option value="floral_tools">{isRTL ? 'أدوات تنسيق' : 'Floral Tools'}</option>
+                  <option value="gift_boxes">{isRTL ? 'صناديق هدايا' : 'Gift Boxes'}</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -408,6 +574,137 @@ export function Products() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showRecipeModal && recipeProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-xl">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  {isRTL ? 'إدارة مكونات المنتج' : 'Product Recipe Management'}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {isRTL ? recipeProduct.name_ar : recipeProduct.name} ({recipeProduct.sku})
+                </p>
+              </div>
+              <button onClick={() => setShowRecipeModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  {isRTL
+                    ? 'أضف المواد/المكونات التي تستخدم في هذا المنتج. عند البيع، سيتم خصم المكونات تلقائياً من المخزون.'
+                    : 'Add materials/components used in this product. When sold, these materials will be automatically deducted from inventory.'
+                  }
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900">{isRTL ? 'إضافة مكون جديد' : 'Add New Material'}</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isRTL ? 'المادة/المكون' : 'Material/Component'}
+                    </label>
+                    <select
+                      value={selectedMaterial}
+                      onChange={(e) => setSelectedMaterial(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    >
+                      <option value="">{isRTL ? 'اختر مادة' : 'Select Material'}</option>
+                      {products
+                        .filter(p => p.is_active && p.id !== recipeProduct.id)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {isRTL ? p.name_ar : p.name} ({p.sku})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isRTL ? 'الكمية' : 'Quantity'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={materialQuantity}
+                      onChange={(e) => setMaterialQuantity(parseFloat(e.target.value) || 1)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={addRecipeItem}
+                  disabled={!selectedMaterial || materialQuantity <= 0}
+                  className="w-full bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium"
+                >
+                  {isRTL ? 'إضافة المكون' : 'Add Material'}
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900">{isRTL ? 'المكونات الحالية' : 'Current Recipe'}</h4>
+                {recipes.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <ClipboardList className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                    <p>{isRTL ? 'لا توجد مكونات مضافة بعد' : 'No materials added yet'}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {recipes.map((recipe) => (
+                      <div
+                        key={recipe.id}
+                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">
+                            {recipe.material && (isRTL ? recipe.material.name_ar : recipe.material?.name)}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {recipe.material?.sku} | {isRTL ? 'الكمية:' : 'Qty:'} {recipe.quantity} | {isRTL ? 'سعر الشراء:' : 'Cost:'} {formatCurrency(recipe.material?.purchase_price || 0)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeRecipeItem(recipe.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-gray-900">
+                          {isRTL ? 'إجمالي تكلفة المكونات:' : 'Total Material Cost:'}
+                        </span>
+                        <span className="text-lg font-bold text-teal-600">
+                          {formatCurrency(
+                            recipes.reduce((sum, r) => sum + (r.material?.purchase_price || 0) * r.quantity, 0)
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-xl">
+              <button
+                onClick={() => setShowRecipeModal(false)}
+                className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium"
+              >
+                {isRTL ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
           </div>
         </div>
       )}

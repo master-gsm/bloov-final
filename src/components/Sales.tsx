@@ -12,7 +12,10 @@ interface Product {
   name: string;
   name_ar: string;
   sale_price: number;
+  purchase_price: number;
   sku: string;
+  type: 'natural' | 'artificial' | 'preserved' | 'greenery' | 'indoor_plants' | 'dried';
+  classification: 'ready_bouquets' | 'vases' | 'gifts' | 'wrapping' | 'cards' | 'services' | 'vases_glass' | 'wrapping_paper' | 'ribbons' | 'floral_tools' | 'gift_boxes' | null;
 }
 
 interface Customer {
@@ -62,6 +65,8 @@ export function Sales() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [classificationFilter, setClassificationFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [viewingSale, setViewingSale] = useState<Sale | null>(null);
@@ -106,7 +111,7 @@ export function Sales() {
     try {
       const [salesRes, productsRes, customersRes, settingsRes] = await Promise.all([
         supabase.from('sales').select('*, customers(name, name_ar, phone)').order('created_at', { ascending: false }),
-        supabase.from('products').select('id, name, name_ar, sale_price, purchase_price, sku').eq('is_active', true),
+        supabase.from('products').select('id, name, name_ar, sale_price, purchase_price, sku, type, classification').eq('is_active', true),
         supabase.from('customers').select('id, name, name_ar, code, phone').eq('is_active', true),
         supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
       ]);
@@ -528,6 +533,82 @@ export function Sales() {
                 )}
               </div>
 
+              <div className="mb-4 space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder={isRTL ? 'بحث عن منتج...' : 'Search products...'}
+                    value={productSearchTerm}
+                    onChange={(e) => setProductSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setClassificationFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      classificationFilter === 'all'
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isRTL ? 'الكل' : 'All'}
+                  </button>
+                  <button
+                    onClick={() => setClassificationFilter('ready_bouquets')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      classificationFilter === 'ready_bouquets'
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isRTL ? 'باقات جاهزة' : 'Bouquets'}
+                  </button>
+                  <button
+                    onClick={() => setClassificationFilter('vases')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      classificationFilter === 'vases'
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isRTL ? 'فازات' : 'Vases'}
+                  </button>
+                  <button
+                    onClick={() => setClassificationFilter('vases_glass')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      classificationFilter === 'vases_glass'
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isRTL ? 'زجاجيات' : 'Glassware'}
+                  </button>
+                  <button
+                    onClick={() => setClassificationFilter('wrapping')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      classificationFilter === 'wrapping'
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isRTL ? 'تغليف' : 'Wrapping'}
+                  </button>
+                  <button
+                    onClick={() => setClassificationFilter('gifts')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      classificationFilter === 'gifts'
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isRTL ? 'هدايا' : 'Gifts'}
+                  </button>
+                </div>
+              </div>
+
               {saleItems.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-30" />
@@ -539,9 +620,18 @@ export function Sales() {
                     <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                       <select value={item.product_id} onChange={(e) => updateItem(index, 'product_id', e.target.value)} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent">
                         <option value="">{isRTL ? 'اختر منتج' : 'Select Product'}</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name} ({formatCurrency(p.sale_price)})</option>
-                        ))}
+                        {products
+                          .filter((p) => {
+                            const matchesSearch = productSearchTerm === '' ||
+                              p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                              p.name_ar.includes(productSearchTerm) ||
+                              p.sku.toLowerCase().includes(productSearchTerm.toLowerCase());
+                            const matchesClassification = classificationFilter === 'all' || p.classification === classificationFilter;
+                            return matchesSearch && matchesClassification;
+                          })
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name} ({formatCurrency(p.sale_price)})</option>
+                          ))}
                       </select>
                       <input type="number" min="1" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" disabled={!canEdit} />
                       <input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" disabled={!canEdit} />
