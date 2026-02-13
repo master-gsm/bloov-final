@@ -149,6 +149,9 @@ export interface Database {
           tax: number
           discount: number
           total: number
+          total_cost: number
+          gross_profit: number
+          profit_margin: number
           paid_amount: number
           payment_status: 'unpaid' | 'partial' | 'paid'
           payment_method: 'cash' | 'card' | 'transfer' | 'check' | null
@@ -168,6 +171,9 @@ export interface Database {
           tax?: number
           discount?: number
           total?: number
+          total_cost?: number
+          gross_profit?: number
+          profit_margin?: number
           paid_amount?: number
           payment_status?: 'unpaid' | 'partial' | 'paid'
           payment_method?: 'cash' | 'card' | 'transfer' | 'check' | null
@@ -187,6 +193,9 @@ export interface Database {
           tax?: number
           discount?: number
           total?: number
+          total_cost?: number
+          gross_profit?: number
+          profit_margin?: number
           paid_amount?: number
           payment_status?: 'unpaid' | 'partial' | 'paid'
           payment_method?: 'cash' | 'card' | 'transfer' | 'check' | null

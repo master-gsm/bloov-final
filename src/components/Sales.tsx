@@ -106,7 +106,7 @@ export function Sales() {
     try {
       const [salesRes, productsRes, customersRes, settingsRes] = await Promise.all([
         supabase.from('sales').select('*, customers(name, name_ar, phone)').order('created_at', { ascending: false }),
-        supabase.from('products').select('id, name, name_ar, sale_price, sku').eq('is_active', true),
+        supabase.from('products').select('id, name, name_ar, sale_price, purchase_price, sku').eq('is_active', true),
         supabase.from('customers').select('id, name, name_ar, code, phone').eq('is_active', true),
         supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
       ]);
@@ -122,7 +122,7 @@ export function Sales() {
   };
 
   const addItem = () => {
-    setSaleItems([...saleItems, { product_id: '', product_name: '', quantity: 1, unit_price: 0, discount: 0, total: 0 }]);
+    setSaleItems([...saleItems, { product_id: '', product_name: '', quantity: 1, unit_price: 0, purchase_price: 0, discount: 0, total: 0 }]);
   };
 
   const updateItem = (index: number, field: string, value: any) => {
@@ -132,6 +132,7 @@ export function Sales() {
       const product = products.find((p) => p.id === value);
       if (product) {
         item.unit_price = product.sale_price;
+        item.purchase_price = product.purchase_price || 0;
         item.product_name = isRTL ? product.name_ar : product.name;
       }
     }
@@ -213,6 +214,7 @@ export function Sales() {
         product_id: item.product_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
+        purchase_price: item.purchase_price || 0,
         discount: item.discount,
         total: item.total,
       }));

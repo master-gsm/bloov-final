@@ -8,6 +8,8 @@ interface SalesData {
   total: number;
   storeTotal: number;
   sallaTotal: number;
+  totalCost: number;
+  grossProfit: number;
   count: number;
 }
 
@@ -35,7 +37,7 @@ export function Reports() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [period, setPeriod] = useState<'today' | 'week' | 'month' | 'year'>('month');
-  const [salesData, setSalesData] = useState<SalesData>({ total: 0, storeTotal: 0, sallaTotal: 0, count: 0 });
+  const [salesData, setSalesData] = useState<SalesData>({ total: 0, storeTotal: 0, sallaTotal: 0, totalCost: 0, grossProfit: 0, count: 0 });
   const [purchasesData, setPurchasesData] = useState<PurchasesData>({ total: 0, count: 0 });
   const [expensesData, setExpensesData] = useState<ExpensesData>({ total: 0, count: 0 });
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -84,7 +86,7 @@ export function Reports() {
       const [salesRes, purchasesRes, expensesRes, recentRes] = await Promise.all([
         supabase
           .from('sales')
-          .select('total, source')
+          .select('total, total_cost, gross_profit, source')
           .eq('status', 'confirmed')
           .gte('sale_date', start)
           .lte('sale_date', end),
@@ -110,10 +112,19 @@ export function Reports() {
       const storeTotalAmount = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
       const sallaTotalAmount = salesRes.data?.filter(s => s.source === 'salla').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
       const salesTotalAmount = storeTotalAmount + sallaTotalAmount;
+      const salesTotalCost = salesRes.data?.reduce((sum, s) => sum + (s.total_cost || 0), 0) || 0;
+      const salesGrossProfit = salesRes.data?.reduce((sum, s) => sum + (s.gross_profit || 0), 0) || 0;
       const purchasesTotalAmount = purchasesRes.data?.reduce((sum, p) => sum + (p.total || 0), 0) || 0;
       const expensesTotalAmount = expensesRes.data?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
 
-      setSalesData({ total: salesTotalAmount, storeTotal: storeTotalAmount, sallaTotal: sallaTotalAmount, count: salesRes.data?.length || 0 });
+      setSalesData({
+        total: salesTotalAmount,
+        storeTotal: storeTotalAmount,
+        sallaTotal: sallaTotalAmount,
+        totalCost: salesTotalCost,
+        grossProfit: salesGrossProfit,
+        count: salesRes.data?.length || 0
+      });
       setPurchasesData({ total: purchasesTotalAmount, count: purchasesRes.data?.length || 0 });
       setExpensesData({ total: expensesTotalAmount, count: expensesRes.data?.length || 0 });
       setRecentSales(recentRes.data || []);
@@ -154,7 +165,7 @@ export function Reports() {
     }
   };
 
-  const netProfit = salesData.total - purchasesData.total - expensesData.total;
+  const netProfit = salesData.grossProfit - expensesData.total;
   const profitMargin = salesData.total > 0 ? ((netProfit / salesData.total) * 100).toFixed(1) : '0.0';
 
   const formatCurrency = (amount: number) =>

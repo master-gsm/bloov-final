@@ -38,12 +38,13 @@ export function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [partnersRes, salesRes, purchasesRes, inventoryRes, recentSalesRes] = await Promise.all([
+      const [partnersRes, salesRes, purchasesRes, inventoryRes, recentSalesRes, expensesRes] = await Promise.all([
         supabase.from('partners').select('*').eq('is_active', true).order('share_percentage', { ascending: false }),
-        supabase.from('sales').select('total, source').eq('status', 'confirmed'),
+        supabase.from('sales').select('total, total_cost, gross_profit, source').eq('status', 'confirmed'),
         supabase.from('purchases').select('total').in('status', ['confirmed', 'received']),
         supabase.from('inventory').select('quantity, products(purchase_price)'),
         supabase.from('sales').select('id, sale_number, total, sale_date, customers(name, name_ar)').eq('status', 'confirmed').order('sale_date', { ascending: false }).limit(5),
+        supabase.from('operating_expenses').select('amount'),
       ]);
 
       if (partnersRes.data) setPartners(partnersRes.data);
@@ -57,12 +58,17 @@ export function Dashboard() {
         return sum + (item.quantity * (item.products?.purchase_price || 0));
       }, 0) || 0;
 
+      const totalCOGS = salesRes.data?.reduce((sum, s) => sum + (s.total_cost || 0), 0) || 0;
+      const totalGrossProfit = salesRes.data?.reduce((sum, s) => sum + (s.gross_profit || 0), 0) || 0;
+      const totalOperatingExpenses = expensesRes.data?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+      const netProfit = totalGrossProfit - totalOperatingExpenses;
+
       setStats({
         totalSales,
         storeSales,
         sallaSales,
         totalPurchases,
-        netProfit: totalSales - totalPurchases,
+        netProfit,
         inventoryValue,
       });
     } catch (error) {
