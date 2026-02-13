@@ -96,12 +96,12 @@ export function Sales() {
         supabase.from('sales').select('*, customers(name, name_ar, phone)').order('created_at', { ascending: false }),
         supabase.from('products').select('id, name, name_ar, sale_price, sku').eq('is_active', true),
         supabase.from('customers').select('id, name, name_ar, code, phone').eq('is_active', true),
-        supabase.from('settings').select('value').eq('key', 'tax_rate').maybeSingle(),
+        supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
       ]);
       if (salesRes.data) setSales(salesRes.data);
       if (productsRes.data) setProducts(productsRes.data);
       if (customersRes.data) setCustomers(customersRes.data);
-      if (settingsRes.data) setTaxRate(parseFloat(settingsRes.data.value) / 100);
+      if (settingsRes.data?.tax_rate) setTaxRate(parseFloat(settingsRes.data.tax_rate.toString()));
     } catch (err) {
       console.error('Error loading data:', err);
     } finally {
