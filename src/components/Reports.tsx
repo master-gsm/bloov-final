@@ -172,7 +172,7 @@ export function Reports() {
             <div className="p-2.5 bg-teal-100 rounded-lg">
               <TrendingUp className="w-5 h-5 text-teal-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? '🏪 مبيعات المحل' : '🏪 Store Sales'}</p>
+            <p className="text-sm text-gray-500">{isRTL ? 'مبيعات المحل' : 'Store Sales'}</p>
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.storeTotal)}</p>
           <p className="text-xs text-gray-400 mt-1">{isRTL ? 'مبيعات محلية' : 'Local sales'}</p>
@@ -183,7 +183,7 @@ export function Reports() {
             <div className="p-2.5 bg-blue-100 rounded-lg">
               <TrendingUp className="w-5 h-5 text-blue-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? '🛒 مبيعات المتجر الإلكتروني' : '🛒 Online Sales'}</p>
+            <p className="text-sm text-gray-500">{isRTL ? 'مبيعات المتجر الإلكتروني' : 'Online Sales'}</p>
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.sallaTotal)}</p>
           <p className="text-xs text-gray-400 mt-1">{isRTL ? 'مبيعات سلة' : 'Salla sales'}</p>
@@ -194,7 +194,7 @@ export function Reports() {
             <div className="p-2.5 bg-green-100 rounded-lg">
               <DollarSign className="w-5 h-5 text-green-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? '💰 إجمالي الإيرادات' : '💰 Total Revenue'}</p>
+            <p className="text-sm text-gray-500">{isRTL ? 'إجمالي الإيرادات' : 'Total Revenue'}</p>
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.total)}</p>
           <p className="text-xs text-gray-400 mt-1">{salesData.count} {isRTL ? 'عملية' : 'transactions'}</p>

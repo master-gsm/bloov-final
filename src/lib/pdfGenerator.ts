@@ -532,6 +532,45 @@ async function uploadImageToStorage(
   }
 }
 
+async function uploadPdfToStorage(
+  pdfBlob: Blob,
+  fileName: string,
+  saleId: string
+): Promise<string | null> {
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      console.error('No authenticated user');
+      return null;
+    }
+
+    const filePath = `${authData.user.id}/${saleId}/${fileName}`;
+    console.log('Uploading PDF to:', filePath);
+
+    const { data, error } = await supabase.storage
+      .from('invoices')
+      .upload(filePath, pdfBlob, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+
+    if (error) {
+      console.error('Upload error:', error);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('invoices')
+      .getPublicUrl(filePath);
+
+    console.log('Upload successful, public URL:', urlData.publicUrl);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error('Error uploading to storage:', error);
+    return null;
+  }
+}
+
 export async function shareInvoiceViaWhatsApp(
   sale: Sale,
   items: SaleItem[],
@@ -543,11 +582,11 @@ export async function shareInvoiceViaWhatsApp(
     console.log('[shareInvoiceViaWhatsApp] Items count:', items.length);
     console.log('[shareInvoiceViaWhatsApp] Customer phone:', customerPhone);
 
-    console.log('[shareInvoiceViaWhatsApp] Calling generateInvoiceImage...');
-    const imageBlob = await generateInvoiceImage(sale, items);
-    console.log('[shareInvoiceViaWhatsApp] Image generated successfully, size:', imageBlob.size);
+    console.log('[shareInvoiceViaWhatsApp] Generating PDF invoice...');
+    const pdfBlob = await generateInvoicePDF(sale, items);
+    console.log('[shareInvoiceViaWhatsApp] PDF generated successfully, size:', pdfBlob.size);
 
-    const fileName = `BLOOV-Invoice-${sale.sale_number}.png`;
+    const fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
 
     let cleanPhone = customerPhone.replace(/[^0-9]/g, '');
     if (cleanPhone.startsWith('00')) {
@@ -578,12 +617,12 @@ export async function shareInvoiceViaWhatsApp(
 
     if (navigator.share && navigator.canShare) {
       try {
-        const file = new File([imageBlob], fileName, { type: 'image/png' });
-        console.log('Image file created:', file.name, file.size, file.type);
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        console.log('PDF file created:', file.name, file.size, file.type);
 
         const shareData: ShareData = {
           files: [file],
-          text: `مرحباً 👋\nشكراً لتسوقك في BLOOV 🌸\n\n📄 رقم الفاتورة: ${sale.sale_number}\n💰 المجموع: ${sale.total.toFixed(2)} ر.س\n\nنتطلع لخدمتك مجدداً!`
+          text: `مرحباً\nشكراً لتسوقك في BLOOV\n\nرقم الفاتورة: ${sale.sale_number}\nالمجموع: ${sale.total.toFixed(2)} ر.س\n\nنتطلع لخدمتك مجدداً`
         };
 
         if (navigator.canShare(shareData)) {
@@ -603,30 +642,30 @@ export async function shareInvoiceViaWhatsApp(
     }
 
     if (!shareSuccessful) {
-      console.log('Uploading invoice image to cloud storage...');
-      const publicUrl = await uploadImageToStorage(imageBlob, fileName, sale.id);
+      console.log('Uploading invoice PDF to cloud storage...');
+      const publicUrl = await uploadPdfToStorage(pdfBlob, fileName, sale.id);
 
       if (publicUrl) {
-        const messageText = `مرحباً 👋
-شكراً لتسوقك في BLOOV 🌸
+        const messageText = `مرحباً
+شكراً لتسوقك في BLOOV
 
-📄 رقم الفاتورة: ${sale.sale_number}
-💰 المجموع: ${sale.total.toFixed(2)} ر.س
+رقم الفاتورة: ${sale.sale_number}
+المجموع: ${sale.total.toFixed(2)} ر.س
 شامل ضريبة القيمة المضافة 15%
 
-🖼️ صورة الفاتورة:
+رابط الفاتورة:
 ${publicUrl}
 
-نتطلع لخدمتك مجدداً!
-📲 للتواصل: https://wa.me/${cleanBusinessPhone}`;
+نتطلع لخدمتك مجدداً
+للتواصل: https://wa.me/${cleanBusinessPhone}`;
 
         const message = encodeURIComponent(messageText);
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
         window.open(whatsappUrl, '_blank');
-        console.log('WhatsApp opened with invoice image link');
+        console.log('WhatsApp opened with invoice PDF link');
       } else {
-        console.error('Failed to upload invoice image');
-        throw new Error('فشل رفع صورة الفاتورة. تحقق من الاتصال بالإنترنت.');
+        console.error('Failed to upload invoice PDF');
+        throw new Error('فشل رفع ملف الفاتورة. تحقق من الاتصال بالإنترنت.');
       }
     }
   } catch (error) {

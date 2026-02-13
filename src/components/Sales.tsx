@@ -540,8 +540,8 @@ export function Sales() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'مصدر البيع' : 'Sale Source'}</label>
                 <select value={saleSource} onChange={(e) => setSaleSource(e.target.value as 'store' | 'salla')} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm bg-white" disabled={!canEdit}>
-                  <option value="store">{isRTL ? '🏪 مبيعات المحل' : '🏪 Store Sales'}</option>
-                  <option value="salla">{isRTL ? '🛒 مبيعات المتجر الإلكتروني (سلة)' : '🛒 Online Sales (Salla)'}</option>
+                  <option value="store">{isRTL ? 'مبيعات المحل' : 'Store Sales'}</option>
+                  <option value="salla">{isRTL ? 'مبيعات المتجر الإلكتروني (سلة)' : 'Online Sales (Salla)'}</option>
                 </select>
               </div>
 

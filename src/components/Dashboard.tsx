@@ -74,19 +74,19 @@ export function Dashboard() {
 
   const statCards = [
     {
-      title: isRTL ? '🏪 مبيعات المحل' : '🏪 Store Sales',
+      title: isRTL ? 'مبيعات المحل' : 'Store Sales',
       value: stats.storeSales,
       icon: ShoppingCart,
       color: 'from-teal-500 to-teal-600'
     },
     {
-      title: isRTL ? '🛒 مبيعات المتجر الإلكتروني' : '🛒 Online Sales (Salla)',
+      title: isRTL ? 'مبيعات المتجر الإلكتروني' : 'Online Sales (Salla)',
       value: stats.sallaSales,
       icon: ShoppingCart,
       color: 'from-blue-500 to-blue-600'
     },
     {
-      title: isRTL ? '💰 إجمالي المبيعات' : '💰 Total Revenue',
+      title: isRTL ? 'إجمالي المبيعات' : 'Total Revenue',
       value: stats.totalSales,
       icon: DollarSign,
       color: 'from-green-500 to-green-600'

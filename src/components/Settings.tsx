@@ -178,10 +178,10 @@ export function Settings() {
         setDiskBackupPath(result.path);
         await diskBackupManager.setBackupPath(result.path);
         setBackupMessage(isRTL
-          ? `✓ تم اختيار المجلد: ${result.path}`
-          : `✓ Folder selected: ${result.path}`);
+          ? `تم اختيار المجلد: ${result.path}`
+          : `Folder selected: ${result.path}`);
       } else if (result.error) {
-        setBackupMessage(`⚠ ${result.error}`);
+        setBackupMessage(result.error);
       } else {
         setBackupMessage(isRTL
           ? 'تم إلغاء اختيار المجلد'
@@ -577,7 +577,7 @@ export function Settings() {
               </div>
 
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-800 font-medium">{isRTL ? '⚠️ تحذير' : '⚠️ Warning'}</p>
+                <p className="text-sm text-amber-800 font-medium">{isRTL ? 'تحذير' : 'Warning'}</p>
                 <p className="text-xs text-amber-700 mt-2">
                   {isRTL
                     ? 'استعادة النسخة الاحتياطية سيؤدي إلى استبدال البيانات الحالية. تأكد من إنشاء نسخة احتياطية قبل الاستعادة.'
@@ -651,7 +651,7 @@ export function Settings() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className={`text-sm font-medium ${isOnline ? 'text-green-800' : 'text-amber-800'}`}>
-                      {isOnline ? (isRTL ? '✓ متصل بالإنترنت' : '✓ Online') : (isRTL ? '⚠ غير متصل بالإنترنت' : '⚠ Offline')}
+                      {isOnline ? (isRTL ? 'متصل بالإنترنت' : 'Online') : (isRTL ? 'غير متصل بالإنترنت' : 'Offline')}
                     </p>
                     {!isOnline && (
                       <p className="text-xs text-amber-700 mt-1">
