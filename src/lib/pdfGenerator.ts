@@ -551,7 +551,7 @@ export async function shareInvoiceViaWhatsApp(
       await navigator.clipboard.write([clipboardItem]);
       console.log('[shareInvoiceViaWhatsApp] ✓ Image copied to clipboard!');
 
-      showToast('تم نسخ الفاتورة! الصق (Ctrl+V) في WhatsApp', 'success');
+      showToast('تم نسخ الفاتورة! اضغط (Ctrl+V) في واتساب لإرسالها', 'success');
 
       console.log('[shareInvoiceViaWhatsApp] Opening WhatsApp...');
       const message = encodeURIComponent(cleanMessageText);
