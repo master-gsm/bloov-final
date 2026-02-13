@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Download } from 'lucide-react';
@@ -41,6 +42,7 @@ const emptyForm = {
 export function Customers() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
+  const canEdit = useCanEdit();
   const isRTL = language === 'ar';
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -228,13 +230,15 @@ export function Customers() {
             <Download className="w-5 h-5" />
             {isRTL ? 'تصدير Excel' : 'Export Excel'}
           </button>
-          <button
-            onClick={openAddModal}
-            className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            {isRTL ? 'إضافة عميل' : 'Add Customer'}
-          </button>
+          {canEdit && (
+            <button
+              onClick={openAddModal}
+              className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
+            >
+              <Plus className="w-5 h-5" />
+              {isRTL ? 'إضافة عميل' : 'Add Customer'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -269,20 +273,22 @@ export function Customers() {
                     </h3>
                     <p className="text-xs text-gray-400 font-mono">{customer.code}</p>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                    <button
-                      onClick={() => openEditModal(customer)}
-                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(customer.id)}
-                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                      <button
+                        onClick={() => openEditModal(customer)}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(customer.id)}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5 text-sm text-gray-600">
@@ -381,6 +387,7 @@ export function Customers() {
                     required
                     value={formData.code}
                     onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    disabled={!canEdit}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent font-mono"
                   />
                 </div>
@@ -392,6 +399,7 @@ export function Customers() {
                     type="number"
                     value={formData.credit_limit}
                     onChange={(e) => setFormData({ ...formData, credit_limit: parseFloat(e.target.value) || 0 })}
+                    disabled={!canEdit}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   />
                 </div>
@@ -407,6 +415,7 @@ export function Customers() {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    disabled={!canEdit}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   />
                 </div>
@@ -418,6 +427,7 @@ export function Customers() {
                     type="text"
                     value={formData.name_ar}
                     onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
+                    disabled={!canEdit}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                     dir="rtl"
                   />
@@ -433,6 +443,7 @@ export function Customers() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    disabled={!canEdit}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   />
                 </div>
@@ -444,6 +455,7 @@ export function Customers() {
                     type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    disabled={!canEdit}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                     dir="ltr"
                   />
@@ -459,6 +471,7 @@ export function Customers() {
                     type="text"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    disabled={!canEdit}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   />
                 </div>
@@ -470,6 +483,7 @@ export function Customers() {
                     type="text"
                     value={formData.city_ar}
                     onChange={(e) => setFormData({ ...formData, city_ar: e.target.value })}
+                    disabled={!canEdit}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                     dir="rtl"
                   />
@@ -484,6 +498,7 @@ export function Customers() {
                   <textarea
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    disabled={!canEdit}
                     rows={2}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
                   />
@@ -495,6 +510,7 @@ export function Customers() {
                   <textarea
                     value={formData.address_ar}
                     onChange={(e) => setFormData({ ...formData, address_ar: e.target.value })}
+                    disabled={!canEdit}
                     rows={2}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
                     dir="rtl"
@@ -511,21 +527,24 @@ export function Customers() {
                   onChange={(e) =>
                     setFormData({ ...formData, [isRTL ? 'notes_ar' : 'notes']: e.target.value })
                   }
+                  disabled={!canEdit}
                   rows={2}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
                 />
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium"
-                >
-                  {submitting
-                    ? (isRTL ? 'جاري الحفظ...' : 'Saving...')
-                    : (isRTL ? 'حفظ' : 'Save')}
-                </button>
+                {canEdit && (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium"
+                  >
+                    {submitting
+                      ? (isRTL ? 'جاري الحفظ...' : 'Saving...')
+                      : (isRTL ? 'حفظ' : 'Save')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}

@@ -326,9 +326,9 @@ export function UserManagement() {
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); onChange(key); }}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition flex-shrink-0 ${perms[key] ? 'bg-teal-600' : 'bg-gray-300'}`}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition flex-shrink-0 overflow-hidden ${perms[key] ? 'bg-teal-600' : 'bg-gray-300'}`}
           >
-            <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${perms[key] ? 'translate-x-5' : 'translate-x-1'}`} />
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${perms[key] ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
           <span className="text-sm text-gray-700 flex-1">{getPermissionLabel(key)}</span>
         </div>

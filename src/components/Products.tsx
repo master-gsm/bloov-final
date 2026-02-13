@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { Package, Plus, Edit, Trash2, Search, X, Filter } from 'lucide-react';
 
@@ -44,6 +45,7 @@ const emptyForm = {
 
 export function Products() {
   const { t, language } = useLanguage();
+  const canEdit = useCanEdit();
   const isRTL = language === 'ar';
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -189,13 +191,15 @@ export function Products() {
           <h2 className="text-2xl font-bold text-gray-900">{t('nav.products')}</h2>
           <p className="text-gray-500 mt-1">{isRTL ? 'إدارة المنتجات والأسعار' : 'Manage products and pricing'}</p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
-        >
-          <Plus className="w-5 h-5" />
-          {t('common.add')}
-        </button>
+        {canEdit && (
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
+          >
+            <Plus className="w-5 h-5" />
+            {t('common.add')}
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -276,12 +280,16 @@ export function Products() {
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => openEditModal(product)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition">
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => setDeleteConfirm(product.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canEdit && (
+                            <>
+                              <button onClick={() => openEditModal(product)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition">
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => setDeleteConfirm(product.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
@@ -52,6 +53,7 @@ interface Sale {
 export function Sales() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
+  const canEdit = useCanEdit();
   const isRTL = language === 'ar';
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -313,8 +315,16 @@ export function Sales() {
       : `Hello ${custName}, thank you for shopping at BLOOV!\n\nInvoice: ${sale.sale_number}\nTotal: ${formatCurrency(sale.total)} SAR\n(Including 15% VAT)\n\nWe look forward to serving you again!`;
 
     const cleanPhone = phone.replace(/[^0-9+]/g, '');
-    const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('+') ? cleanPhone.slice(1) : cleanPhone}?text=${encodeURIComponent(msg)}`;
-    window.open(whatsappUrl, '_blank');
+    const phoneNumber = cleanPhone.startsWith('+') ? cleanPhone.slice(1) : cleanPhone;
+
+    const desktopUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(msg)}`;
+    const webUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(msg)}`;
+
+    window.location.href = desktopUrl;
+
+    setTimeout(() => {
+      window.open(webUrl, '_blank');
+    }, 1000);
   };
 
   const updateSaleStatus = async (saleId: string, status: string) => {
@@ -399,9 +409,11 @@ export function Sales() {
             <div className="bg-white rounded-xl shadow-sm border p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-gray-900">{isRTL ? 'المنتجات' : 'Items'}</h3>
-                <button onClick={addItem} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium">
-                  <Plus className="w-4 h-4" /> {isRTL ? 'إضافة منتج' : 'Add Item'}
-                </button>
+                {canEdit && (
+                  <button onClick={addItem} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium">
+                    <Plus className="w-4 h-4" /> {isRTL ? 'إضافة منتج' : 'Add Item'}
+                  </button>
+                )}
               </div>
 
               {saleItems.length === 0 ? (
@@ -419,10 +431,10 @@ export function Sales() {
                           <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name} ({formatCurrency(p.sale_price)})</option>
                         ))}
                       </select>
-                      <input type="number" min="1" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
-                      <input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      <input type="number" min="1" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" disabled={!canEdit} />
+                      <input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" disabled={!canEdit} />
                       <div className="w-28 text-sm font-bold text-gray-900 text-center">{formatCurrency(item.total)}</div>
-                      <button onClick={() => removeItem(index)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                      {canEdit && <button onClick={() => removeItem(index)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>}
                     </div>
                   ))}
                 </div>
@@ -540,10 +552,12 @@ export function Sales() {
                 </div>
               )}
 
-              <button onClick={handleSubmit} disabled={submitting || saleItems.length === 0} className="w-full bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium flex items-center justify-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'تأكيد وطباعة الفاتورة' : 'Confirm & Print Invoice')}
-              </button>
+              {canEdit && (
+                <button onClick={handleSubmit} disabled={submitting || saleItems.length === 0} className="w-full bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium flex items-center justify-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'تأكيد وطباعة الفاتورة' : 'Confirm & Print Invoice')}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -558,10 +572,12 @@ export function Sales() {
           <h2 className="text-2xl font-bold text-gray-900">{t('nav.sales')}</h2>
           <p className="text-gray-500 mt-1">{isRTL ? 'إدارة المبيعات والفواتير' : 'Manage sales and invoices'}</p>
         </div>
-        <button onClick={openNewSale} className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium">
-          <Plus className="w-5 h-5" />
-          {isRTL ? 'بيع جديد' : 'New Sale'}
-        </button>
+        {canEdit && (
+          <button onClick={openNewSale} className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium">
+            <Plus className="w-5 h-5" />
+            {isRTL ? 'بيع جديد' : 'New Sale'}
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useCanEdit } from '../hooks/useCanEdit';
 import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
 import { uploadFile, getFileUrl } from '../lib/fileUpload';
 import { Receipt, Plus, Trash2, Search, Calendar, DollarSign, FileText, Filter, Download, Users, Paperclip, Camera, Printer, X } from 'lucide-react';
@@ -26,6 +27,7 @@ interface OperatingExpense {
 export default function Expenses() {
   const { user } = useAuth();
   const { language } = useLanguage();
+  const canEdit = useCanEdit();
   const isRTL = language === 'ar';
 
   const [expenses, setExpenses] = useState<OperatingExpense[]>([]);
@@ -219,13 +221,15 @@ export default function Expenses() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
-        >
-          <Plus className="w-4 h-4" />
-          {isRTL ? 'إضافة مصروف' : 'Add Expense'}
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+          >
+            <Plus className="w-4 h-4" />
+            {isRTL ? 'إضافة مصروف' : 'Add Expense'}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -242,6 +246,7 @@ export default function Expenses() {
                 <select
                   value={formData.expense_type}
                   onChange={(e) => setFormData({ ...formData, expense_type: e.target.value })}
+                  disabled={!canEdit}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   required
                 >
@@ -262,6 +267,7 @@ export default function Expenses() {
                   step="0.01"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  disabled={!canEdit}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   required
                 />
@@ -275,6 +281,7 @@ export default function Expenses() {
                   type="date"
                   value={formData.expense_date}
                   onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
+                  disabled={!canEdit}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   required
                 />
@@ -287,6 +294,7 @@ export default function Expenses() {
                 <select
                   value={formData.payment_method}
                   onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+                  disabled={!canEdit}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 >
                   <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
@@ -304,6 +312,7 @@ export default function Expenses() {
                   type="text"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  disabled={!canEdit}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   required
                 />
@@ -317,6 +326,7 @@ export default function Expenses() {
                   type="text"
                   value={formData.description_ar}
                   onChange={(e) => setFormData({ ...formData, description_ar: e.target.value })}
+                  disabled={!canEdit}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>
@@ -333,6 +343,7 @@ export default function Expenses() {
                       [isRTL ? 'notes_ar' : 'notes']: e.target.value,
                     })
                   }
+                  disabled={!canEdit}
                   rows={3}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
                 />
@@ -392,12 +403,14 @@ export default function Expenses() {
               >
                 {isRTL ? 'إلغاء' : 'Cancel'}
               </button>
-              <button
-                type="submit"
-                className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
-              >
-                {isRTL ? 'حفظ' : 'Save'}
-              </button>
+              {canEdit && (
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                >
+                  {isRTL ? 'حفظ' : 'Save'}
+                </button>
+              )}
             </div>
           </form>
         </div>
@@ -527,14 +540,14 @@ export default function Expenses() {
                             {isRTL ? 'إلغاء' : 'Cancel'}
                           </button>
                         </>
-                      ) : (
+                      ) : canEdit ? (
                         <button
                           onClick={() => setDeleteConfirm(exp.id)}
                           className="p-2 text-red-500 hover:bg-red-50 rounded transition"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </td>
                 </tr>

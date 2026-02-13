@@ -238,9 +238,9 @@ export function Settings() {
       <button
         type="button"
         onClick={() => updateSetting(key, settings[key] === 'true' ? 'false' : 'true')}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${settings[key] === 'true' ? 'bg-teal-600' : 'bg-gray-300'}`}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition overflow-hidden ${settings[key] === 'true' ? 'bg-teal-600' : 'bg-gray-300'}`}
       >
-        <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${settings[key] === 'true' ? 'translate-x-5' : 'translate-x-1'}`} />
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${settings[key] === 'true' ? 'translate-x-6' : 'translate-x-1'}`} />
       </button>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Truck, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Globe, FileText, DollarSign, Save } from 'lucide-react';
@@ -41,6 +42,7 @@ const emptyForm = {
 export function Suppliers() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
+  const canEdit = useCanEdit();
   const isRTL = language === 'ar';
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -225,13 +227,15 @@ export function Suppliers() {
           <h2 className="text-2xl font-bold text-gray-900">{t('nav.suppliers')}</h2>
           <p className="text-gray-500 mt-1">{isRTL ? 'إدارة بيانات الموردين' : 'Manage supplier information'}</p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
-        >
-          <Plus className="w-5 h-5" />
-          {isRTL ? 'إضافة مورد' : 'Add Supplier'}
-        </button>
+        {canEdit && (
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
+          >
+            <Plus className="w-5 h-5" />
+            {isRTL ? 'إضافة مورد' : 'Add Supplier'}
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -265,14 +269,16 @@ export function Suppliers() {
                     </h3>
                     <p className="text-xs text-gray-400 font-mono">{supplier.code}</p>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                    <button onClick={() => openEditModal(supplier)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setDeleteConfirm(supplier.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                      <button onClick={() => openEditModal(supplier)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg">
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setDeleteConfirm(supplier.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5 text-sm text-gray-600">
@@ -354,9 +360,11 @@ export function Suppliers() {
                 <p className="text-sm text-gray-500">{isRTL ? statementSupplier.name_ar || statementSupplier.name : statementSupplier.name}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => { setShowPaymentForm(true); }} className="flex items-center gap-1 bg-teal-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 transition">
-                  <DollarSign className="w-4 h-4" /> {isRTL ? 'تسجيل دفعة' : 'Add Payment'}
-                </button>
+                {canEdit && (
+                  <button onClick={() => { setShowPaymentForm(true); }} className="flex items-center gap-1 bg-teal-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 transition">
+                    <DollarSign className="w-4 h-4" /> {isRTL ? 'تسجيل دفعة' : 'Add Payment'}
+                  </button>
+                )}
                 <button onClick={() => setStatementSupplier(null)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
               </div>
             </div>
@@ -461,9 +469,11 @@ export function Suppliers() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'ملاحظات' : 'Notes'}</label>
                 <input type="text" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" dir="rtl" />
               </div>
-              <button onClick={addSupplierPayment} disabled={submitting || !paymentAmount} className="w-full bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                <Save className="w-4 h-4" /> {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ الدفعة' : 'Save Payment')}
-              </button>
+              {canEdit && (
+                <button onClick={addSupplierPayment} disabled={submitting || !paymentAmount} className="w-full bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  <Save className="w-4 h-4" /> {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ الدفعة' : 'Save Payment')}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -546,9 +556,11 @@ export function Suppliers() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={submitting} className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium">
-                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
-                </button>
+                {canEdit && (
+                  <button type="submit" disabled={submitting} className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium">
+                    {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
+                  </button>
+                )}
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium">
                   {isRTL ? 'إلغاء' : 'Cancel'}
                 </button>

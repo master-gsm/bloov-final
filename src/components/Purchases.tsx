@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getSignedUrl, getFileUrl } from '../lib/fileUpload';
 import { ShoppingBag, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Paperclip, Download, Printer, Camera } from 'lucide-react';
@@ -49,6 +50,7 @@ interface Purchase {
 export function Purchases() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
+  const canEdit = useCanEdit();
   const isRTL = language === 'ar';
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -282,9 +284,11 @@ export function Purchases() {
             <div className="bg-white rounded-xl shadow-sm border p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-gray-900">{isRTL ? 'المنتجات' : 'Items'}</h3>
-                <button onClick={addItem} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium">
-                  <Plus className="w-4 h-4" /> {isRTL ? 'إضافة منتج' : 'Add Item'}
-                </button>
+                {canEdit && (
+                  <button onClick={addItem} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium">
+                    <Plus className="w-4 h-4" /> {isRTL ? 'إضافة منتج' : 'Add Item'}
+                  </button>
+                )}
               </div>
 
               {purchaseItems.length === 0 ? (
@@ -299,6 +303,7 @@ export function Purchases() {
                       <select
                         value={item.product_id}
                         onChange={(e) => updateItem(index, 'product_id', e.target.value)}
+                        disabled={!canEdit}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       >
                         <option value="">{isRTL ? 'اختر منتج' : 'Select Product'}</option>
@@ -308,12 +313,14 @@ export function Purchases() {
                           </option>
                         ))}
                       </select>
-                      <input type="number" min="1" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
-                      <input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      <input type="number" min="1" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} disabled={!canEdit} className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      <input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} disabled={!canEdit} className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
                       <div className="w-28 text-sm font-bold text-gray-900 text-center">{formatCurrency(item.total)}</div>
-                      <button onClick={() => removeItem(index)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canEdit && (
+                        <button onClick={() => removeItem(index)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -327,7 +334,7 @@ export function Purchases() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'المورد' : 'Supplier'}</label>
-                <select value={selectedSupplier} onChange={(e) => setSelectedSupplier(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm">
+                <select value={selectedSupplier} onChange={(e) => setSelectedSupplier(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm">
                   <option value="">{isRTL ? 'اختر مورد' : 'Select Supplier'}</option>
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>{isRTL ? s.name_ar || s.name : s.name}</option>
@@ -337,7 +344,7 @@ export function Purchases() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'طريقة الدفع' : 'Payment'}</label>
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm">
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm">
                   <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
                   <option value="transfer">{isRTL ? 'تحويل' : 'Transfer'}</option>
                   <option value="check">{isRTL ? 'شيك' : 'Check'}</option>
@@ -346,17 +353,17 @@ export function Purchases() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الضريبة' : 'Tax'}</label>
-                <input type="number" step="0.01" min="0" value={purchaseTax} onChange={(e) => setPurchaseTax(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
+                <input type="number" step="0.01" min="0" value={purchaseTax} onChange={(e) => setPurchaseTax(parseFloat(e.target.value) || 0)} disabled={!canEdit} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الخصم' : 'Discount'}</label>
-                <input type="number" step="0.01" min="0" value={purchaseDiscount} onChange={(e) => setPurchaseDiscount(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
+                <input type="number" step="0.01" min="0" value={purchaseDiscount} onChange={(e) => setPurchaseDiscount(parseFloat(e.target.value) || 0)} disabled={!canEdit} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'ملاحظات' : 'Notes'}</label>
-                <textarea value={purchaseNotes} onChange={(e) => setPurchaseNotes(e.target.value)} rows={2} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm resize-none" />
+                <textarea value={purchaseNotes} onChange={(e) => setPurchaseNotes(e.target.value)} disabled={!canEdit} rows={2} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm resize-none" />
               </div>
 
               <div>
@@ -423,14 +430,16 @@ export function Purchases() {
                 <span className="font-bold text-xl text-teal-600">{formatCurrency(total)}</span>
               </div>
 
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || purchaseItems.length === 0}
-                className="w-full bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-5 h-5" />
-                {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'تأكيد الشراء' : 'Confirm Purchase')}
-              </button>
+              {canEdit && (
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting || purchaseItems.length === 0}
+                  className="w-full bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                >
+                  <CreditCard className="w-5 h-5" />
+                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'تأكيد الشراء' : 'Confirm Purchase')}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -445,13 +454,15 @@ export function Purchases() {
           <h2 className="text-2xl font-bold text-gray-900">{t('nav.purchases')}</h2>
           <p className="text-gray-500 mt-1">{isRTL ? 'إدارة المشتريات وأوامر الشراء' : 'Manage purchases and orders'}</p>
         </div>
-        <button
-          onClick={openNewPurchase}
-          className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
-        >
-          <Plus className="w-5 h-5" />
-          {isRTL ? 'شراء جديد' : 'New Purchase'}
-        </button>
+        {canEdit && (
+          <button
+            onClick={openNewPurchase}
+            className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
+          >
+            <Plus className="w-5 h-5" />
+            {isRTL ? 'شراء جديد' : 'New Purchase'}
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -571,7 +582,7 @@ export function Purchases() {
                 </div>
               )}
 
-              {viewingPurchase.status === 'confirmed' && (
+              {canEdit && viewingPurchase.status === 'confirmed' && (
                 <div className="flex gap-3 pt-2">
                   <button
                     onClick={() => updatePurchaseStatus(viewingPurchase.id, 'received')}

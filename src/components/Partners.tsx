@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getSignedUrl, getFileUrl } from '../lib/fileUpload';
 import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
@@ -44,6 +45,7 @@ interface Settlement {
 export function Partners() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
+  const canEdit = useCanEdit();
   const isRTL = language === 'ar';
   const [partners, setPartners] = useState<Partner[]>([]);
   const [contributions, setContributions] = useState<Contribution[]>([]);
@@ -483,20 +485,24 @@ export function Partners() {
             <FileSpreadsheet className="w-5 h-5" />
             {isRTL ? 'تصدير Excel' : 'Export Excel'}
           </button>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            {isRTL ? 'إضافة دفعة' : 'Add Payment'}
-          </button>
-          <button
-            onClick={() => setShowSettlementForm(true)}
-            className="flex items-center gap-2 bg-amber-600 text-white px-4 py-2.5 rounded-lg hover:bg-amber-700 transition font-medium"
-          >
-            <ArrowRightLeft className="w-5 h-5" />
-            {isRTL ? 'إضافة تصفية' : 'Add Settlement'}
-          </button>
+          {canEdit && (
+            <>
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
+              >
+                <Plus className="w-5 h-5" />
+                {isRTL ? 'إضافة دفعة' : 'Add Payment'}
+              </button>
+              <button
+                onClick={() => setShowSettlementForm(true)}
+                className="flex items-center gap-2 bg-amber-600 text-white px-4 py-2.5 rounded-lg hover:bg-amber-700 transition font-medium"
+              >
+                <ArrowRightLeft className="w-5 h-5" />
+                {isRTL ? 'إضافة تصفية' : 'Add Settlement'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -657,12 +663,14 @@ export function Partners() {
                             </div>
                           </td>
                           <td className="py-2.5 px-4 w-10">
-                            <button
-                              onClick={() => setDeleteConfirm(contrib.id)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => setDeleteConfirm(contrib.id)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -746,12 +754,14 @@ export function Partners() {
                             </div>
                           </td>
                           <td className="py-2.5 px-4 w-10">
-                            <button
-                              onClick={() => setDeleteConfirm(contrib.id)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => setDeleteConfirm(contrib.id)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -832,12 +842,14 @@ export function Partners() {
                         )}
                       </td>
                       <td className="py-3 px-6">
-                        <button
-                          onClick={() => setDeleteSettlementConfirm(settlement.id)}
-                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => setDeleteSettlementConfirm(settlement.id)}
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -979,13 +991,15 @@ export function Partners() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium"
-                >
-                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
-                </button>
+                {canEdit && (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium"
+                  >
+                    {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowAddForm(false)}
@@ -1129,13 +1143,15 @@ export function Partners() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 bg-amber-600 text-white py-2.5 rounded-lg hover:bg-amber-700 transition disabled:opacity-50 font-medium"
-                >
-                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
-                </button>
+                {canEdit && (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 bg-amber-600 text-white py-2.5 rounded-lg hover:bg-amber-700 transition disabled:opacity-50 font-medium"
+                  >
+                    {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowSettlementForm(false)}
