@@ -3,6 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getSignedUrl } from '../lib/fileUpload';
+import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
 import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet, Paperclip, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -877,10 +878,11 @@ export function Partners() {
                   onChange={(e) => setContributionType(e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 >
-                  <option value="operational">{isRTL ? 'تشغيلي' : 'Operational'}</option>
-                  <option value="government">{isRTL ? 'حكومي' : 'Government'}</option>
-                  <option value="assets">{isRTL ? 'أصول' : 'Assets'}</option>
-                  <option value="other">{isRTL ? 'آخر' : 'Other'}</option>
+                  {expenseCategories.map((cat) => (
+                    <option key={cat.value} value={cat.value}>
+                      {isRTL ? cat.labelAr : cat.labelEn}
+                    </option>
+                  ))}
                 </select>
               </div>
 

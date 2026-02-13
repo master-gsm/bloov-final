@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Receipt, Plus, Trash2, Search, Calendar, DollarSign, FileText, Filter, Download } from 'lucide-react';
+import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
+import { Receipt, Plus, Trash2, Search, Calendar, DollarSign, FileText, Filter, Download, Users } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface OperatingExpense {
@@ -16,23 +17,9 @@ interface OperatingExpense {
   payment_method?: string;
   notes?: string;
   notes_ar?: string;
+  partner_contribution_id?: string | null;
   created_at: string;
 }
-
-const expenseTypes = [
-  { value: 'residence', labelEn: 'Residence Permits', labelAr: 'تجديد إقامات' },
-  { value: 'sponsorship', labelEn: 'Sponsorship Transfer', labelAr: 'نقل كفالات' },
-  { value: 'electricity', labelEn: 'Electricity Bills', labelAr: 'فواتير كهرباء' },
-  { value: 'water', labelEn: 'Water Bills', labelAr: 'فواتير مياه' },
-  { value: 'violations', labelEn: 'Violations & Fines', labelAr: 'مخالفات' },
-  { value: 'rent', labelEn: 'Rent', labelAr: 'إيجار' },
-  { value: 'maintenance', labelEn: 'Maintenance', labelAr: 'صيانة' },
-  { value: 'salaries', labelEn: 'Salaries', labelAr: 'رواتب' },
-  { value: 'transportation', labelEn: 'Transportation', labelAr: 'نقل ومواصلات' },
-  { value: 'communication', labelEn: 'Communication', labelAr: 'اتصالات' },
-  { value: 'office', labelEn: 'Office Supplies', labelAr: 'مستلزمات مكتبية' },
-  { value: 'other', labelEn: 'Other', labelAr: 'أخرى' },
-];
 
 export default function Expenses() {
   const { user } = useAuth();
@@ -146,13 +133,12 @@ export default function Expenses() {
     const data = filteredExpenses.map((exp) => ({
       [isRTL ? 'رقم المصروف' : 'Expense Number']: exp.expense_number,
       [isRTL ? 'التاريخ' : 'Date']: exp.expense_date,
-      [isRTL ? 'النوع' : 'Type']: isRTL
-        ? expenseTypes.find((t) => t.value === exp.expense_type)?.labelAr
-        : expenseTypes.find((t) => t.value === exp.expense_type)?.labelEn,
+      [isRTL ? 'النوع' : 'Type']: getCategoryLabel(exp.expense_type, isRTL),
       [isRTL ? 'الوصف' : 'Description']: isRTL ? exp.description_ar || exp.description : exp.description,
       [isRTL ? 'المبلغ (ر.س)' : 'Amount (SAR)']: Number(exp.amount).toFixed(2),
       [isRTL ? 'طريقة الدفع' : 'Payment Method']: exp.payment_method,
       [isRTL ? 'ملاحظات' : 'Notes']: isRTL ? exp.notes_ar || exp.notes : exp.notes,
+      [isRTL ? 'من الشركاء' : 'From Partners']: exp.partner_contribution_id ? (isRTL ? 'نعم' : 'Yes') : (isRTL ? 'لا' : 'No'),
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -226,7 +212,7 @@ export default function Expenses() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   required
                 >
-                  {expenseTypes.map((type) => (
+                  {expenseCategories.map((type) => (
                     <option key={type.value} value={type.value}>
                       {isRTL ? type.labelAr : type.labelEn}
                     </option>
@@ -360,7 +346,7 @@ export default function Expenses() {
             className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
           >
             <option value="all">{isRTL ? 'جميع الأنواع' : 'All Types'}</option>
-            {expenseTypes.map((type) => (
+            {expenseCategories.map((type) => (
               <option key={type.value} value={type.value}>
                 {isRTL ? type.labelAr : type.labelEn}
               </option>
@@ -409,11 +395,19 @@ export default function Expenses() {
                   <td className="py-3 px-4 text-gray-600">{exp.expense_date}</td>
                   <td className="py-3 px-4 text-gray-600">
                     {isRTL
-                      ? expenseTypes.find((t) => t.value === exp.expense_type)?.labelAr
-                      : expenseTypes.find((t) => t.value === exp.expense_type)?.labelEn}
+                      ? expenseCategories.find((t) => t.value === exp.expense_type)?.labelAr
+                      : expenseCategories.find((t) => t.value === exp.expense_type)?.labelEn}
                   </td>
                   <td className="py-3 px-4 text-gray-600">
-                    {isRTL ? exp.description_ar || exp.description : exp.description}
+                    <div className="flex items-center gap-2">
+                      {exp.partner_contribution_id && (
+                        <Users
+                          className="w-4 h-4 text-teal-600"
+                          title={isRTL ? 'من دفعات الشركاء' : 'From partner contributions'}
+                        />
+                      )}
+                      <span>{isRTL ? exp.description_ar || exp.description : exp.description}</span>
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-gray-900 font-bold">
                     {formatCurrency(Number(exp.amount))} {isRTL ? 'ر.س' : 'SAR'}
@@ -421,7 +415,14 @@ export default function Expenses() {
                   <td className="py-3 px-4 text-gray-600">{exp.payment_method}</td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center gap-2">
-                      {deleteConfirm === exp.id ? (
+                      {exp.partner_contribution_id ? (
+                        <span
+                          className="text-xs text-gray-400 italic"
+                          title={isRTL ? 'لا يمكن حذف المصاريف المرتبطة بدفعات الشركاء' : 'Cannot delete expenses from partner contributions'}
+                        >
+                          {isRTL ? 'من الشركاء' : 'From Partners'}
+                        </span>
+                      ) : deleteConfirm === exp.id ? (
                         <>
                           <button
                             onClick={() => handleDelete(exp.id)}
