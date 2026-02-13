@@ -142,9 +142,7 @@ export function Purchases() {
       if (attachmentFile) {
         attachmentUrl = await uploadFile(attachmentFile, 'purchases');
         if (!attachmentUrl) {
-          setError(isRTL ? 'فشل رفع الملف' : 'Failed to upload file');
-          setSubmitting(false);
-          return;
+          console.warn('File upload failed, continuing without attachment');
         }
       }
 

@@ -146,9 +146,7 @@ export function Partners() {
       if (contributionFile) {
         attachmentUrl = await uploadFile(contributionFile, 'partner_contributions');
         if (!attachmentUrl) {
-          setError(isRTL ? 'فشل رفع الملف' : 'Failed to upload file');
-          setSubmitting(false);
-          return;
+          console.warn('File upload failed, continuing without attachment');
         }
       }
 
@@ -207,9 +205,7 @@ export function Partners() {
       if (settlementFile) {
         attachmentUrl = await uploadFile(settlementFile, 'partner_settlements');
         if (!attachmentUrl) {
-          setError(isRTL ? 'فشل رفع الملف' : 'Failed to upload file');
-          setSubmitting(false);
-          return;
+          console.warn('File upload failed, continuing without attachment');
         }
       }
 

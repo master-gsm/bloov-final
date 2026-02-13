@@ -2,8 +2,57 @@ import { supabase } from './supabase';
 
 const BUCKET_NAME = 'receipts';
 
+export const ensureBucketExists = async (): Promise<boolean> => {
+  try {
+    const { data: buckets, error } = await supabase.storage.listBuckets();
+
+    if (error) {
+      console.error('Error checking buckets:', error);
+      return false;
+    }
+
+    const bucketExists = buckets.some(bucket => bucket.id === BUCKET_NAME);
+
+    if (!bucketExists) {
+      const { error: createError } = await supabase.storage.createBucket(BUCKET_NAME, {
+        public: false,
+        fileSizeLimit: 10485760,
+        allowedMimeTypes: [
+          'image/jpeg',
+          'image/jpg',
+          'image/png',
+          'image/gif',
+          'image/webp',
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ]
+      });
+
+      if (createError) {
+        console.error('Error creating bucket:', createError);
+        return false;
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error ensuring bucket exists:', err);
+    return false;
+  }
+};
+
 export const uploadFile = async (file: File, folder: string): Promise<string | null> => {
   try {
+    const bucketReady = await ensureBucketExists();
+
+    if (!bucketReady) {
+      console.error('Storage bucket is not available');
+      return null;
+    }
+
     const fileExt = file.name.split('.').pop();
     const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
