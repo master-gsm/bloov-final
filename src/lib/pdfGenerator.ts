@@ -285,43 +285,6 @@ export async function generateInvoicePDF(
   }
 }
 
-async function uploadInvoiceToStorage(
-  pdfBlob: Blob,
-  fileName: string,
-  saleId: string
-): Promise<string | null> {
-  try {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) {
-      console.error('No authenticated user');
-      return null;
-    }
-
-    const filePath = `${authData.user.id}/${saleId}/${fileName}`;
-
-    const { data, error } = await supabase.storage
-      .from('invoices')
-      .upload(filePath, pdfBlob, {
-        contentType: 'application/pdf',
-        upsert: true
-      });
-
-    if (error) {
-      console.error('Upload error:', error);
-      return null;
-    }
-
-    const { data: urlData } = supabase.storage
-      .from('invoices')
-      .getPublicUrl(filePath);
-
-    return urlData.publicUrl;
-  } catch (error) {
-    console.error('Error uploading to storage:', error);
-    return null;
-  }
-}
-
 export async function shareInvoiceViaWhatsApp(
   sale: Sale,
   items: SaleItem[],
@@ -387,10 +350,18 @@ export async function shareInvoiceViaWhatsApp(
     }
 
     if (!shareSuccessful) {
-      console.log('Using upload to storage method...');
-      const publicUrl = await uploadInvoiceToStorage(pdfBlob, fileName, sale.id);
+      console.log('Desktop fallback: Download PDF and open WhatsApp');
 
-      if (publicUrl) {
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setTimeout(() => {
         const messageText = `مرحباً 👋
 شكراً لتسوقك في BLOOV 🌸
 
@@ -398,37 +369,14 @@ export async function shareInvoiceViaWhatsApp(
 💰 المجموع: ${sale.total.toFixed(2)} ر.س
 شامل ضريبة القيمة المضافة 15%
 
-يمكنك تحميل الفاتورة من هنا:
-${publicUrl}
-
 نتطلع لخدمتك مجدداً!
 📲 للتواصل: https://wa.me/${cleanBusinessPhone}`;
 
         const message = encodeURIComponent(messageText);
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
         window.open(whatsappUrl, '_blank');
-        console.log('WhatsApp opened with download link');
-      } else {
-        console.log('Upload failed, falling back to download');
-        const url = URL.createObjectURL(pdfBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        setTimeout(() => {
-          const fallbackMessage = `مرحباً 👋
-شكراً لتسوقك في BLOOV 🌸
-📄 رقم الفاتورة: ${sale.sale_number}
-💰 المجموع: ${sale.total.toFixed(2)} ر.س`;
-          const message = encodeURIComponent(fallbackMessage);
-          const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
-          window.open(whatsappUrl, '_blank');
-        }, 500);
-      }
+        console.log('WhatsApp opened - Please attach the downloaded PDF');
+      }, 500);
     }
   } catch (error) {
     console.error('Error in shareInvoiceViaWhatsApp:', error);
