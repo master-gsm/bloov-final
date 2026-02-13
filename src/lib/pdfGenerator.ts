@@ -285,6 +285,43 @@ export async function generateInvoicePDF(
   }
 }
 
+async function uploadInvoiceToStorage(
+  pdfBlob: Blob,
+  fileName: string,
+  saleId: string
+): Promise<string | null> {
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      console.error('No authenticated user');
+      return null;
+    }
+
+    const filePath = `${authData.user.id}/${saleId}/${fileName}`;
+
+    const { data, error } = await supabase.storage
+      .from('invoices')
+      .upload(filePath, pdfBlob, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+
+    if (error) {
+      console.error('Upload error:', error);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('invoices')
+      .getPublicUrl(filePath);
+
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error('Error uploading to storage:', error);
+    return null;
+  }
+}
+
 export async function shareInvoiceViaWhatsApp(
   sale: Sale,
   items: SaleItem[],
@@ -322,59 +359,76 @@ export async function shareInvoiceViaWhatsApp(
       cleanBusinessPhone = '966' + cleanBusinessPhone;
     }
 
-    const messageText = `BLOOV Invoice #${sale.sale_number}
-Total: ${sale.total.toFixed(2)} SAR (Including 15% VAT)
-Thank you for your business!
-Contact us: https://wa.me/${cleanBusinessPhone}`;
-
     let shareSuccessful = false;
 
-    if (navigator.share) {
+    if (navigator.share && navigator.canShare) {
       try {
         const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
         console.log('File created:', file.name, file.size, file.type);
 
         const shareData: ShareData = {
-          title: `Invoice ${sale.sale_number}`,
-          text: messageText,
           files: [file]
         };
 
-        if (navigator.canShare && navigator.canShare(shareData)) {
+        if (navigator.canShare(shareData)) {
           console.log('Share API available, opening share dialog...');
           await navigator.share(shareData);
           shareSuccessful = true;
           console.log('Share successful!');
           return;
-        } else {
-          console.log('Cannot share with files, falling back...');
         }
       } catch (error: any) {
         console.error('Share API error:', error);
-        if (error.name !== 'AbortError') {
-          console.log('Using fallback due to error');
-        } else {
+        if (error.name === 'AbortError') {
+          console.log('User cancelled share');
           return;
         }
       }
     }
 
     if (!shareSuccessful) {
-      const url = URL.createObjectURL(pdfBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      console.log('Using upload to storage method...');
+      const publicUrl = await uploadInvoiceToStorage(pdfBlob, fileName, sale.id);
 
-      setTimeout(() => {
-        const fallbackMessage = `${messageText}\n\n✅ تم تنزيل الفاتورة، يرجى إرفاقها يدوياً في WhatsApp`;
-        const message = encodeURIComponent(fallbackMessage);
+      if (publicUrl) {
+        const messageText = `مرحباً 👋
+شكراً لتسوقك في BLOOV 🌸
+
+📄 رقم الفاتورة: ${sale.sale_number}
+💰 المجموع: ${sale.total.toFixed(2)} ر.س
+شامل ضريبة القيمة المضافة 15%
+
+يمكنك تحميل الفاتورة من هنا:
+${publicUrl}
+
+نتطلع لخدمتك مجدداً!
+📲 للتواصل: https://wa.me/${cleanBusinessPhone}`;
+
+        const message = encodeURIComponent(messageText);
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
         window.open(whatsappUrl, '_blank');
-      }, 500);
+        console.log('WhatsApp opened with download link');
+      } else {
+        console.log('Upload failed, falling back to download');
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        setTimeout(() => {
+          const fallbackMessage = `مرحباً 👋
+شكراً لتسوقك في BLOOV 🌸
+📄 رقم الفاتورة: ${sale.sale_number}
+💰 المجموع: ${sale.total.toFixed(2)} ر.س`;
+          const message = encodeURIComponent(fallbackMessage);
+          const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
+          window.open(whatsappUrl, '_blank');
+        }, 500);
+      }
     }
   } catch (error) {
     console.error('Error in shareInvoiceViaWhatsApp:', error);
