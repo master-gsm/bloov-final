@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import { supabase } from './supabase';
+import html2canvas from 'html2canvas';
 
 interface SaleItem {
   product_name: string;
@@ -285,17 +286,172 @@ export async function generateInvoicePDF(
   }
 }
 
+async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob> {
+  try {
+    const qrCodeData = generateZATCAQRCode(sale, COMPANY_INFO);
+    const qrCodeDataUrl = await QRCode.toDataURL(qrCodeData);
+
+    const invoiceElement = document.createElement('div');
+    invoiceElement.style.position = 'absolute';
+    invoiceElement.style.left = '-9999px';
+    invoiceElement.style.width = '800px';
+    invoiceElement.style.backgroundColor = '#ffffff';
+    invoiceElement.style.padding = '40px';
+    invoiceElement.style.fontFamily = 'Arial, sans-serif';
+    invoiceElement.style.direction = 'rtl';
+
+    const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+    const tax = subtotal * 0.15;
+    const total = subtotal + tax;
+
+    invoiceElement.innerHTML = `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #2563eb; font-size: 32px; margin: 0;">BLOOV 🌸</h1>
+        <p style="color: #666; margin: 5px 0;">نظام المحاسبة المتكامل</p>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+        <div style="text-align: right;">
+          <h2 style="color: #333; font-size: 24px; margin: 0 0 15px 0;">فاتورة ضريبية</h2>
+          <p style="margin: 5px 0;"><strong>رقم الفاتورة:</strong> ${sale.sale_number}</p>
+          <p style="margin: 5px 0;"><strong>التاريخ:</strong> ${new Date(sale.sale_date).toLocaleDateString('ar-SA')}</p>
+          ${sale.customer_name ? `<p style="margin: 5px 0;"><strong>العميل:</strong> ${sale.customer_name}</p>` : ''}
+        </div>
+        <div style="text-align: left;">
+          <p style="margin: 5px 0; font-size: 14px;"><strong>${COMPANY_INFO.name}</strong></p>
+          <p style="margin: 5px 0; font-size: 12px;">الرقم الضريبي: ${COMPANY_INFO.vatNumber}</p>
+          <p style="margin: 5px 0; font-size: 12px;">${COMPANY_INFO.address}</p>
+          <p style="margin: 5px 0; font-size: 12px;">${COMPANY_INFO.phone}</p>
+        </div>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <thead>
+          <tr style="background-color: #2563eb; color: white;">
+            <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">المنتج</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">الكمية</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">السعر</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">الخصم</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">المجموع</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item, index) => `
+            <tr style="background-color: ${index % 2 === 0 ? '#f9fafb' : 'white'};">
+              <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">${item.product_name}</td>
+              <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${item.quantity}</td>
+              <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${item.unit_price.toFixed(2)} ر.س</td>
+              <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${item.discount.toFixed(2)} ر.س</td>
+              <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${item.total.toFixed(2)} ر.س</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div style="display: flex; justify-content: space-between; margin-top: 30px;">
+        <div style="text-align: center;">
+          <img src="${qrCodeDataUrl}" style="width: 120px; height: 120px;" />
+          <p style="font-size: 10px; color: #666; margin: 5px 0;">كود الفاتورة - ZATCA</p>
+        </div>
+        <div style="text-align: left; min-width: 300px;">
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd;">
+            <span>المجموع الفرعي:</span>
+            <span style="font-weight: bold;">${subtotal.toFixed(2)} ر.س</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd;">
+            <span>ضريبة القيمة المضافة (15%):</span>
+            <span style="font-weight: bold;">${tax.toFixed(2)} ر.س</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; background-color: #2563eb; color: white; margin-top: 5px; padding-left: 10px; padding-right: 10px;">
+            <span style="font-size: 18px; font-weight: bold;">المجموع الإجمالي:</span>
+            <span style="font-size: 18px; font-weight: bold;">${total.toFixed(2)} ر.س</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #ddd;">
+        <p style="color: #2563eb; font-weight: bold; margin: 0;">شكراً لتسوقك معنا! 🌸</p>
+        <p style="color: #666; font-size: 12px; margin: 5px 0;">نتطلع لخدمتك مجدداً</p>
+      </div>
+    `;
+
+    document.body.appendChild(invoiceElement);
+
+    const canvas = await html2canvas(invoiceElement, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true,
+      allowTaint: true
+    });
+
+    document.body.removeChild(invoiceElement);
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to generate image blob'));
+        }
+      }, 'image/png', 0.95);
+    });
+  } catch (error) {
+    console.error('Error generating invoice image:', error);
+    throw new Error('فشل إنشاء صورة الفاتورة');
+  }
+}
+
+async function uploadImageToStorage(
+  imageBlob: Blob,
+  fileName: string,
+  saleId: string
+): Promise<string | null> {
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      console.error('No authenticated user');
+      return null;
+    }
+
+    const filePath = `${authData.user.id}/${saleId}/${fileName}`;
+    console.log('Uploading image to:', filePath);
+
+    const { data, error } = await supabase.storage
+      .from('invoices')
+      .upload(filePath, imageBlob, {
+        contentType: 'image/png',
+        upsert: true
+      });
+
+    if (error) {
+      console.error('Upload error:', error);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('invoices')
+      .getPublicUrl(filePath);
+
+    console.log('Upload successful, public URL:', urlData.publicUrl);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error('Error uploading to storage:', error);
+    return null;
+  }
+}
+
 export async function shareInvoiceViaWhatsApp(
   sale: Sale,
   items: SaleItem[],
   customerPhone: string
 ): Promise<void> {
   try {
-    console.log('Starting PDF generation...');
-    const pdfBlob = await generateInvoicePDF(sale, items);
-    console.log('PDF generated successfully, size:', pdfBlob.size);
+    console.log('Starting invoice image generation...');
+    const imageBlob = await generateInvoiceImage(sale, items);
+    console.log('Invoice image generated successfully, size:', imageBlob.size);
 
-    const fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
+    const fileName = `BLOOV-Invoice-${sale.sale_number}.png`;
 
     let cleanPhone = customerPhone.replace(/[^0-9]/g, '');
     if (cleanPhone.startsWith('00')) {
@@ -326,11 +482,12 @@ export async function shareInvoiceViaWhatsApp(
 
     if (navigator.share && navigator.canShare) {
       try {
-        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-        console.log('File created:', file.name, file.size, file.type);
+        const file = new File([imageBlob], fileName, { type: 'image/png' });
+        console.log('Image file created:', file.name, file.size, file.type);
 
         const shareData: ShareData = {
-          files: [file]
+          files: [file],
+          text: `مرحباً 👋\nشكراً لتسوقك في BLOOV 🌸\n\n📄 رقم الفاتورة: ${sale.sale_number}\n💰 المجموع: ${sale.total.toFixed(2)} ر.س\n\nنتطلع لخدمتك مجدداً!`
         };
 
         if (navigator.canShare(shareData)) {
@@ -350,18 +507,10 @@ export async function shareInvoiceViaWhatsApp(
     }
 
     if (!shareSuccessful) {
-      console.log('Desktop fallback: Download PDF and open WhatsApp');
+      console.log('Uploading invoice image to cloud storage...');
+      const publicUrl = await uploadImageToStorage(imageBlob, fileName, sale.id);
 
-      const url = URL.createObjectURL(pdfBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      setTimeout(() => {
+      if (publicUrl) {
         const messageText = `مرحباً 👋
 شكراً لتسوقك في BLOOV 🌸
 
@@ -369,14 +518,20 @@ export async function shareInvoiceViaWhatsApp(
 💰 المجموع: ${sale.total.toFixed(2)} ر.س
 شامل ضريبة القيمة المضافة 15%
 
+🖼️ صورة الفاتورة:
+${publicUrl}
+
 نتطلع لخدمتك مجدداً!
 📲 للتواصل: https://wa.me/${cleanBusinessPhone}`;
 
         const message = encodeURIComponent(messageText);
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
         window.open(whatsappUrl, '_blank');
-        console.log('WhatsApp opened - Please attach the downloaded PDF');
-      }, 500);
+        console.log('WhatsApp opened with invoice image link');
+      } else {
+        console.error('Failed to upload invoice image');
+        throw new Error('فشل رفع صورة الفاتورة. تحقق من الاتصال بالإنترنت.');
+      }
     }
   } catch (error) {
     console.error('Error in shareInvoiceViaWhatsApp:', error);
