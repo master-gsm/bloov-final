@@ -7,6 +7,7 @@ import { AdminSetup } from './components/AdminSetup';
 import { ResetPassword } from './components/ResetPassword';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
+import { ConnectionStatusBar } from './components/ConnectionStatusBar';
 import { Dashboard } from './components/Dashboard';
 import { Products } from './components/Products';
 import { Partners } from './components/Partners';
@@ -157,6 +158,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+      <ConnectionStatusBar />
       <div className="flex">
         <Sidebar activeSection={activeSection} setActiveSection={handleSetActiveSection} />
         <main className="flex-1 overflow-auto h-[calc(100vh-73px)]">

@@ -1,6 +1,7 @@
 const DB_NAME = 'BloovAccountingDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const PENDING_OPERATIONS_STORE = 'pendingOperations';
+const DATA_CACHE_STORE = 'dataCache';
 
 export interface PendingOperation {
   id: string;
@@ -9,6 +10,14 @@ export interface PendingOperation {
   data: any;
   timestamp: number;
   retries: number;
+}
+
+export interface CachedData {
+  table: string;
+  recordId: string;
+  data: any;
+  lastUpdated: number;
+  version: number;
 }
 
 class OfflineStorage {
@@ -31,6 +40,12 @@ class OfflineStorage {
           const store = db.createObjectStore(PENDING_OPERATIONS_STORE, { keyPath: 'id' });
           store.createIndex('timestamp', 'timestamp', { unique: false });
           store.createIndex('table', 'table', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(DATA_CACHE_STORE)) {
+          const cacheStore = db.createObjectStore(DATA_CACHE_STORE, { keyPath: ['table', 'recordId'] });
+          cacheStore.createIndex('table', 'table', { unique: false });
+          cacheStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
         }
       };
     });
@@ -129,6 +144,86 @@ class OfflineStorage {
       const request = store.count();
 
       request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async cacheData(table: string, records: any[]): Promise<void> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([DATA_CACHE_STORE], 'readwrite');
+      const store = transaction.objectStore(DATA_CACHE_STORE);
+
+      const timestamp = Date.now();
+      const promises = records.map((record) => {
+        const cachedData: CachedData = {
+          table,
+          recordId: record.id,
+          data: record,
+          lastUpdated: timestamp,
+          version: record.updated_at ? new Date(record.updated_at).getTime() : timestamp,
+        };
+        return store.put(cachedData);
+      });
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  async getCachedData(table: string): Promise<any[]> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([DATA_CACHE_STORE], 'readonly');
+      const store = transaction.objectStore(DATA_CACHE_STORE);
+      const index = store.index('table');
+      const request = index.getAll(table);
+
+      request.onsuccess = () => {
+        const cachedItems = request.result as CachedData[];
+        resolve(cachedItems.map(item => item.data));
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getCachedRecord(table: string, recordId: string): Promise<any | null> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([DATA_CACHE_STORE], 'readonly');
+      const store = transaction.objectStore(DATA_CACHE_STORE);
+      const request = store.get([table, recordId]);
+
+      request.onsuccess = () => {
+        const result = request.result as CachedData | undefined;
+        resolve(result ? result.data : null);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async clearCachedData(table: string): Promise<void> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([DATA_CACHE_STORE], 'readwrite');
+      const store = transaction.objectStore(DATA_CACHE_STORE);
+      const index = store.index('table');
+      const request = index.openCursor(table);
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+
       request.onerror = () => reject(request.error);
     });
   }

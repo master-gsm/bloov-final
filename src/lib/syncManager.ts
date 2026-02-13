@@ -1,9 +1,39 @@
 import { supabase } from './supabase';
 import { offlineStorage, PendingOperation } from './offlineStorage';
 
+export interface SyncStatus {
+  isSyncing: boolean;
+  lastSyncTime: number | null;
+  pendingCount: number;
+  error: string | null;
+}
+
 class SyncManager {
   private isSyncing = false;
   private syncInterval: NodeJS.Timeout | null = null;
+  private lastSyncTime: number | null = null;
+  private syncCallbacks: Array<(status: SyncStatus) => void> = [];
+
+  onSyncStatusChange(callback: (status: SyncStatus) => void): () => void {
+    this.syncCallbacks.push(callback);
+    return () => {
+      this.syncCallbacks = this.syncCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  private notifySyncStatus(error: string | null = null): void {
+    const status: SyncStatus = {
+      isSyncing: this.isSyncing,
+      lastSyncTime: this.lastSyncTime,
+      pendingCount: 0,
+      error,
+    };
+
+    offlineStorage.getPendingOperationsCount().then(count => {
+      status.pendingCount = count;
+      this.syncCallbacks.forEach(callback => callback(status));
+    });
+  }
 
   async startAutoSync(intervalMinutes: number = 5): Promise<void> {
     if (this.syncInterval) {
@@ -11,10 +41,14 @@ class SyncManager {
     }
 
     this.syncInterval = setInterval(() => {
-      this.syncPendingOperations();
+      if (navigator.onLine) {
+        this.syncPendingOperations();
+      }
     }, intervalMinutes * 60 * 1000);
 
-    await this.syncPendingOperations();
+    if (navigator.onLine) {
+      await this.syncPendingOperations();
+    }
   }
 
   stopAutoSync(): void {
@@ -30,21 +64,29 @@ class SyncManager {
     }
 
     if (!navigator.onLine) {
+      this.notifySyncStatus('Offline - cannot sync');
       return { success: 0, failed: 0 };
     }
 
     this.isSyncing = true;
+    this.notifySyncStatus();
+
     let successCount = 0;
     let failedCount = 0;
 
     try {
       const operations = await offlineStorage.getPendingOperations();
 
+      if (operations.length === 0) {
+        this.lastSyncTime = Date.now();
+        return { success: 0, failed: 0 };
+      }
+
       operations.sort((a, b) => a.timestamp - b.timestamp);
 
       for (const operation of operations) {
         try {
-          await this.executeOperation(operation);
+          await this.executeOperationWithConflictResolution(operation);
           await offlineStorage.removePendingOperation(operation.id);
           successCount++;
         } catch (error) {
@@ -59,38 +101,109 @@ class SyncManager {
           failedCount++;
         }
       }
+
+      this.lastSyncTime = Date.now();
+      this.notifySyncStatus();
     } catch (error) {
       console.error('Error syncing pending operations:', error);
+      this.notifySyncStatus((error as Error).message);
     } finally {
       this.isSyncing = false;
+      this.notifySyncStatus();
     }
 
     return { success: successCount, failed: failedCount };
   }
 
-  private async executeOperation(operation: PendingOperation): Promise<void> {
+  private async executeOperationWithConflictResolution(operation: PendingOperation): Promise<void> {
     const { table, operation: op, data } = operation;
 
     switch (op) {
       case 'insert':
         const { error: insertError } = await supabase.from(table).insert(data);
-        if (insertError) throw insertError;
+        if (insertError) {
+          if (insertError.code === '23505') {
+            console.warn(`Record already exists, attempting update instead for table ${table}`);
+            const { id, ...updateData } = data;
+            const { error: updateError } = await supabase.from(table).update(updateData).eq('id', id);
+            if (updateError) throw updateError;
+          } else {
+            throw insertError;
+          }
+        }
         break;
 
       case 'update':
         const { id, ...updateData } = data;
-        const { error: updateError } = await supabase.from(table).update(updateData).eq('id', id);
-        if (updateError) throw updateError;
+
+        const { data: existingRecord, error: fetchError } = await supabase
+          .from(table)
+          .select('updated_at')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (fetchError) throw fetchError;
+
+        if (!existingRecord) {
+          console.warn(`Record not found for update in table ${table}, attempting insert instead`);
+          const { error: insertError } = await supabase.from(table).insert(data);
+          if (insertError) throw insertError;
+        } else {
+          const localVersion = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+          const remoteVersion = existingRecord.updated_at ? new Date(existingRecord.updated_at).getTime() : 0;
+
+          if (remoteVersion > localVersion) {
+            console.warn(`Conflict detected: Remote version is newer for ${table}/${id}. Applying local changes anyway.`);
+          }
+
+          const { error: updateError } = await supabase.from(table).update(updateData).eq('id', id);
+          if (updateError) throw updateError;
+        }
         break;
 
       case 'delete':
         const { error: deleteError } = await supabase.from(table).delete().eq('id', data.id);
-        if (deleteError) throw deleteError;
+        if (deleteError && deleteError.code !== 'PGRST116') {
+          throw deleteError;
+        }
         break;
 
       default:
         throw new Error(`Unknown operation: ${op}`);
     }
+  }
+
+  async cacheTableData(table: string): Promise<void> {
+    if (!navigator.onLine) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.from(table).select('*');
+      if (error) throw error;
+
+      if (data) {
+        await offlineStorage.cacheData(table, data);
+      }
+    } catch (error) {
+      console.error(`Error caching data for table ${table}:`, error);
+    }
+  }
+
+  async getCachedOrFetch(table: string, fetchQuery?: () => Promise<any>): Promise<any[]> {
+    if (navigator.onLine && fetchQuery) {
+      try {
+        const result = await fetchQuery();
+        if (result && !result.error) {
+          await offlineStorage.cacheData(table, result.data || []);
+          return result.data || [];
+        }
+      } catch (error) {
+        console.error(`Error fetching ${table}, falling back to cache:`, error);
+      }
+    }
+
+    return await offlineStorage.getCachedData(table);
   }
 
   async getPendingCount(): Promise<number> {
@@ -99,6 +212,10 @@ class SyncManager {
 
   getIsSyncing(): boolean {
     return this.isSyncing;
+  }
+
+  getLastSyncTime(): number | null {
+    return this.lastSyncTime;
   }
 }
 
