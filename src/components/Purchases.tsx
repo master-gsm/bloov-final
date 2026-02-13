@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { uploadFile, getSignedUrl } from '../lib/storageProvider';
+import { uploadFile, getSignedUrl, getFileUrl } from '../lib/fileUpload';
 import { ShoppingBag, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Paperclip, Download } from 'lucide-react';
 
 interface Product {
@@ -69,10 +69,17 @@ export function Purchases() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [viewingAttachment, setViewingAttachment] = useState<{ url: string; type: string } | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleViewAttachment = (attachmentPath: string) => {
+    const url = getFileUrl(attachmentPath);
+    const fileType = attachmentPath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
+    setViewingAttachment({ url, type: fileType });
+  };
 
   const loadData = async () => {
     try {
@@ -515,10 +522,7 @@ export function Purchases() {
               {viewingPurchase.attachment_url && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <button
-                    onClick={async () => {
-                      const url = await getSignedUrl(viewingPurchase.attachment_url!);
-                      if (url) window.open(url, '_blank');
-                    }}
+                    onClick={() => handleViewAttachment(viewingPurchase.attachment_url!)}
                     className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
                   >
                     <Download className="w-4 h-4" />
@@ -543,6 +547,55 @@ export function Purchases() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingAttachment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setViewingAttachment(null)}>
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-bold">{isRTL ? 'عرض المرفق' : 'View Attachment'}</h3>
+              <button
+                onClick={() => setViewingAttachment(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              {viewingAttachment.type === 'image' ? (
+                <img
+                  src={viewingAttachment.url}
+                  alt="Attachment"
+                  className="w-full h-auto rounded-lg"
+                />
+              ) : (
+                <iframe
+                  src={viewingAttachment.url}
+                  className="w-full h-[70vh] rounded-lg border"
+                  title="Document Viewer"
+                />
+              )}
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <a
+                href={viewingAttachment.url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Download className="w-4 h-4 inline mr-2" />
+                {isRTL ? 'تحميل' : 'Download'}
+              </a>
+              <button
+                onClick={() => setViewingAttachment(null)}
+                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+              >
+                {isRTL ? 'إغلاق' : 'Close'}
+              </button>
             </div>
           </div>
         </div>

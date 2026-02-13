@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { uploadFile, getSignedUrl } from '../lib/storageProvider';
+import { uploadFile, getSignedUrl, getFileUrl } from '../lib/fileUpload';
 import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
 import { ContributionReceipt } from './ContributionReceipt';
 import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet, Paperclip, Download, Receipt } from 'lucide-react';
@@ -73,6 +73,7 @@ export function Partners() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleteSettlementConfirm, setDeleteSettlementConfirm] = useState<string | null>(null);
   const [showReceipt, setShowReceipt] = useState<{ contribution: Contribution; partner: Partner } | null>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<{ url: string; type: string } | null>(null);
 
   useEffect(() => {
     checkAdminAndLoad();
@@ -135,6 +136,12 @@ export function Partners() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewAttachment = (attachmentPath: string) => {
+    const url = getFileUrl(attachmentPath);
+    const fileType = attachmentPath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
+    setViewingAttachment({ url, type: fileType });
   };
 
   const handleAddContribution = async (e: React.FormEvent) => {
@@ -625,12 +632,9 @@ export function Partners() {
                               </button>
                               {contrib.attachment_url && (
                                 <button
-                                  onClick={async () => {
-                                    const url = await getSignedUrl(contrib.attachment_url!);
-                                    if (url) window.open(url, '_blank');
-                                  }}
+                                  onClick={() => handleViewAttachment(contrib.attachment_url!)}
                                   className="p-1 text-blue-500 hover:bg-blue-50 rounded transition"
-                                  title={isRTL ? 'تحميل المرفق' : 'Download attachment'}
+                                  title={isRTL ? 'عرض المرفق' : 'View attachment'}
                                 >
                                   <Download className="w-3.5 h-3.5" />
                                 </button>
@@ -717,12 +721,9 @@ export function Partners() {
                               </button>
                               {contrib.attachment_url && (
                                 <button
-                                  onClick={async () => {
-                                    const url = await getSignedUrl(contrib.attachment_url!);
-                                    if (url) window.open(url, '_blank');
-                                  }}
+                                  onClick={() => handleViewAttachment(contrib.attachment_url!)}
                                   className="p-1 text-blue-500 hover:bg-blue-50 rounded transition"
-                                  title={isRTL ? 'تحميل المرفق' : 'Download attachment'}
+                                  title={isRTL ? 'عرض المرفق' : 'View attachment'}
                                 >
                                   <Download className="w-3.5 h-3.5" />
                                 </button>
@@ -807,12 +808,9 @@ export function Partners() {
                       <td className="py-3 px-6">
                         {settlement.attachment_url && (
                           <button
-                            onClick={async () => {
-                              const url = await getSignedUrl(settlement.attachment_url!);
-                              if (url) window.open(url, '_blank');
-                            }}
+                            onClick={() => handleViewAttachment(settlement.attachment_url!)}
                             className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
-                            title={isRTL ? 'تحميل الإيصال' : 'Download receipt'}
+                            title={isRTL ? 'عرض الإيصال' : 'View receipt'}
                           >
                             <Download className="w-4 h-4" />
                           </button>
@@ -1144,6 +1142,55 @@ export function Partners() {
           partner={showReceipt.partner}
           onClose={() => setShowReceipt(null)}
         />
+      )}
+
+      {viewingAttachment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setViewingAttachment(null)}>
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-bold">{isRTL ? 'عرض المرفق' : 'View Attachment'}</h3>
+              <button
+                onClick={() => setViewingAttachment(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              {viewingAttachment.type === 'image' ? (
+                <img
+                  src={viewingAttachment.url}
+                  alt="Attachment"
+                  className="w-full h-auto rounded-lg"
+                />
+              ) : (
+                <iframe
+                  src={viewingAttachment.url}
+                  className="w-full h-[70vh] rounded-lg border"
+                  title="Document Viewer"
+                />
+              )}
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <a
+                href={viewingAttachment.url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Download className="w-4 h-4 inline mr-2" />
+                {isRTL ? 'تحميل' : 'Download'}
+              </a>
+              <button
+                onClick={() => setViewingAttachment(null)}
+                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+              >
+                {isRTL ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

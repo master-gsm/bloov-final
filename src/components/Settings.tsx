@@ -11,11 +11,10 @@ import {
 import { createBackup, downloadBackupAsJSON, downloadBackupAsExcel, restoreFromBackup, getLastBackupTime } from '../lib/backup';
 import { useAutoBackup } from '../hooks/useAutoBackup';
 import { diskBackupManager } from '../lib/diskBackup';
-import StorageSettings from './StorageSettings';
 
 type SettingsMap = Record<string, string>;
 
-const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'backup', 'storage', 'language'] as const;
+const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'backup', 'language'] as const;
 type Tab = typeof TABS[number];
 
 export function Settings() {
@@ -211,7 +210,6 @@ export function Settings() {
     inventory: { icon: Package, label: 'Inventory', labelAr: 'المخزون' },
     loyalty: { icon: Heart, label: 'Loyalty', labelAr: 'الولاء' },
     backup: { icon: Database, label: 'Backup & Restore', labelAr: 'النسخ الاحتياطي' },
-    storage: { icon: HardDrive, label: 'Storage', labelAr: 'التخزين' },
     language: { icon: Globe, label: 'Language', labelAr: 'اللغة والعرض' },
   };
 
@@ -761,10 +759,6 @@ export function Settings() {
               </div>
             </div>
           </div>
-        )}
-
-        {activeTab === 'storage' && (
-          <StorageSettings />
         )}
 
         {activeTab === 'language' && (
