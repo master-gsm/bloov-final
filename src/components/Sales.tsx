@@ -362,27 +362,16 @@ export function Sales() {
     }));
 
     try {
-      console.log('[Sales] Starting WhatsApp share for sale:', sale.id);
-      console.log('[Sales] Generating invoice file (PDF or Image)...');
-
-      // Show loading indicator
-      const originalText = isRTL ? 'جاري إنشاء الفاتورة...' : 'Generating invoice...';
-      console.log(originalText);
+      console.log('[Sales] Starting WhatsApp ONE-CLICK share for sale:', sale.id);
 
       await shareInvoiceViaWhatsApp(sale, formattedItems, phone);
       console.log('[Sales] WhatsApp share completed successfully');
-
-      // Success message
-      console.log(isRTL
-        ? '✓ تم فتح نافذة المشاركة. اختر WhatsApp من القائمة.'
-        : '✓ Share dialog opened. Select WhatsApp from the menu.');
 
     } catch (error: any) {
       console.error('[Sales] Error sharing invoice:', error);
       console.error('[Sales] Error message:', error?.message);
       console.error('[Sales] Error stack:', error?.stack);
 
-      // Don't show error if user just cancelled
       if (error?.name === 'AbortError') {
         console.log('[Sales] User cancelled share dialog');
         return;

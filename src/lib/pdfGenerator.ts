@@ -500,7 +500,7 @@ export async function shareInvoiceViaWhatsApp(
   customerPhone: string
 ): Promise<void> {
   try {
-    console.log('[shareInvoiceViaWhatsApp] Starting...');
+    console.log('[shareInvoiceViaWhatsApp] Starting ONE-CLICK experience...');
     console.log('[shareInvoiceViaWhatsApp] Sale:', sale.id, sale.sale_number);
     console.log('[shareInvoiceViaWhatsApp] Items count:', items.length);
     console.log('[shareInvoiceViaWhatsApp] Customer phone:', customerPhone);
@@ -522,130 +522,57 @@ export async function shareInvoiceViaWhatsApp(
       cleanPhone = '966' + cleanPhone;
     }
 
-    const hasShareAPI = typeof navigator.share === 'function';
-    console.log('[shareInvoiceViaWhatsApp] Web Share API available:', hasShareAPI);
+    const hasClipboardAPI = typeof navigator.clipboard !== 'undefined' && typeof ClipboardItem !== 'undefined';
+    console.log('[shareInvoiceViaWhatsApp] Clipboard API available:', hasClipboardAPI);
 
-    if (!hasShareAPI) {
-      console.warn('[shareInvoiceViaWhatsApp] Share API not available, opening WhatsApp with text only');
+    if (!hasClipboardAPI) {
+      console.warn('[shareInvoiceViaWhatsApp] Clipboard API not available, falling back to text-only');
       const message = encodeURIComponent(cleanMessageText);
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
       window.open(whatsappUrl, '_blank');
       return;
     }
-
-    let fileToShare: File | null = null;
-    let fileName = '';
-    let fileType: 'pdf' | 'image' = 'pdf';
 
     try {
-      console.log('[shareInvoiceViaWhatsApp] Generating PDF...');
-      const pdfBlob = await generateInvoicePDF(sale, items);
+      console.log('[shareInvoiceViaWhatsApp] Generating invoice image...');
+      const imageBlob = await generateInvoiceImage(sale, items);
 
-      if (pdfBlob && pdfBlob.size > 0) {
-        console.log('[shareInvoiceViaWhatsApp] PDF generated, size:', pdfBlob.size, 'bytes');
-        fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
-        fileToShare = new File([pdfBlob], fileName, {
-          type: 'application/pdf',
-          lastModified: Date.now()
-        });
-        fileType = 'pdf';
+      if (!imageBlob || imageBlob.size === 0) {
+        throw new Error('Failed to generate invoice image');
+      }
+
+      console.log('[shareInvoiceViaWhatsApp] Image generated, size:', imageBlob.size, 'bytes');
+
+      console.log('[shareInvoiceViaWhatsApp] Copying image to clipboard...');
+      const clipboardItem = new ClipboardItem({
+        'image/png': imageBlob
+      });
+
+      await navigator.clipboard.write([clipboardItem]);
+      console.log('[shareInvoiceViaWhatsApp] ✓ Image copied to clipboard!');
+
+      showToast('تم نسخ الفاتورة! الصق (Ctrl+V) في WhatsApp', 'success');
+
+      console.log('[shareInvoiceViaWhatsApp] Opening WhatsApp...');
+      const message = encodeURIComponent(cleanMessageText);
+      const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
+      window.open(whatsappUrl, '_blank');
+
+      console.log('[shareInvoiceViaWhatsApp] ✓ Complete! User can now paste in WhatsApp.');
+
+    } catch (clipboardError: any) {
+      console.error('[shareInvoiceViaWhatsApp] Clipboard copy failed:', clipboardError);
+
+      if (clipboardError.name === 'NotAllowedError') {
+        showToast('يرجى السماح بالوصول للحافظة', 'error');
       } else {
-        throw new Error('PDF blob is empty');
+        showToast('فشل نسخ الصورة. جاري فتح WhatsApp...', 'warning');
       }
-    } catch (pdfError) {
-      console.warn('[shareInvoiceViaWhatsApp] PDF failed, trying PNG:', pdfError);
-
-      try {
-        console.log('[shareInvoiceViaWhatsApp] Generating PNG...');
-        const imageBlob = await generateInvoiceImage(sale, items);
-
-        if (imageBlob && imageBlob.size > 0) {
-          console.log('[shareInvoiceViaWhatsApp] PNG generated, size:', imageBlob.size, 'bytes');
-          fileName = `BLOOV-Invoice-${sale.sale_number}.png`;
-          fileToShare = new File([imageBlob], fileName, {
-            type: 'image/png',
-            lastModified: Date.now()
-          });
-          fileType = 'image';
-        } else {
-          throw new Error('Image blob is empty');
-        }
-      } catch (imageError) {
-        console.error('[shareInvoiceViaWhatsApp] Both PDF and PNG failed:', imageError);
-        const message = encodeURIComponent(cleanMessageText);
-        const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
-        window.open(whatsappUrl, '_blank');
-        return;
-      }
-    }
-
-    if (!fileToShare) {
-      console.warn('[shareInvoiceViaWhatsApp] No file generated');
-      const message = encodeURIComponent(cleanMessageText);
-      const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
-      window.open(whatsappUrl, '_blank');
-      return;
-    }
-
-    console.log('[shareInvoiceViaWhatsApp] File ready:', {
-      name: fileToShare.name,
-      size: fileToShare.size,
-      type: fileToShare.type
-    });
-
-    const shareData: ShareData = {
-      files: [fileToShare],
-      text: cleanMessageText
-    };
-
-    const canShare = navigator.canShare && navigator.canShare(shareData);
-    console.log('[shareInvoiceViaWhatsApp] Can share files with text:', canShare);
-
-    if (!canShare) {
-      const fileOnlyData: ShareData = {
-        files: [fileToShare]
-      };
-      const canShareFileOnly = navigator.canShare && navigator.canShare(fileOnlyData);
-      console.log('[shareInvoiceViaWhatsApp] Can share file only:', canShareFileOnly);
-
-      if (canShareFileOnly) {
-        console.log('[shareInvoiceViaWhatsApp] Sharing file only (text separate)...');
-        await navigator.share(fileOnlyData);
-        console.log('[shareInvoiceViaWhatsApp] File shared! Opening WhatsApp for text...');
-
-        setTimeout(() => {
-          const message = encodeURIComponent(cleanMessageText);
-          const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
-          window.open(whatsappUrl, '_blank');
-        }, 1000);
-        return;
-      }
-
-      console.warn('[shareInvoiceViaWhatsApp] File sharing not supported on this device');
-
-      const url = URL.createObjectURL(fileToShare);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      alert('تم تحميل الفاتورة.\n\nيرجى نسخ الرسالة التالية وإرفاق الملف في WhatsApp:\n\n' + cleanMessageText + '\n\nPlease copy the message above and attach the downloaded file to WhatsApp.');
 
       const message = encodeURIComponent(cleanMessageText);
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
       window.open(whatsappUrl, '_blank');
-      return;
     }
-
-    console.log('[shareInvoiceViaWhatsApp] Opening native share dialog...');
-    console.log('[shareInvoiceViaWhatsApp] Format:', fileType.toUpperCase());
-
-    await navigator.share(shareData);
-    console.log('[shareInvoiceViaWhatsApp] ✓ Share completed successfully!');
 
   } catch (error: any) {
     console.error('[shareInvoiceViaWhatsApp] Error:', error);
@@ -657,6 +584,29 @@ export async function shareInvoiceViaWhatsApp(
 
     throw error;
   }
+}
+
+function showToast(message: string, type: 'success' | 'error' | 'warning' = 'success') {
+  const toast = document.createElement('div');
+  toast.className = `fixed top-20 right-4 z-[9999] px-6 py-3 rounded-lg shadow-lg text-white font-medium transition-all duration-300 transform translate-x-0 ${
+    type === 'success' ? 'bg-green-600' :
+    type === 'error' ? 'bg-red-600' :
+    'bg-yellow-600'
+  }`;
+  toast.textContent = message;
+  toast.style.minWidth = '300px';
+  toast.style.maxWidth = '500px';
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.transform = 'translateX(150%)';
+    toast.style.opacity = '0';
+  }, 3000);
+
+  setTimeout(() => {
+    document.body.removeChild(toast);
+  }, 3500);
 }
 
 export async function downloadInvoicePDF(sale: Sale, items: SaleItem[]): Promise<void> {
