@@ -20,6 +20,7 @@ import { Inventory } from './components/Inventory';
 import { Reports } from './components/Reports';
 import { Settings } from './components/Settings';
 import { CashRegister } from './components/CashRegister';
+import { SallaOrders } from './components/SallaOrders';
 import { supabase } from './lib/supabase';
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
@@ -32,6 +33,7 @@ const SECTION_PERMISSIONS: Record<string, string[]> = {
   customers: ['admin', 'accountant', 'viewer'],
   suppliers: ['admin', 'accountant', 'viewer'],
   partners: ['admin', 'viewer'],
+  salla: ['admin', 'accountant'],
   cashregister: ['admin', 'accountant', 'viewer'],
   reports: ['admin', 'accountant', 'viewer'],
   users: ['admin'],
@@ -143,6 +145,7 @@ function AppContent() {
       case 'inventory': return <Inventory />;
       case 'customers': return <Customers />;
       case 'suppliers': return <Suppliers />;
+      case 'salla': return <SallaOrders />;
       case 'cashregister': return <CashRegister />;
       case 'reports': return <Reports />;
       case 'users': return <UserManagement />;

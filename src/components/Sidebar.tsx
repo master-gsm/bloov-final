@@ -14,6 +14,7 @@ import {
   UserCog,
   Wallet,
   Receipt,
+  Store,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,6 +32,7 @@ const MENU_ACCESS: Record<string, string[]> = {
   customers: ['admin', 'accountant', 'viewer'],
   suppliers: ['admin', 'accountant', 'viewer'],
   partners: ['admin', 'viewer'],
+  salla: ['admin', 'accountant'],
   cashregister: ['admin', 'accountant', 'viewer'],
   reports: ['admin', 'accountant', 'viewer'],
   users: ['admin'],
@@ -51,6 +53,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'customers', icon: Users, label: t('nav.customers') },
     { id: 'suppliers', icon: Truck, label: t('nav.suppliers') },
     { id: 'partners', icon: UsersRound, label: t('nav.partners') },
+    { id: 'salla', icon: Store, label: isRTL ? 'سلة' : 'Salla' },
     { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
     { id: 'reports', icon: FileText, label: t('nav.reports') },
     { id: 'users', icon: UserCog, label: t('nav.users') },
