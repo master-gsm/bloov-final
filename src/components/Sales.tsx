@@ -24,6 +24,18 @@ interface Customer {
   name_ar: string | null;
   code: string;
   phone: string | null;
+  total_spent?: number;
+  order_count?: number;
+  tier?: 'vip' | 'frequent' | 'regular' | 'inactive';
+  last_order_date?: string;
+}
+
+interface CustomerLoyalty {
+  id: string;
+  customer_id: string;
+  points: number;
+  total_earned: number;
+  total_redeemed: number;
 }
 
 interface SaleItem {
@@ -92,6 +104,12 @@ export function Sales() {
   const [sallaShippingCost, setSallaShippingCost] = useState(0);
   const [sallaPaymentFee, setSallaPaymentFee] = useState(0);
 
+  const [lookedUpCustomer, setLookedUpCustomer] = useState<Customer | null>(null);
+  const [customerLoyalty, setCustomerLoyalty] = useState<CustomerLoyalty | null>(null);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [showQuickRegister, setShowQuickRegister] = useState(false);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+
   useEffect(() => {
     loadData();
     checkAdmin();
@@ -148,7 +166,101 @@ export function Sales() {
 
   const removeItem = (index: number) => setSaleItems(saleItems.filter((_, i) => i !== index));
 
+  const lookupCustomerByPhone = async (phone: string) => {
+    if (!phone || phone.length < 10) {
+      setLookedUpCustomer(null);
+      setCustomerLoyalty(null);
+      return;
+    }
+
+    setIsLookingUp(true);
+    try {
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (customer) {
+        setLookedUpCustomer(customer);
+        setWalkinName(customer.name);
+        setSelectedCustomer(customer.id);
+
+        const { data: loyalty } = await supabase
+          .from('customer_loyalty')
+          .select('*')
+          .eq('customer_id', customer.id)
+          .maybeSingle();
+
+        setCustomerLoyalty(loyalty);
+      } else {
+        setLookedUpCustomer(null);
+        setCustomerLoyalty(null);
+        setWalkinName('');
+      }
+    } catch (err) {
+      console.error('Error looking up customer:', err);
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
+  const quickRegisterCustomer = async () => {
+    if (!walkinName || !walkinPhone) {
+      setError(isRTL ? 'الرجاء إدخال الاسم ورقم الهاتف' : 'Please enter name and phone');
+      return;
+    }
+
+    try {
+      const customerCode = `C${Date.now().toString(36).toUpperCase()}`;
+      const { data: newCustomer, error: custError } = await supabase
+        .from('customers')
+        .insert({
+          code: customerCode,
+          name: walkinName,
+          name_ar: walkinName,
+          phone: walkinPhone,
+          is_active: true,
+          created_by: user?.id,
+        })
+        .select()
+        .single();
+
+      if (custError) throw custError;
+
+      await supabase.from('customer_loyalty').insert({
+        customer_id: newCustomer.id,
+        points: 0,
+        total_earned: 0,
+        total_redeemed: 0,
+      });
+
+      setSelectedCustomer(newCustomer.id);
+      setLookedUpCustomer(newCustomer);
+      setCustomerLoyalty({ id: '', customer_id: newCustomer.id, points: 0, total_earned: 0, total_redeemed: 0 });
+      setShowQuickRegister(false);
+      await loadData();
+    } catch (err) {
+      console.error('Error registering customer:', err);
+      setError(isRTL ? 'حدث خطأ في التسجيل' : 'Registration error');
+    }
+  };
+
+  const calculatePointsDiscount = (points: number): number => {
+    const pointsRate = 0.05;
+    return Math.floor(points * pointsRate * 100) / 100;
+  };
+
+  const applyPointsRedemption = () => {
+    if (!customerLoyalty || customerLoyalty.points <= 0) return;
+    const maxPoints = customerLoyalty.points;
+    const discount = calculatePointsDiscount(maxPoints);
+    setPointsToRedeem(maxPoints);
+    setSaleDiscount(saleDiscount + discount);
+  };
+
   const subtotal = saleItems.reduce((sum, item) => sum + item.total, 0);
+  const pointsDiscount = calculatePointsDiscount(pointsToRedeem);
   const taxableAmount = subtotal - saleDiscount + deliveryCharge;
   const vatAmount = Math.round(taxableAmount * taxRate * 100) / 100;
   const total = taxableAmount + vatAmount;
@@ -168,6 +280,9 @@ export function Sales() {
     setSaleSource('store');
     setSallaShippingCost(0);
     setSallaPaymentFee(0);
+    setLookedUpCustomer(null);
+    setCustomerLoyalty(null);
+    setPointsToRedeem(0);
     setError('');
     setShowForm(true);
   };
@@ -254,7 +369,7 @@ export function Sales() {
         const loyaltyPoints = Math.floor(total);
         const { data: existingLoyalty } = await supabase
           .from('customer_loyalty')
-          .select('id, points, total_earned')
+          .select('id, points, total_earned, total_redeemed')
           .eq('customer_id', selectedCustomer)
           .maybeSingle();
 
@@ -262,16 +377,18 @@ export function Sales() {
           await supabase
             .from('customer_loyalty')
             .update({
-              points: existingLoyalty.points + loyaltyPoints,
+              points: existingLoyalty.points + loyaltyPoints - pointsToRedeem,
               total_earned: existingLoyalty.total_earned + loyaltyPoints,
+              total_redeemed: (existingLoyalty.total_redeemed || 0) + pointsToRedeem,
               updated_at: new Date().toISOString(),
             })
             .eq('id', existingLoyalty.id);
         } else {
           await supabase.from('customer_loyalty').insert({
             customer_id: selectedCustomer,
-            points: loyaltyPoints,
+            points: loyaltyPoints - pointsToRedeem,
             total_earned: loyaltyPoints,
+            total_redeemed: pointsToRedeem,
           });
         }
 
@@ -282,6 +399,16 @@ export function Sales() {
           type: 'earned',
           description: `Sale ${saleNumber}`,
         });
+
+        if (pointsToRedeem > 0) {
+          await supabase.from('loyalty_transactions').insert({
+            customer_id: selectedCustomer,
+            sale_id: sale.id,
+            points: pointsToRedeem,
+            type: 'redeemed',
+            description: `${isRTL ? 'استخدام' : 'Redeemed'} ${pointsToRedeem} ${isRTL ? 'نقطة' : 'points'} (${formatCurrency(pointsDiscount)} ${isRTL ? 'خصم' : 'discount'})`,
+          });
+        }
 
         if (isCredit) {
           await supabase.from('customers').update({
@@ -658,15 +785,85 @@ export function Sales() {
                 </select>
               </div>
 
+              {lookedUpCustomer && (
+                <div className="p-3 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-lg border border-teal-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900">{lookedUpCustomer.name}</span>
+                      {lookedUpCustomer.tier && (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                          lookedUpCustomer.tier === 'vip' ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-white' :
+                          lookedUpCustomer.tier === 'frequent' ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' :
+                          lookedUpCustomer.tier === 'inactive' ? 'bg-gray-400 text-white' :
+                          'bg-gray-200 text-gray-700'
+                        }`}>
+                          {lookedUpCustomer.tier === 'vip' ? (isRTL ? '⭐ VIP' : '⭐ VIP') :
+                           lookedUpCustomer.tier === 'frequent' ? (isRTL ? '🔥 دائم' : '🔥 Frequent') :
+                           lookedUpCustomer.tier === 'inactive' ? (isRTL ? '💤 غير نشط' : '💤 Inactive') :
+                           (isRTL ? 'عادي' : 'Regular')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {customerLoyalty && (
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="font-medium text-teal-700">
+                        {isRTL ? '🎁 النقاط:' : '🎁 Points:'} <span className="font-bold text-teal-900">{customerLoyalty.points}</span>
+                      </span>
+                      <span className="text-gray-600">
+                        {isRTL ? `إجمالي الطلبات: ${lookedUpCustomer.order_count || 0}` : `Orders: ${lookedUpCustomer.order_count || 0}`}
+                      </span>
+                      <span className="text-gray-600">
+                        {isRTL ? `الإنفاق: ${formatCurrency(lookedUpCustomer.total_spent || 0)}` : `Spent: ${formatCurrency(lookedUpCustomer.total_spent || 0)}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {!selectedCustomer && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'اسم العميل' : 'Customer Name'}</label>
-                    <input type="text" value={walkinName} onChange={(e) => setWalkinName(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" placeholder={isRTL ? 'اسم العميل' : 'Customer name'} />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'رقم الجوال (للبحث التلقائي)' : 'Phone Number (Auto-lookup)'}</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={walkinPhone}
+                        onChange={(e) => {
+                          setWalkinPhone(e.target.value);
+                          if (e.target.value.length >= 10) {
+                            lookupCustomerByPhone(e.target.value);
+                          }
+                        }}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                        placeholder="+966XXXXXXXXX"
+                        dir="ltr"
+                      />
+                      {isLookingUp && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <div className="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    {walkinPhone && !lookedUpCustomer && !isLookingUp && walkinPhone.length >= 10 && (
+                      <button
+                        onClick={() => setShowQuickRegister(true)}
+                        className="mt-2 text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        {isRTL ? 'تسجيل عميل جديد بهذا الرقم' : 'Register new customer with this number'}
+                      </button>
+                    )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'رقم الجوال' : 'Phone Number'}</label>
-                    <input type="text" value={walkinPhone} onChange={(e) => setWalkinPhone(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" placeholder="+966XXXXXXXXX" dir="ltr" />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'اسم العميل' : 'Customer Name'}</label>
+                    <input
+                      type="text"
+                      value={walkinName}
+                      onChange={(e) => setWalkinName(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                      placeholder={isRTL ? 'اسم العميل' : 'Customer name'}
+                    />
                   </div>
                 </>
               )}
@@ -776,6 +973,48 @@ export function Sales() {
                 </div>
               )}
 
+              {customerLoyalty && customerLoyalty.points > 0 && (
+                <div className="border-t pt-3">
+                  <div className="bg-gradient-to-r from-amber-50 to-yellow-50 p-4 rounded-lg border border-amber-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🎁</span>
+                        <div>
+                          <p className="text-sm font-bold text-gray-900">{isRTL ? 'نقاط الولاء المتاحة' : 'Available Loyalty Points'}</p>
+                          <p className="text-xs text-gray-600">{isRTL ? '100 نقطة = 5 ريال خصم' : '100 points = 5 SAR discount'}</p>
+                        </div>
+                      </div>
+                      <span className="text-2xl font-bold text-amber-600">{customerLoyalty.points}</span>
+                    </div>
+                    {pointsToRedeem === 0 ? (
+                      <button
+                        onClick={applyPointsRedemption}
+                        disabled={customerLoyalty.points < 20}
+                        className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 text-white py-2 rounded-lg hover:from-amber-600 hover:to-yellow-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm flex items-center justify-center gap-2"
+                      >
+                        <span>✨</span>
+                        {isRTL ? `استخدام النقاط (خصم ${formatCurrency(calculatePointsDiscount(customerLoyalty.points))})` : `Redeem Points (${formatCurrency(calculatePointsDiscount(customerLoyalty.points))} off)`}
+                      </button>
+                    ) : (
+                      <div className="flex items-center justify-between bg-white p-2 rounded border border-amber-300">
+                        <span className="text-xs font-medium text-gray-700">
+                          {isRTL ? `تم استخدام ${pointsToRedeem} نقطة` : `${pointsToRedeem} points redeemed`}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setSaleDiscount(saleDiscount - calculatePointsDiscount(pointsToRedeem));
+                            setPointsToRedeem(0);
+                          }}
+                          className="text-xs text-red-600 hover:text-red-700 font-medium"
+                        >
+                          {isRTL ? 'إلغاء' : 'Cancel'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {canEdit && (
                 <button onClick={handleSubmit} disabled={submitting || saleItems.length === 0} className="w-full bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium flex items-center justify-center gap-2">
                   <CreditCard className="w-5 h-5" />
@@ -785,6 +1024,63 @@ export function Sales() {
             </div>
           </div>
         </div>
+
+        {showQuickRegister && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'تسجيل عميل جديد' : 'Register New Customer'}</h3>
+                <button onClick={() => setShowQuickRegister(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'رقم الجوال' : 'Phone Number'}</label>
+                  <input
+                    type="text"
+                    value={walkinPhone}
+                    onChange={(e) => setWalkinPhone(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                    placeholder="+966XXXXXXXXX"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'اسم العميل' : 'Customer Name'}</label>
+                  <input
+                    type="text"
+                    value={walkinName}
+                    onChange={(e) => setWalkinName(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                    placeholder={isRTL ? 'الاسم الكامل' : 'Full name'}
+                  />
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">{error}</div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={quickRegisterCustomer}
+                    className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
+                  >
+                    {isRTL ? 'تسجيل وإكمال البيع' : 'Register & Continue'}
+                  </button>
+                  <button
+                    onClick={() => setShowQuickRegister(false)}
+                    className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium"
+                  >
+                    {isRTL ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
