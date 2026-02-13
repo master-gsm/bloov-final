@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { uploadFile, getSignedUrl } from '../lib/fileUpload';
+import { uploadFile, getSignedUrl } from '../lib/storageProvider';
 import { ShoppingBag, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Paperclip, Download } from 'lucide-react';
 
 interface Product {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { uploadFile, getSignedUrl } from '../lib/fileUpload';
+import { uploadFile, getSignedUrl } from '../lib/storageProvider';
 import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
 import { ContributionReceipt } from './ContributionReceipt';
 import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet, Paperclip, Download, Receipt } from 'lucide-react';
