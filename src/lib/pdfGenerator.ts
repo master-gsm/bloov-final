@@ -1,7 +1,6 @@
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import { supabase } from './supabase';
-import html2canvas from 'html2canvas';
 
 interface SaleItem {
   product_name: string;
@@ -291,108 +290,152 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
     const qrCodeData = generateZATCAQRCode(sale, COMPANY_INFO);
     const qrCodeDataUrl = await QRCode.toDataURL(qrCodeData);
 
-    const invoiceElement = document.createElement('div');
-    invoiceElement.style.position = 'absolute';
-    invoiceElement.style.left = '-9999px';
-    invoiceElement.style.width = '800px';
-    invoiceElement.style.backgroundColor = '#ffffff';
-    invoiceElement.style.padding = '40px';
-    invoiceElement.style.fontFamily = 'Arial, sans-serif';
-    invoiceElement.style.direction = 'rtl';
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
 
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
     const tax = subtotal * 0.15;
     const total = subtotal + tax;
 
-    invoiceElement.innerHTML = `
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #2563eb; font-size: 32px; margin: 0;">BLOOV 🌸</h1>
-        <p style="color: #666; margin: 5px 0;">نظام المحاسبة المتكامل</p>
-      </div>
+    const rowHeight = 40;
+    const headerHeight = 250;
+    const footerHeight = 200;
+    canvas.height = headerHeight + (items.length * rowHeight) + footerHeight;
 
-      <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
-        <div style="text-align: right;">
-          <h2 style="color: #333; font-size: 24px; margin: 0 0 15px 0;">فاتورة ضريبية</h2>
-          <p style="margin: 5px 0;"><strong>رقم الفاتورة:</strong> ${sale.sale_number}</p>
-          <p style="margin: 5px 0;"><strong>التاريخ:</strong> ${new Date(sale.sale_date).toLocaleDateString('ar-SA')}</p>
-          ${sale.customer_name ? `<p style="margin: 5px 0;"><strong>العميل:</strong> ${sale.customer_name}</p>` : ''}
-        </div>
-        <div style="text-align: left;">
-          <p style="margin: 5px 0; font-size: 14px;"><strong>${COMPANY_INFO.name}</strong></p>
-          <p style="margin: 5px 0; font-size: 12px;">الرقم الضريبي: ${COMPANY_INFO.vatNumber}</p>
-          <p style="margin: 5px 0; font-size: 12px;">${COMPANY_INFO.address}</p>
-          <p style="margin: 5px 0; font-size: 12px;">${COMPANY_INFO.phone}</p>
-        </div>
-      </div>
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Cannot get canvas context');
 
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <thead>
-          <tr style="background-color: #2563eb; color: white;">
-            <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">المنتج</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">الكمية</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">السعر</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">الخصم</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">المجموع</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items.map((item, index) => `
-            <tr style="background-color: ${index % 2 === 0 ? '#f9fafb' : 'white'};">
-              <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">${item.product_name}</td>
-              <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${item.quantity}</td>
-              <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${item.unit_price.toFixed(2)} ر.س</td>
-              <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${item.discount.toFixed(2)} ر.س</td>
-              <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${item.total.toFixed(2)} ر.س</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      <div style="display: flex; justify-content: space-between; margin-top: 30px;">
-        <div style="text-align: center;">
-          <img src="${qrCodeDataUrl}" style="width: 120px; height: 120px;" />
-          <p style="font-size: 10px; color: #666; margin: 5px 0;">كود الفاتورة - ZATCA</p>
-        </div>
-        <div style="text-align: left; min-width: 300px;">
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd;">
-            <span>المجموع الفرعي:</span>
-            <span style="font-weight: bold;">${subtotal.toFixed(2)} ر.س</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd;">
-            <span>ضريبة القيمة المضافة (15%):</span>
-            <span style="font-weight: bold;">${tax.toFixed(2)} ر.س</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: 12px 0; background-color: #2563eb; color: white; margin-top: 5px; padding-left: 10px; padding-right: 10px;">
-            <span style="font-size: 18px; font-weight: bold;">المجموع الإجمالي:</span>
-            <span style="font-size: 18px; font-weight: bold;">${total.toFixed(2)} ر.س</span>
-          </div>
-        </div>
-      </div>
+    ctx.fillStyle = '#2563eb';
+    ctx.font = 'bold 40px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('BLOOV 🌸', 400, 60);
 
-      <div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #ddd;">
-        <p style="color: #2563eb; font-weight: bold; margin: 0;">شكراً لتسوقك معنا! 🌸</p>
-        <p style="color: #666; font-size: 12px; margin: 5px 0;">نتطلع لخدمتك مجدداً</p>
-      </div>
-    `;
+    ctx.fillStyle = '#666666';
+    ctx.font = '18px Arial';
+    ctx.fillText('نظام المحاسبة المتكامل', 400, 95);
 
-    document.body.appendChild(invoiceElement);
+    ctx.strokeStyle = '#cccccc';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(50, 120);
+    ctx.lineTo(750, 120);
+    ctx.stroke();
 
-    const canvas = await html2canvas(invoiceElement, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      logging: false,
-      useCORS: true,
-      allowTaint: true
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('فاتورة ضريبية', 750, 155);
+
+    ctx.font = '16px Arial';
+    ctx.fillText(`رقم الفاتورة: ${sale.sale_number}`, 750, 185);
+    ctx.fillText(`التاريخ: ${new Date(sale.sale_date).toLocaleDateString('ar-SA')}`, 750, 210);
+
+    if (sale.customer_name) {
+      ctx.fillText(`العميل: ${sale.customer_name}`, 750, 235);
+    }
+
+    ctx.textAlign = 'left';
+    ctx.font = '14px Arial';
+    ctx.fillText(COMPANY_INFO.name, 50, 155);
+    ctx.font = '12px Arial';
+    ctx.fillText(`الرقم الضريبي: ${COMPANY_INFO.vatNumber}`, 50, 175);
+    ctx.fillText(COMPANY_INFO.address, 50, 195);
+    ctx.fillText(COMPANY_INFO.phone, 50, 215);
+
+    let yPos = headerHeight;
+
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(50, yPos, 700, 35);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('المنتج', 720, yPos + 22);
+    ctx.textAlign = 'center';
+    ctx.fillText('الكمية', 520, yPos + 22);
+    ctx.fillText('السعر', 390, yPos + 22);
+    ctx.fillText('الخصم', 260, yPos + 22);
+    ctx.fillText('المجموع', 130, yPos + 22);
+
+    yPos += 35;
+    ctx.font = '15px Arial';
+
+    items.forEach((item, index) => {
+      if (index % 2 === 0) {
+        ctx.fillStyle = '#f9fafb';
+        ctx.fillRect(50, yPos, 700, rowHeight);
+      }
+
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'right';
+      ctx.fillText(item.product_name, 720, yPos + 25);
+      ctx.textAlign = 'center';
+      ctx.fillText(item.quantity.toString(), 520, yPos + 25);
+      ctx.fillText(`${item.unit_price.toFixed(2)} ر.س`, 390, yPos + 25);
+      ctx.fillText(`${item.discount.toFixed(2)} ر.س`, 260, yPos + 25);
+      ctx.fillText(`${item.total.toFixed(2)} ر.س`, 130, yPos + 25);
+
+      yPos += rowHeight;
     });
 
-    document.body.removeChild(invoiceElement);
+    yPos += 30;
 
-    return new Promise((resolve, reject) => {
+    const qrImage = new Image();
+    await new Promise((resolve, reject) => {
+      qrImage.onload = resolve;
+      qrImage.onerror = reject;
+      qrImage.src = qrCodeDataUrl;
+    });
+    ctx.drawImage(qrImage, 60, yPos, 120, 120);
+
+    const summaryX = 450;
+    ctx.strokeStyle = '#cccccc';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(summaryX, yPos);
+    ctx.lineTo(740, yPos);
+    ctx.stroke();
+
+    yPos += 30;
+    ctx.fillStyle = '#000000';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('المجموع الفرعي:', summaryX + 60, yPos);
+    ctx.fillText(`${subtotal.toFixed(2)} ر.س`, 730, yPos);
+
+    yPos += 25;
+    ctx.fillText('ضريبة القيمة المضافة (15%):', summaryX + 60, yPos);
+    ctx.fillText(`${tax.toFixed(2)} ر.س`, 730, yPos);
+
+    yPos += 35;
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(summaryX, yPos - 25, 290, 40);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('المجموع الإجمالي:', summaryX + 60, yPos);
+    ctx.fillText(`${total.toFixed(2)} ر.س`, 730, yPos);
+
+    yPos += 60;
+    ctx.fillStyle = '#2563eb';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('شكراً لتسوقك معنا! 🌸', 400, yPos);
+
+    yPos += 30;
+    ctx.fillStyle = '#666666';
+    ctx.font = '16px Arial';
+    ctx.fillText('نتطلع لخدمتك مجدداً', 400, yPos);
+
+    return new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((blob) => {
         if (blob) {
           resolve(blob);
         } else {
-          reject(new Error('Failed to generate image blob'));
+          reject(new Error('Failed to convert canvas to blob'));
         }
       }, 'image/png', 0.95);
     });
