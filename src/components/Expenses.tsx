@@ -32,6 +32,7 @@ export default function Expenses() {
 
   const [expenses, setExpenses] = useState<OperatingExpense[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -54,7 +55,18 @@ export default function Expenses() {
 
   useEffect(() => {
     loadExpenses();
+    checkAdmin();
   }, []);
+
+  const checkAdmin = async () => {
+    if (!user) return;
+    try {
+      const { data: role } = await supabase.rpc('get_my_role');
+      setIsAdmin(role === 'admin');
+    } catch (err) {
+      console.error('Error checking role:', err);
+    }
+  };
 
   const loadExpenses = async () => {
     try {
@@ -152,6 +164,10 @@ export default function Expenses() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!isAdmin) {
+      alert(isRTL ? 'يتطلب صلاحيات المدير لحذف المصاريف' : 'Admin privileges required to delete expenses');
+      return;
+    }
     try {
       const { error } = await supabase.from('operating_expenses').delete().eq('id', id);
 
@@ -540,7 +556,7 @@ export default function Expenses() {
                             {isRTL ? 'إلغاء' : 'Cancel'}
                           </button>
                         </>
-                      ) : canEdit ? (
+                      ) : canEdit && isAdmin ? (
                         <button
                           onClick={() => setDeleteConfirm(exp.id)}
                           className="p-2 text-red-500 hover:bg-red-50 rounded transition"

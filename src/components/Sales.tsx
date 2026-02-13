@@ -60,6 +60,7 @@ export function Sales() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
@@ -88,7 +89,18 @@ export function Sales() {
 
   useEffect(() => {
     loadData();
+    checkAdmin();
   }, []);
+
+  const checkAdmin = async () => {
+    if (!user) return;
+    try {
+      const { data: role } = await supabase.rpc('get_my_role');
+      setIsAdmin(role === 'admin');
+    } catch (err) {
+      console.error('Error checking role:', err);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -396,9 +408,31 @@ export function Sales() {
   };
 
   const updateSaleStatus = async (saleId: string, status: string) => {
-    await supabase.from('sales').update({ status }).eq('id', saleId);
-    loadData();
-    setViewingSale(null);
+    try {
+      const { error } = await supabase.from('sales').update({ status }).eq('id', saleId);
+      if (error) throw error;
+      await loadData();
+      setViewingSale(null);
+    } catch (error) {
+      console.error('Error updating sale status:', error);
+      alert(isRTL ? 'حدث خطأ أثناء تحديث حالة الفاتورة' : 'Error updating sale status');
+    }
+  };
+
+  const reactivateSale = async (saleId: string, newStatus: 'confirmed') => {
+    if (!isAdmin) {
+      alert(isRTL ? 'يتطلب صلاحيات المدير' : 'Admin privileges required');
+      return;
+    }
+    try {
+      const { error } = await supabase.from('sales').update({ status: newStatus }).eq('id', saleId);
+      if (error) throw error;
+      await loadData();
+      setViewingSale(null);
+    } catch (error) {
+      console.error('Error reactivating sale:', error);
+      alert(isRTL ? 'حدث خطأ أثناء استعادة الفاتورة' : 'Error reactivating sale');
+    }
   };
 
   const filtered = sales.filter((s) => {
@@ -801,11 +835,15 @@ export function Sales() {
                     <MessageCircle className="w-4 h-4" /> WhatsApp
                   </button>
                 )}
-                {viewingSale.status !== 'cancelled' && (
+                {viewingSale.status === 'cancelled' && isAdmin ? (
+                  <button onClick={() => reactivateSale(viewingSale.id, 'confirmed')} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium">
+                    <Check className="w-4 h-4" /> {isRTL ? 'استعادة' : 'Restore'}
+                  </button>
+                ) : viewingSale.status !== 'cancelled' ? (
                   <button onClick={() => updateSaleStatus(viewingSale.id, 'cancelled')} className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 transition font-medium">
                     <XCircle className="w-4 h-4" /> {isRTL ? 'إلغاء' : 'Cancel'}
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           </div>

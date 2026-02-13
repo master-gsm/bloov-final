@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { FileText, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3 } from 'lucide-react';
+import { FileText, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, Receipt, ShieldAlert } from 'lucide-react';
 
 interface SalesData {
   total: number;
@@ -15,6 +16,11 @@ interface PurchasesData {
   count: number;
 }
 
+interface ExpensesData {
+  total: number;
+  count: number;
+}
+
 interface TopProduct {
   product_name: string;
   product_name_ar: string;
@@ -24,17 +30,39 @@ interface TopProduct {
 
 export function Reports() {
   const { t, language } = useLanguage();
+  const { user } = useAuth();
   const isRTL = language === 'ar';
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [period, setPeriod] = useState<'today' | 'week' | 'month' | 'year'>('month');
   const [salesData, setSalesData] = useState<SalesData>({ total: 0, storeTotal: 0, sallaTotal: 0, count: 0 });
   const [purchasesData, setPurchasesData] = useState<PurchasesData>({ total: 0, count: 0 });
+  const [expensesData, setExpensesData] = useState<ExpensesData>({ total: 0, count: 0 });
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [recentSales, setRecentSales] = useState<any[]>([]);
 
   useEffect(() => {
-    loadReportData();
-  }, [period]);
+    checkAdminAndLoad();
+  }, [user]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadReportData();
+    }
+  }, [period, isAdmin]);
+
+  const checkAdminAndLoad = async () => {
+    if (!user) return;
+    try {
+      const { data: role } = await supabase.rpc('get_my_role');
+      const admin = role === 'admin';
+      setIsAdmin(admin);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error checking role:', err);
+      setLoading(false);
+    }
+  };
 
   const getDateRange = () => {
     const now = new Date();
@@ -53,7 +81,7 @@ export function Reports() {
     try {
       const { start, end } = getDateRange();
 
-      const [salesRes, purchasesRes, recentRes] = await Promise.all([
+      const [salesRes, purchasesRes, expensesRes, recentRes] = await Promise.all([
         supabase
           .from('sales')
           .select('total, source')
@@ -67,6 +95,11 @@ export function Reports() {
           .gte('purchase_date', start)
           .lte('purchase_date', end),
         supabase
+          .from('operating_expenses')
+          .select('amount')
+          .gte('expense_date', start)
+          .lte('expense_date', end),
+        supabase
           .from('sales')
           .select('*, customers(name, name_ar)')
           .eq('status', 'confirmed')
@@ -78,9 +111,11 @@ export function Reports() {
       const sallaTotalAmount = salesRes.data?.filter(s => s.source === 'salla').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
       const salesTotalAmount = storeTotalAmount + sallaTotalAmount;
       const purchasesTotalAmount = purchasesRes.data?.reduce((sum, p) => sum + (p.total || 0), 0) || 0;
+      const expensesTotalAmount = expensesRes.data?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
 
       setSalesData({ total: salesTotalAmount, storeTotal: storeTotalAmount, sallaTotal: sallaTotalAmount, count: salesRes.data?.length || 0 });
       setPurchasesData({ total: purchasesTotalAmount, count: purchasesRes.data?.length || 0 });
+      setExpensesData({ total: expensesTotalAmount, count: expensesRes.data?.length || 0 });
       setRecentSales(recentRes.data || []);
 
       const { data: saleItemsData } = await supabase
@@ -119,7 +154,7 @@ export function Reports() {
     }
   };
 
-  const netProfit = salesData.total - purchasesData.total;
+  const netProfit = salesData.total - purchasesData.total - expensesData.total;
   const profitMargin = salesData.total > 0 ? ((netProfit / salesData.total) * 100).toFixed(1) : '0.0';
 
   const formatCurrency = (amount: number) =>
@@ -134,6 +169,24 @@ export function Reports() {
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="mt-4 text-gray-600">{t('common.loading')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center max-w-md">
+          <ShieldAlert className="w-16 h-16 mx-auto mb-4 text-red-500" />
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            {isRTL ? 'وصول محظور' : 'Access Denied'}
+          </h3>
+          <p className="text-gray-600">
+            {isRTL
+              ? 'التقارير المالية متاحة للمديرين فقط. يرجى التواصل مع المدير للحصول على الصلاحيات المطلوبة.'
+              : 'Financial reports are available to administrators only. Please contact your administrator for access.'}
+          </p>
         </div>
       </div>
     );
@@ -209,6 +262,17 @@ export function Reports() {
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatCurrency(purchasesData.total)}</p>
           <p className="text-xs text-gray-400 mt-1">{purchasesData.count} {isRTL ? 'عملية' : 'transactions'}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 bg-orange-100 rounded-lg">
+              <Receipt className="w-5 h-5 text-orange-600" />
+            </div>
+            <p className="text-sm text-gray-500">{isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses'}</p>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(expensesData.total)}</p>
+          <p className="text-xs text-gray-400 mt-1">{expensesData.count} {isRTL ? 'عملية' : 'transactions'}</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border p-5">

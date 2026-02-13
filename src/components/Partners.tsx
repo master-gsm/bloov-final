@@ -214,6 +214,10 @@ export function Partners() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!isAdmin) {
+      alert(isRTL ? 'يتطلب صلاحيات المدير لحذف دفعات الشركاء' : 'Admin privileges required to delete partner payments');
+      return;
+    }
     try {
       const { error } = await supabase.from('partner_contributions').delete().eq('id', id);
       if (error) throw error;
@@ -221,6 +225,7 @@ export function Partners() {
       await loadData();
     } catch (err) {
       console.error('Error deleting:', err);
+      alert(isRTL ? 'حدث خطأ أثناء الحذف' : 'Error deleting payment');
     }
   };
 
@@ -273,6 +278,10 @@ export function Partners() {
   };
 
   const handleDeleteSettlement = async (id: string) => {
+    if (!isAdmin) {
+      alert(isRTL ? 'يتطلب صلاحيات المدير لحذف دفعات التسوية' : 'Admin privileges required to delete settlements');
+      return;
+    }
     try {
       const { error } = await supabase.from('partner_settlements').delete().eq('id', id);
       if (error) throw error;
@@ -280,6 +289,7 @@ export function Partners() {
       await loadData();
     } catch (err) {
       console.error('Error deleting settlement:', err);
+      alert(isRTL ? 'حدث خطأ أثناء الحذف' : 'Error deleting settlement');
     }
   };
 
@@ -671,7 +681,7 @@ export function Partners() {
                             </div>
                           </td>
                           <td className="py-2.5 px-4 w-10">
-                            {canEdit && (
+                            {canEdit && isAdmin && (
                               <button
                                 onClick={() => setDeleteConfirm(contrib.id)}
                                 className="p-1 text-red-500 hover:bg-red-50 rounded transition"
@@ -762,7 +772,7 @@ export function Partners() {
                             </div>
                           </td>
                           <td className="py-2.5 px-4 w-10">
-                            {canEdit && (
+                            {canEdit && isAdmin && (
                               <button
                                 onClick={() => setDeleteConfirm(contrib.id)}
                                 className="p-1 text-red-500 hover:bg-red-50 rounded transition"
@@ -850,7 +860,7 @@ export function Partners() {
                         )}
                       </td>
                       <td className="py-3 px-6">
-                        {canEdit && (
+                        {canEdit && isAdmin && (
                           <button
                             onClick={() => setDeleteSettlementConfirm(settlement.id)}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
