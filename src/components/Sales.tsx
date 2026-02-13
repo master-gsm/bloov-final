@@ -322,18 +322,33 @@ export function Sales() {
       return;
     }
 
-    const { data: items } = await supabase
+    const { data: items, error } = await supabase
       .from('sale_items')
-      .select('product_id, product_name, quantity, unit_price, discount, total')
+      .select('product_id, quantity, unit_price, discount, total, products(name, name_ar)')
       .eq('sale_id', sale.id);
+
+    if (error) {
+      console.error('Error fetching items:', error);
+      alert(isRTL ? 'حدث خطأ أثناء جلب عناصر الفاتورة' : 'Error fetching invoice items');
+      return;
+    }
 
     if (!items || items.length === 0) {
       alert(isRTL ? 'لا توجد عناصر في الفاتورة' : 'No items found in this invoice');
       return;
     }
 
+    const formattedItems = items.map(item => ({
+      product_id: item.product_id,
+      product_name: (item.products as any)?.name || (item.products as any)?.name_ar || 'Unknown Product',
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount: item.discount,
+      total: item.total
+    }));
+
     try {
-      await shareInvoiceViaWhatsApp(sale, items, phone);
+      await shareInvoiceViaWhatsApp(sale, formattedItems, phone);
     } catch (error) {
       console.error('Error sharing invoice:', error);
       alert(isRTL ? 'حدث خطأ أثناء مشاركة الفاتورة' : 'Error sharing invoice');
@@ -341,18 +356,33 @@ export function Sales() {
   };
 
   const downloadPDF = async (sale: Sale) => {
-    const { data: items } = await supabase
+    const { data: items, error } = await supabase
       .from('sale_items')
-      .select('product_id, product_name, quantity, unit_price, discount, total')
+      .select('product_id, quantity, unit_price, discount, total, products(name, name_ar)')
       .eq('sale_id', sale.id);
+
+    if (error) {
+      console.error('Error fetching items:', error);
+      alert(isRTL ? 'حدث خطأ أثناء جلب عناصر الفاتورة' : 'Error fetching invoice items');
+      return;
+    }
 
     if (!items || items.length === 0) {
       alert(isRTL ? 'لا توجد عناصر في الفاتورة' : 'No items found in this invoice');
       return;
     }
 
+    const formattedItems = items.map(item => ({
+      product_id: item.product_id,
+      product_name: (item.products as any)?.name || (item.products as any)?.name_ar || 'Unknown Product',
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount: item.discount,
+      total: item.total
+    }));
+
     try {
-      await downloadInvoicePDF(sale, items);
+      await downloadInvoicePDF(sale, formattedItems);
     } catch (error) {
       console.error('Error downloading invoice:', error);
       alert(isRTL ? 'حدث خطأ أثناء تنزيل الفاتورة' : 'Error downloading invoice');
