@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet } from 'lucide-react';
+import { uploadFile, getSignedUrl } from '../lib/fileUpload';
+import { Users, Plus, TrendingUp, ArrowRightLeft, DollarSign, Calendar, X, ShieldAlert, Trash2, FileSpreadsheet, Paperclip, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface Partner {
@@ -22,6 +23,7 @@ interface Contribution {
   description_ar: string | null;
   contribution_date: string;
   contribution_type?: string;
+  attachment_url?: string | null;
   created_at: string;
 }
 
@@ -33,6 +35,7 @@ interface Settlement {
   description: string;
   description_ar: string | null;
   settlement_date: string;
+  attachment_url?: string | null;
   created_at: string;
 }
 
@@ -61,6 +64,8 @@ export function Partners() {
   const [contribDate, setContribDate] = useState(new Date().toISOString().split('T')[0]);
   const [contributionType, setContributionType] = useState('operational');
   const [settlementDate, setSettlementDate] = useState(new Date().toISOString().split('T')[0]);
+  const [contributionFile, setContributionFile] = useState<File | null>(null);
+  const [settlementFile, setSettlementFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -136,6 +141,16 @@ export function Partners() {
     setSubmitting(true);
 
     try {
+      let attachmentUrl = null;
+      if (contributionFile) {
+        attachmentUrl = await uploadFile(contributionFile, 'partner_contributions');
+        if (!attachmentUrl) {
+          setError(isRTL ? 'فشل رفع الملف' : 'Failed to upload file');
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const { error: insertError } = await supabase.from('partner_contributions').insert({
         partner_id: selectedPartner,
         amount: parseFloat(amount),
@@ -143,6 +158,7 @@ export function Partners() {
         description_ar: descriptionAr || null,
         contribution_date: contribDate,
         contribution_type: contributionType,
+        attachment_url: attachmentUrl,
         created_by: user?.id,
       });
 
@@ -155,6 +171,7 @@ export function Partners() {
       setDescriptionAr('');
       setContribDate(new Date().toISOString().split('T')[0]);
       setContributionType('operational');
+      setContributionFile(null);
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Error adding contribution');
@@ -185,6 +202,16 @@ export function Partners() {
     setSubmitting(true);
 
     try {
+      let attachmentUrl = null;
+      if (settlementFile) {
+        attachmentUrl = await uploadFile(settlementFile, 'partner_settlements');
+        if (!attachmentUrl) {
+          setError(isRTL ? 'فشل رفع الملف' : 'Failed to upload file');
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const { error: insertError } = await supabase.from('partner_settlements').insert({
         from_partner_id: fromPartner,
         to_partner_id: toPartner,
@@ -192,6 +219,7 @@ export function Partners() {
         description: settlementDescriptionAr || 'دفعة تصفية',
         description_ar: settlementDescriptionAr || null,
         settlement_date: settlementDate,
+        attachment_url: attachmentUrl,
         created_by: user?.id,
       });
 
@@ -204,6 +232,7 @@ export function Partners() {
       setSettlementDescription('');
       setSettlementDescriptionAr('');
       setSettlementDate(new Date().toISOString().split('T')[0]);
+      setSettlementFile(null);
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Error adding settlement');
@@ -584,6 +613,20 @@ export function Partners() {
                           <td className="py-2.5 px-4 text-xs text-gray-700">{isRTL ? (contrib.description_ar || contrib.description) : contrib.description}</td>
                           <td className="py-2.5 px-4 text-xs font-bold text-gray-900 text-right">{formatCurrency(Number(contrib.amount))} {isRTL ? 'ر.س' : 'SAR'}</td>
                           <td className="py-2.5 px-4 w-10">
+                            {contrib.attachment_url && (
+                              <button
+                                onClick={async () => {
+                                  const url = await getSignedUrl(contrib.attachment_url!);
+                                  if (url) window.open(url, '_blank');
+                                }}
+                                className="p-1 text-blue-500 hover:bg-blue-50 rounded transition"
+                                title={isRTL ? 'تحميل الإيصال' : 'Download receipt'}
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 w-10">
                             <button
                               onClick={() => setDeleteConfirm(contrib.id)}
                               className="p-1 text-red-500 hover:bg-red-50 rounded transition"
@@ -650,6 +693,20 @@ export function Partners() {
                           <td className="py-2.5 px-4 text-xs text-gray-700">{isRTL ? (contrib.description_ar || contrib.description) : contrib.description}</td>
                           <td className="py-2.5 px-4 text-xs font-bold text-gray-900 text-right">{formatCurrency(Number(contrib.amount))} {isRTL ? 'ر.س' : 'SAR'}</td>
                           <td className="py-2.5 px-4 w-10">
+                            {contrib.attachment_url && (
+                              <button
+                                onClick={async () => {
+                                  const url = await getSignedUrl(contrib.attachment_url!);
+                                  if (url) window.open(url, '_blank');
+                                }}
+                                className="p-1 text-blue-500 hover:bg-blue-50 rounded transition"
+                                title={isRTL ? 'تحميل الإيصال' : 'Download receipt'}
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 w-10">
                             <button
                               onClick={() => setDeleteConfirm(contrib.id)}
                               className="p-1 text-red-500 hover:bg-red-50 rounded transition"
@@ -702,6 +759,7 @@ export function Partners() {
                   <th className="text-left py-3 px-6 font-semibold text-gray-600 text-sm">{isRTL ? 'المبلغ' : 'Amount'}</th>
                   <th className="text-left py-3 px-6 font-semibold text-gray-600 text-sm">{isRTL ? 'الوصف' : 'Description'}</th>
                   <th className="text-left py-3 px-6 font-semibold text-gray-600 text-sm w-16"></th>
+                  <th className="text-left py-3 px-6 font-semibold text-gray-600 text-sm w-16"></th>
                 </tr>
               </thead>
               <tbody>
@@ -722,6 +780,20 @@ export function Partners() {
                       </td>
                       <td className="py-3 px-6 text-sm text-gray-600">
                         {isRTL ? (settlement.description_ar || settlement.description) : settlement.description}
+                      </td>
+                      <td className="py-3 px-6">
+                        {settlement.attachment_url && (
+                          <button
+                            onClick={async () => {
+                              const url = await getSignedUrl(settlement.attachment_url!);
+                              if (url) window.open(url, '_blank');
+                            }}
+                            className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
+                            title={isRTL ? 'تحميل الإيصال' : 'Download receipt'}
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        )}
                       </td>
                       <td className="py-3 px-6">
                         <button
@@ -822,6 +894,24 @@ export function Partners() {
                   placeholder={isRTL ? 'رسوم تأسيس' : 'Setup fee'}
                   dir="rtl"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Paperclip className="w-4 h-4 inline mr-1" />
+                  {isRTL ? 'إرفاق إيصال' : 'Attach Receipt'}
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setContributionFile(e.target.files?.[0] || null)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                />
+                {contributionFile && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {isRTL ? 'الملف المحدد: ' : 'Selected: '}{contributionFile.name}
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -927,6 +1017,24 @@ export function Partners() {
                   placeholder={isRTL ? 'دفعة تصفية' : 'Settlement payment'}
                   dir="rtl"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Paperclip className="w-4 h-4 inline mr-1" />
+                  {isRTL ? 'إرفاق إيصال' : 'Attach Receipt'}
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setSettlementFile(e.target.files?.[0] || null)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                />
+                {settlementFile && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {isRTL ? 'الملف المحدد: ' : 'Selected: '}{settlementFile.name}
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3 pt-2">

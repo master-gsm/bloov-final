@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { ShoppingBag, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard } from 'lucide-react';
+import { uploadFile, getSignedUrl } from '../lib/fileUpload';
+import { ShoppingBag, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Paperclip, Download } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -41,6 +42,7 @@ interface Purchase {
   payment_status: string;
   payment_method: string | null;
   notes: string | null;
+  attachment_url: string | null;
   suppliers?: { name: string; name_ar: string | null } | null;
 }
 
@@ -64,6 +66,7 @@ export function Purchases() {
   const [purchaseNotes, setPurchaseNotes] = useState('');
   const [purchaseTax, setPurchaseTax] = useState(0);
   const [purchaseDiscount, setPurchaseDiscount] = useState(0);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -120,6 +123,7 @@ export function Purchases() {
     setPurchaseNotes('');
     setPurchaseTax(0);
     setPurchaseDiscount(0);
+    setAttachmentFile(null);
     setError('');
     setShowForm(true);
   };
@@ -134,6 +138,16 @@ export function Purchases() {
     setSubmitting(true);
 
     try {
+      let attachmentUrl = null;
+      if (attachmentFile) {
+        attachmentUrl = await uploadFile(attachmentFile, 'purchases');
+        if (!attachmentUrl) {
+          setError(isRTL ? 'فشل رفع الملف' : 'Failed to upload file');
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const purchaseNumber = `PO-${Date.now().toString(36).toUpperCase()}`;
 
       const { data: purchase, error: purchaseError } = await supabase
@@ -151,6 +165,7 @@ export function Purchases() {
           payment_status: 'paid',
           payment_method: paymentMethod,
           notes: purchaseNotes || null,
+          attachment_url: attachmentUrl,
           created_by: user?.id,
         })
         .select()
@@ -325,6 +340,24 @@ export function Purchases() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'ملاحظات' : 'Notes'}</label>
                 <textarea value={purchaseNotes} onChange={(e) => setPurchaseNotes(e.target.value)} rows={2} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm resize-none" />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Paperclip className="w-4 h-4 inline mr-1" />
+                  {isRTL ? 'إرفاق فاتورة/إيصال' : 'Attach Invoice/Receipt'}
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                />
+                {attachmentFile && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {isRTL ? 'الملف المحدد: ' : 'Selected: '}{attachmentFile.name}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border p-6 space-y-3">
@@ -480,6 +513,21 @@ export function Purchases() {
                 <span>{isRTL ? 'الإجمالي' : 'Total'}</span>
                 <span className="text-teal-600">{formatCurrency(viewingPurchase.total)} {isRTL ? 'ر.س' : 'SAR'}</span>
               </div>
+
+              {viewingPurchase.attachment_url && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <button
+                    onClick={async () => {
+                      const url = await getSignedUrl(viewingPurchase.attachment_url!);
+                      if (url) window.open(url, '_blank');
+                    }}
+                    className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    <Download className="w-4 h-4" />
+                    {isRTL ? 'تحميل الفاتورة/الإيصال' : 'Download Invoice/Receipt'}
+                  </button>
+                </div>
+              )}
 
               {viewingPurchase.status === 'confirmed' && (
                 <div className="flex gap-3 pt-2">
