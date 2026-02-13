@@ -71,28 +71,27 @@ export async function generateInvoicePDF(
   sale: Sale,
   items: SaleItem[]
 ): Promise<Blob> {
-  const pdf = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
-  });
+  try {
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
 
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 15;
-  let yPos = margin;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    let yPos = margin;
 
-  pdf.setFont('helvetica', 'normal');
+    pdf.setFillColor(139, 92, 246);
+    pdf.rect(0, 0, pageWidth, 35, 'F');
 
-  pdf.setFillColor(139, 92, 246);
-  pdf.rect(0, 0, pageWidth, 35, 'F');
-
-  pdf.setTextColor(255, 255, 255);
-  pdf.setFontSize(28);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text('BLOOV', margin, 15);
-  pdf.setFontSize(16);
-  pdf.text('بلوف', margin, 25);
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(28);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('BLOOV', margin, 15);
+    pdf.setFontSize(16);
+    pdf.text('BLOOV', margin, 25);
 
   pdf.setFontSize(10);
   pdf.setFont('helvetica', 'normal');
@@ -103,199 +102,194 @@ export async function generateInvoicePDF(
 
   yPos = 45;
 
-  pdf.setFontSize(18);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text('TAX INVOICE', margin, yPos);
-  pdf.text('فاتورة ضريبية', pageWidth - margin, yPos, { align: 'right' });
+    pdf.setFontSize(18);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('TAX INVOICE', margin, yPos);
 
-  yPos += 10;
+    yPos += 10;
 
-  pdf.setDrawColor(139, 92, 246);
-  pdf.setLineWidth(0.5);
-  pdf.line(margin, yPos, pageWidth - margin, yPos);
+    pdf.setDrawColor(139, 92, 246);
+    pdf.setLineWidth(0.5);
+    pdf.line(margin, yPos, pageWidth - margin, yPos);
 
-  yPos += 8;
+    yPos += 8;
 
-  pdf.setFontSize(10);
-  pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
 
-  pdf.text('Company Information:', margin, yPos);
-  yPos += 5;
-  pdf.setFontSize(9);
-  pdf.text(`${COMPANY_INFO.nameAr} | ${COMPANY_INFO.name}`, margin + 5, yPos);
-  yPos += 4;
-  pdf.text(`VAT: ${COMPANY_INFO.vatNumber}`, margin + 5, yPos);
-  yPos += 4;
-  pdf.text(`${COMPANY_INFO.addressAr}`, margin + 5, yPos);
-  yPos += 4;
-  pdf.text(`${COMPANY_INFO.phone} | ${COMPANY_INFO.email}`, margin + 5, yPos);
-
-  yPos += 8;
-
-  pdf.setFontSize(10);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text('Invoice Details:', margin, yPos);
-  yPos += 5;
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(9);
-  pdf.text(`Invoice No: ${sale.sale_number}`, margin + 5, yPos);
-  pdf.text(`رقم الفاتورة: ${sale.sale_number}`, pageWidth - margin, yPos, { align: 'right' });
-  yPos += 4;
-  const invoiceDate = new Date(sale.sale_date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-  pdf.text(`Date: ${invoiceDate}`, margin + 5, yPos);
-  yPos += 4;
-  if (sale.customer_name) {
-    pdf.text(`Customer: ${sale.customer_name}`, margin + 5, yPos);
+    pdf.text('Company Information:', margin, yPos);
+    yPos += 5;
+    pdf.setFontSize(9);
+    pdf.text(`${COMPANY_INFO.name}`, margin + 5, yPos);
     yPos += 4;
-  }
-  if (sale.customer_phone) {
-    pdf.text(`Phone: ${sale.customer_phone}`, margin + 5, yPos);
+    pdf.text(`VAT: ${COMPANY_INFO.vatNumber}`, margin + 5, yPos);
     yPos += 4;
-  }
+    pdf.text(`${COMPANY_INFO.address}`, margin + 5, yPos);
+    yPos += 4;
+    pdf.text(`${COMPANY_INFO.phone} | ${COMPANY_INFO.email}`, margin + 5, yPos);
 
-  yPos += 5;
+    yPos += 8;
 
-  pdf.setDrawColor(200, 200, 200);
-  pdf.setLineWidth(0.3);
-  pdf.line(margin, yPos, pageWidth - margin, yPos);
-
-  yPos += 8;
-
-  pdf.setFillColor(245, 245, 247);
-  pdf.rect(margin, yPos - 5, pageWidth - 2 * margin, 8, 'F');
-
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(9);
-  pdf.text('Item', margin + 2, yPos);
-  pdf.text('المنتج', margin + 50, yPos);
-  pdf.text('Qty', pageWidth - 80, yPos, { align: 'right' });
-  pdf.text('Price', pageWidth - 60, yPos, { align: 'right' });
-  pdf.text('Disc.', pageWidth - 40, yPos, { align: 'right' });
-  pdf.text('Total', pageWidth - margin - 2, yPos, { align: 'right' });
-
-  yPos += 8;
-
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(9);
-
-  items.forEach((item, index) => {
-    if (yPos > pageHeight - 60) {
-      pdf.addPage();
-      yPos = margin;
-    }
-
-    const itemName = item.product_name.length > 25
-      ? item.product_name.substring(0, 22) + '...'
-      : item.product_name;
-
-    pdf.text(itemName, margin + 2, yPos);
-    pdf.text(item.quantity.toString(), pageWidth - 80, yPos, { align: 'right' });
-    pdf.text(item.unit_price.toFixed(2), pageWidth - 60, yPos, { align: 'right' });
-    pdf.text(item.discount.toFixed(2), pageWidth - 40, yPos, { align: 'right' });
-    pdf.text(item.total.toFixed(2), pageWidth - margin - 2, yPos, { align: 'right' });
-
-    yPos += 6;
-
-    if (index < items.length - 1) {
-      pdf.setDrawColor(240, 240, 240);
-      pdf.setLineWidth(0.1);
-      pdf.line(margin, yPos, pageWidth - margin, yPos);
-      yPos += 2;
-    }
-  });
-
-  yPos += 5;
-
-  pdf.setDrawColor(139, 92, 246);
-  pdf.setLineWidth(0.5);
-  pdf.line(margin, yPos, pageWidth - margin, yPos);
-
-  yPos += 8;
-
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(10);
-
-  const summaryX = pageWidth - 70;
-  const labelX = summaryX - 35;
-
-  pdf.text('Subtotal:', labelX, yPos);
-  pdf.text('المجموع الفرعي:', labelX - 25, yPos, { align: 'right' });
-  pdf.text(`${sale.subtotal.toFixed(2)} SAR`, summaryX, yPos, { align: 'right' });
-  yPos += 6;
-
-  if (sale.discount > 0) {
-    pdf.text('Discount:', labelX, yPos);
-    pdf.text('الخصم:', labelX - 25, yPos, { align: 'right' });
-    pdf.text(`${sale.discount.toFixed(2)} SAR`, summaryX, yPos, { align: 'right' });
-    yPos += 6;
-  }
-
-  pdf.text('VAT (15%):', labelX, yPos);
-  pdf.text('ضريبة القيمة المضافة:', labelX - 25, yPos, { align: 'right' });
-  pdf.text(`${sale.tax.toFixed(2)} SAR`, summaryX, yPos, { align: 'right' });
-  yPos += 8;
-
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(12);
-  pdf.setFillColor(139, 92, 246);
-  pdf.rect(labelX - 30, yPos - 6, 100, 10, 'F');
-  pdf.setTextColor(255, 255, 255);
-  pdf.text('Total:', labelX, yPos);
-  pdf.text('الإجمالي:', labelX - 25, yPos, { align: 'right' });
-  pdf.text(`${sale.total.toFixed(2)} SAR`, summaryX, yPos, { align: 'right' });
-
-  pdf.setTextColor(0, 0, 0);
-
-  yPos += 15;
-
-  if (sale.payment_method) {
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Invoice Details:', margin, yPos);
+    yPos += 5;
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    const paymentMethodMap: Record<string, string> = {
-      cash: 'Cash / نقداً',
-      card: 'Card / بطاقة',
-      bank_transfer: 'Bank Transfer / تحويل بنكي'
-    };
-    pdf.text(`Payment Method: ${paymentMethodMap[sale.payment_method] || sale.payment_method}`, margin, yPos);
-    yPos += 6;
-  }
-
-  if (sale.notes) {
-    pdf.text(`Notes: ${sale.notes}`, margin, yPos);
-    yPos += 6;
-  }
-
-  const qrData = generateZATCAQRCode(sale, COMPANY_INFO);
-  const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
-    width: 200,
-    margin: 1,
-    color: {
-      dark: '#000000',
-      light: '#FFFFFF'
+    pdf.text(`Invoice No: ${sale.sale_number}`, margin + 5, yPos);
+    yPos += 4;
+    const invoiceDate = new Date(sale.sale_date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    pdf.text(`Date: ${invoiceDate}`, margin + 5, yPos);
+    yPos += 4;
+    if (sale.customer_name) {
+      pdf.text(`Customer: ${sale.customer_name}`, margin + 5, yPos);
+      yPos += 4;
     }
-  });
+    if (sale.customer_phone) {
+      pdf.text(`Phone: ${sale.customer_phone}`, margin + 5, yPos);
+      yPos += 4;
+    }
 
-  const qrSize = 35;
-  const qrX = pageWidth - margin - qrSize;
-  const qrY = pageHeight - margin - qrSize - 15;
+    yPos += 5;
 
-  pdf.addImage(qrCodeDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+    pdf.setDrawColor(200, 200, 200);
+    pdf.setLineWidth(0.3);
+    pdf.line(margin, yPos, pageWidth - margin, yPos);
 
-  pdf.setFontSize(8);
-  pdf.setFont('helvetica', 'normal');
-  pdf.text('Scan for Invoice Verification', qrX + qrSize / 2, qrY + qrSize + 4, { align: 'center' });
-  pdf.text('امسح للتحقق من الفاتورة', qrX + qrSize / 2, qrY + qrSize + 8, { align: 'center' });
+    yPos += 8;
 
-  pdf.setFontSize(8);
-  pdf.setTextColor(100, 100, 100);
-  pdf.text('Thank you for your business!', pageWidth / 2, pageHeight - 10, { align: 'center' });
-  pdf.text('شكراً لتعاملكم معنا', pageWidth / 2, pageHeight - 6, { align: 'center' });
+    pdf.setFillColor(245, 245, 247);
+    pdf.rect(margin, yPos - 5, pageWidth - 2 * margin, 8, 'F');
 
-  return pdf.output('blob');
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(9);
+    pdf.text('Item', margin + 2, yPos);
+    pdf.text('Qty', pageWidth - 80, yPos, { align: 'right' });
+    pdf.text('Price', pageWidth - 60, yPos, { align: 'right' });
+    pdf.text('Disc.', pageWidth - 40, yPos, { align: 'right' });
+    pdf.text('Total', pageWidth - margin - 2, yPos, { align: 'right' });
+
+    yPos += 8;
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+
+    items.forEach((item, index) => {
+      if (yPos > pageHeight - 60) {
+        pdf.addPage();
+        yPos = margin;
+      }
+
+      const itemName = item.product_name.length > 25
+        ? item.product_name.substring(0, 22) + '...'
+        : item.product_name;
+
+      pdf.text(itemName, margin + 2, yPos);
+      pdf.text(item.quantity.toString(), pageWidth - 80, yPos, { align: 'right' });
+      pdf.text(item.unit_price.toFixed(2), pageWidth - 60, yPos, { align: 'right' });
+      pdf.text(item.discount.toFixed(2), pageWidth - 40, yPos, { align: 'right' });
+      pdf.text(item.total.toFixed(2), pageWidth - margin - 2, yPos, { align: 'right' });
+
+      yPos += 6;
+
+      if (index < items.length - 1) {
+        pdf.setDrawColor(240, 240, 240);
+        pdf.setLineWidth(0.1);
+        pdf.line(margin, yPos, pageWidth - margin, yPos);
+        yPos += 2;
+      }
+    });
+
+    yPos += 5;
+
+    pdf.setDrawColor(139, 92, 246);
+    pdf.setLineWidth(0.5);
+    pdf.line(margin, yPos, pageWidth - margin, yPos);
+
+    yPos += 8;
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+
+    const summaryX = pageWidth - 70;
+    const labelX = summaryX - 35;
+
+    pdf.text('Subtotal:', labelX, yPos);
+    pdf.text(`${sale.subtotal.toFixed(2)} SAR`, summaryX, yPos, { align: 'right' });
+    yPos += 6;
+
+    if (sale.discount > 0) {
+      pdf.text('Discount:', labelX, yPos);
+      pdf.text(`${sale.discount.toFixed(2)} SAR`, summaryX, yPos, { align: 'right' });
+      yPos += 6;
+    }
+
+    pdf.text('VAT (15%):', labelX, yPos);
+    pdf.text(`${sale.tax.toFixed(2)} SAR`, summaryX, yPos, { align: 'right' });
+    yPos += 8;
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    pdf.setFillColor(139, 92, 246);
+    pdf.rect(labelX - 30, yPos - 6, 100, 10, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.text('Total:', labelX, yPos);
+    pdf.text(`${sale.total.toFixed(2)} SAR`, summaryX, yPos, { align: 'right' });
+
+    pdf.setTextColor(0, 0, 0);
+
+    yPos += 15;
+
+    if (sale.payment_method) {
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      const paymentMethodMap: Record<string, string> = {
+        cash: 'Cash',
+        card: 'Card',
+        bank_transfer: 'Bank Transfer'
+      };
+      pdf.text(`Payment Method: ${paymentMethodMap[sale.payment_method] || sale.payment_method}`, margin, yPos);
+      yPos += 6;
+    }
+
+    if (sale.notes) {
+      pdf.text(`Notes: ${sale.notes}`, margin, yPos);
+      yPos += 6;
+    }
+
+    const qrData = generateZATCAQRCode(sale, COMPANY_INFO);
+    const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+      width: 200,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+
+    const qrSize = 35;
+    const qrX = pageWidth - margin - qrSize;
+    const qrY = pageHeight - margin - qrSize - 15;
+
+    pdf.addImage(qrCodeDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('Scan for Invoice Verification', qrX + qrSize / 2, qrY + qrSize + 4, { align: 'center' });
+
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text('Thank you for your business!', pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+    return pdf.output('blob');
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    throw new Error('Failed to generate PDF invoice');
+  }
 }
 
 export async function shareInvoiceViaWhatsApp(
