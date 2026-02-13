@@ -321,11 +321,15 @@ export function Sales() {
       return;
     }
 
-    const custName = sale.customer_name || (sale.customers ? (isRTL ? sale.customers.name_ar || sale.customers.name : sale.customers.name) : '');
+    const invoiceLink = `${window.location.origin}/?invoice=${sale.id}`;
 
-    const msg = isRTL
-      ? `مرحباً ${custName} 👋\n\nشكراً لتسوقك في *BLOOV* 🌸\n\n📋 *رقم الفاتورة:* ${sale.sale_number}\n💰 *المجموع:* ${formatCurrency(sale.total)} ر.س\n\n_شامل ضريبة القيمة المضافة 15%_\n\nنتطلع لخدمتك مجدداً! 💚`
-      : `Hello ${custName} 👋\n\nThank you for shopping at *BLOOV* 🌸\n\n📋 *Invoice:* ${sale.sale_number}\n💰 *Total:* ${formatCurrency(sale.total)} SAR\n\n_Including 15% VAT_\n\nWe look forward to serving you again! 💚`;
+    const msg = `مرحباً 👋
+شكراً لتسوقك في BLOOV 🌸
+📄 رقم الفاتورة: ${sale.sale_number}
+�� المجموع: ${formatCurrency(sale.total)} ر.س
+شامل ضريبة القيمة المضافة 15%
+نتطلع لخدمتك مجدداً!
+يمكنك عرض الفاتورة الرسمية من هنا: ${invoiceLink}`;
 
     let cleanPhone = phone.replace(/[^0-9]/g, '');
 
