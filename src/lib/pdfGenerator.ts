@@ -287,9 +287,14 @@ export async function generateInvoicePDF(
 
 async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob> {
   try {
+    console.log('[generateInvoiceImage] Starting...');
+
+    console.log('[generateInvoiceImage] Generating QR code...');
     const qrCodeData = generateZATCAQRCode(sale, COMPANY_INFO);
     const qrCodeDataUrl = await QRCode.toDataURL(qrCodeData);
+    console.log('[generateInvoiceImage] QR code generated');
 
+    console.log('[generateInvoiceImage] Creating canvas...');
     const canvas = document.createElement('canvas');
     canvas.width = 800;
 
@@ -301,21 +306,28 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
     const headerHeight = 250;
     const footerHeight = 200;
     canvas.height = headerHeight + (items.length * rowHeight) + footerHeight;
+    console.log('[generateInvoiceImage] Canvas dimensions:', canvas.width, 'x', canvas.height);
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Cannot get canvas context');
+    if (!ctx) {
+      console.error('[generateInvoiceImage] Failed to get canvas context');
+      throw new Error('Cannot get canvas context');
+    }
+    console.log('[generateInvoiceImage] Canvas context obtained');
 
+    console.log('[generateInvoiceImage] Drawing background...');
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    console.log('[generateInvoiceImage] Drawing header...');
     ctx.fillStyle = '#2563eb';
     ctx.font = 'bold 40px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('BLOOV 🌸', 400, 60);
+    ctx.fillText('BLOOV', 400, 60);
 
     ctx.fillStyle = '#666666';
     ctx.font = '18px Arial';
-    ctx.fillText('نظام المحاسبة المتكامل', 400, 95);
+    ctx.fillText('Accounting System', 400, 95);
 
     ctx.strokeStyle = '#cccccc';
     ctx.lineWidth = 2;
@@ -324,27 +336,29 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
     ctx.lineTo(750, 120);
     ctx.stroke();
 
+    console.log('[generateInvoiceImage] Drawing invoice info...');
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'right';
-    ctx.fillText('فاتورة ضريبية', 750, 155);
+    ctx.fillText('Tax Invoice', 750, 155);
 
     ctx.font = '16px Arial';
-    ctx.fillText(`رقم الفاتورة: ${sale.sale_number}`, 750, 185);
-    ctx.fillText(`التاريخ: ${new Date(sale.sale_date).toLocaleDateString('ar-SA')}`, 750, 210);
+    ctx.fillText(`Invoice: ${sale.sale_number}`, 750, 185);
+    ctx.fillText(`Date: ${new Date(sale.sale_date).toLocaleDateString()}`, 750, 210);
 
     if (sale.customer_name) {
-      ctx.fillText(`العميل: ${sale.customer_name}`, 750, 235);
+      ctx.fillText(`Customer: ${sale.customer_name}`, 750, 235);
     }
 
     ctx.textAlign = 'left';
     ctx.font = '14px Arial';
     ctx.fillText(COMPANY_INFO.name, 50, 155);
     ctx.font = '12px Arial';
-    ctx.fillText(`الرقم الضريبي: ${COMPANY_INFO.vatNumber}`, 50, 175);
+    ctx.fillText(`VAT: ${COMPANY_INFO.vatNumber}`, 50, 175);
     ctx.fillText(COMPANY_INFO.address, 50, 195);
     ctx.fillText(COMPANY_INFO.phone, 50, 215);
 
+    console.log('[generateInvoiceImage] Drawing table header...');
     let yPos = headerHeight;
 
     ctx.fillStyle = '#2563eb';
@@ -353,16 +367,17 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'right';
-    ctx.fillText('المنتج', 720, yPos + 22);
+    ctx.fillText('Product', 720, yPos + 22);
     ctx.textAlign = 'center';
-    ctx.fillText('الكمية', 520, yPos + 22);
-    ctx.fillText('السعر', 390, yPos + 22);
-    ctx.fillText('الخصم', 260, yPos + 22);
-    ctx.fillText('المجموع', 130, yPos + 22);
+    ctx.fillText('Qty', 520, yPos + 22);
+    ctx.fillText('Price', 390, yPos + 22);
+    ctx.fillText('Disc', 260, yPos + 22);
+    ctx.fillText('Total', 130, yPos + 22);
 
     yPos += 35;
     ctx.font = '15px Arial';
 
+    console.log('[generateInvoiceImage] Drawing items...');
     items.forEach((item, index) => {
       if (index % 2 === 0) {
         ctx.fillStyle = '#f9fafb';
@@ -374,23 +389,33 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
       ctx.fillText(item.product_name, 720, yPos + 25);
       ctx.textAlign = 'center';
       ctx.fillText(item.quantity.toString(), 520, yPos + 25);
-      ctx.fillText(`${item.unit_price.toFixed(2)} ر.س`, 390, yPos + 25);
-      ctx.fillText(`${item.discount.toFixed(2)} ر.س`, 260, yPos + 25);
-      ctx.fillText(`${item.total.toFixed(2)} ر.س`, 130, yPos + 25);
+      ctx.fillText(`${item.unit_price.toFixed(2)} SAR`, 390, yPos + 25);
+      ctx.fillText(`${item.discount.toFixed(2)} SAR`, 260, yPos + 25);
+      ctx.fillText(`${item.total.toFixed(2)} SAR`, 130, yPos + 25);
 
       yPos += rowHeight;
     });
 
     yPos += 30;
 
+    console.log('[generateInvoiceImage] Loading QR code image...');
     const qrImage = new Image();
     await new Promise((resolve, reject) => {
-      qrImage.onload = resolve;
-      qrImage.onerror = reject;
+      qrImage.onload = () => {
+        console.log('[generateInvoiceImage] QR image loaded');
+        resolve(null);
+      };
+      qrImage.onerror = (err) => {
+        console.error('[generateInvoiceImage] QR image load failed:', err);
+        reject(err);
+      };
       qrImage.src = qrCodeDataUrl;
     });
+
+    console.log('[generateInvoiceImage] Drawing QR code...');
     ctx.drawImage(qrImage, 60, yPos, 120, 120);
 
+    console.log('[generateInvoiceImage] Drawing totals...');
     const summaryX = 450;
     ctx.strokeStyle = '#cccccc';
     ctx.lineWidth = 1;
@@ -403,12 +428,12 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
     ctx.fillStyle = '#000000';
     ctx.font = '16px Arial';
     ctx.textAlign = 'right';
-    ctx.fillText('المجموع الفرعي:', summaryX + 60, yPos);
-    ctx.fillText(`${subtotal.toFixed(2)} ر.س`, 730, yPos);
+    ctx.fillText('Subtotal:', summaryX + 60, yPos);
+    ctx.fillText(`${subtotal.toFixed(2)} SAR`, 730, yPos);
 
     yPos += 25;
-    ctx.fillText('ضريبة القيمة المضافة (15%):', summaryX + 60, yPos);
-    ctx.fillText(`${tax.toFixed(2)} ر.س`, 730, yPos);
+    ctx.fillText('VAT (15%):', summaryX + 60, yPos);
+    ctx.fillText(`${tax.toFixed(2)} SAR`, 730, yPos);
 
     yPos += 35;
     ctx.fillStyle = '#2563eb';
@@ -416,32 +441,40 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 18px Arial';
-    ctx.fillText('المجموع الإجمالي:', summaryX + 60, yPos);
-    ctx.fillText(`${total.toFixed(2)} ر.س`, 730, yPos);
+    ctx.fillText('Total:', summaryX + 60, yPos);
+    ctx.fillText(`${total.toFixed(2)} SAR`, 730, yPos);
 
     yPos += 60;
     ctx.fillStyle = '#2563eb';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('شكراً لتسوقك معنا! 🌸', 400, yPos);
+    ctx.fillText('Thank you!', 400, yPos);
 
-    yPos += 30;
-    ctx.fillStyle = '#666666';
-    ctx.font = '16px Arial';
-    ctx.fillText('نتطلع لخدمتك مجدداً', 400, yPos);
+    console.log('[generateInvoiceImage] Converting canvas to blob...');
 
-    return new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('Failed to convert canvas to blob'));
-        }
-      }, 'image/png', 0.95);
-    });
+    try {
+      const dataUrl = canvas.toDataURL('image/png', 0.95);
+      console.log('[generateInvoiceImage] Data URL created, length:', dataUrl.length);
+
+      const base64Data = dataUrl.split(',')[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const blob = new Blob([bytes], { type: 'image/png' });
+      console.log('[generateInvoiceImage] Blob created successfully, size:', blob.size);
+
+      return blob;
+    } catch (err) {
+      console.error('[generateInvoiceImage] Canvas conversion error:', err);
+      throw err;
+    }
   } catch (error) {
-    console.error('Error generating invoice image:', error);
-    throw new Error('فشل إنشاء صورة الفاتورة');
+    console.error('[generateInvoiceImage] Error:', error);
+    throw error;
   }
 }
 
