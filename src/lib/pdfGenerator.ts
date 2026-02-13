@@ -493,83 +493,6 @@ async function generateInvoiceImage(sale: Sale, items: SaleItem[]): Promise<Blob
   }
 }
 
-async function uploadImageToStorage(
-  imageBlob: Blob,
-  fileName: string,
-  saleId: string
-): Promise<string | null> {
-  try {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) {
-      console.error('No authenticated user');
-      return null;
-    }
-
-    const filePath = `${authData.user.id}/${saleId}/${fileName}`;
-    console.log('Uploading image to:', filePath);
-
-    const { data, error } = await supabase.storage
-      .from('invoices')
-      .upload(filePath, imageBlob, {
-        contentType: 'image/png',
-        upsert: true
-      });
-
-    if (error) {
-      console.error('Upload error:', error);
-      return null;
-    }
-
-    const { data: urlData } = supabase.storage
-      .from('invoices')
-      .getPublicUrl(filePath);
-
-    console.log('Upload successful, public URL:', urlData.publicUrl);
-    return urlData.publicUrl;
-  } catch (error) {
-    console.error('Error uploading to storage:', error);
-    return null;
-  }
-}
-
-async function uploadPdfToStorage(
-  pdfBlob: Blob,
-  fileName: string,
-  saleId: string
-): Promise<string | null> {
-  try {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) {
-      console.error('No authenticated user');
-      return null;
-    }
-
-    const filePath = `${authData.user.id}/${saleId}/${fileName}`;
-    console.log('Uploading PDF to:', filePath);
-
-    const { data, error } = await supabase.storage
-      .from('invoices')
-      .upload(filePath, pdfBlob, {
-        contentType: 'application/pdf',
-        upsert: true
-      });
-
-    if (error) {
-      console.error('Upload error:', error);
-      return null;
-    }
-
-    const { data: urlData } = supabase.storage
-      .from('invoices')
-      .getPublicUrl(filePath);
-
-    console.log('Upload successful, public URL:', urlData.publicUrl);
-    return urlData.publicUrl;
-  } catch (error) {
-    console.error('Error uploading to storage:', error);
-    return null;
-  }
-}
 
 export async function shareInvoiceViaWhatsApp(
   sale: Sale,
@@ -582,11 +505,11 @@ export async function shareInvoiceViaWhatsApp(
     console.log('[shareInvoiceViaWhatsApp] Items count:', items.length);
     console.log('[shareInvoiceViaWhatsApp] Customer phone:', customerPhone);
 
-    console.log('[shareInvoiceViaWhatsApp] Generating PDF invoice...');
-    const pdfBlob = await generateInvoicePDF(sale, items);
-    console.log('[shareInvoiceViaWhatsApp] PDF generated successfully, size:', pdfBlob.size);
-
-    const fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
+    const cleanMessageText = `مرحباً
+شكراً لتسوقك في BLOOV
+رقم الفاتورة: ${sale.sale_number}
+المجموع: ${sale.total.toFixed(2)} ر.س
+نتطلع لخدمتك مجدداً`;
 
     let cleanPhone = customerPhone.replace(/[^0-9]/g, '');
     if (cleanPhone.startsWith('00')) {
@@ -597,79 +520,79 @@ export async function shareInvoiceViaWhatsApp(
       cleanPhone = '966' + cleanPhone;
     }
 
-    const { data: settings } = await supabase
-      .from('settings')
-      .select('business_whatsapp')
-      .eq('id', 1)
-      .maybeSingle();
-
-    const businessWhatsApp = settings?.business_whatsapp || '966XXXXXXXXX';
-    let cleanBusinessPhone = businessWhatsApp.replace(/[^0-9]/g, '');
-    if (cleanBusinessPhone.startsWith('00')) {
-      cleanBusinessPhone = cleanBusinessPhone.slice(2);
-    } else if (cleanBusinessPhone.startsWith('0')) {
-      cleanBusinessPhone = '966' + cleanBusinessPhone.slice(1);
-    } else if (!cleanBusinessPhone.startsWith('966')) {
-      cleanBusinessPhone = '966' + cleanBusinessPhone;
+    if (!navigator.share || !navigator.canShare) {
+      console.warn('Share API not available, opening WhatsApp directly');
+      const message = encodeURIComponent(cleanMessageText);
+      const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
+      window.open(whatsappUrl, '_blank');
+      return;
     }
 
-    let shareSuccessful = false;
+    let fileToShare: File | null = null;
+    let fileName = '';
 
-    if (navigator.share && navigator.canShare) {
-      try {
-        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-        console.log('PDF file created:', file.name, file.size, file.type);
+    try {
+      console.log('[shareInvoiceViaWhatsApp] Attempting to generate PDF...');
+      const pdfBlob = await generateInvoicePDF(sale, items);
 
-        const shareData: ShareData = {
-          files: [file],
-          text: `مرحباً\nشكراً لتسوقك في BLOOV\n\nرقم الفاتورة: ${sale.sale_number}\nالمجموع: ${sale.total.toFixed(2)} ر.س\n\nنتطلع لخدمتك مجدداً`
-        };
-
-        if (navigator.canShare(shareData)) {
-          console.log('Share API available, opening share dialog...');
-          await navigator.share(shareData);
-          shareSuccessful = true;
-          console.log('Share successful!');
-          return;
-        }
-      } catch (error: any) {
-        console.error('Share API error:', error);
-        if (error.name === 'AbortError') {
-          console.log('User cancelled share');
-          return;
-        }
-      }
-    }
-
-    if (!shareSuccessful) {
-      console.log('Uploading invoice PDF to cloud storage...');
-      const publicUrl = await uploadPdfToStorage(pdfBlob, fileName, sale.id);
-
-      if (publicUrl) {
-        const messageText = `مرحباً
-شكراً لتسوقك في BLOOV
-
-رقم الفاتورة: ${sale.sale_number}
-المجموع: ${sale.total.toFixed(2)} ر.س
-شامل ضريبة القيمة المضافة 15%
-
-رابط الفاتورة:
-${publicUrl}
-
-نتطلع لخدمتك مجدداً
-للتواصل: https://wa.me/${cleanBusinessPhone}`;
-
-        const message = encodeURIComponent(messageText);
-        const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
-        window.open(whatsappUrl, '_blank');
-        console.log('WhatsApp opened with invoice PDF link');
+      if (pdfBlob && pdfBlob.size > 0) {
+        console.log('[shareInvoiceViaWhatsApp] PDF generated successfully, size:', pdfBlob.size);
+        fileName = `BLOOV-Invoice-${sale.sale_number}.pdf`;
+        fileToShare = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        console.log('[shareInvoiceViaWhatsApp] PDF file created:', fileToShare.name, fileToShare.size);
       } else {
-        console.error('Failed to upload invoice PDF');
-        throw new Error('فشل رفع ملف الفاتورة. تحقق من الاتصال بالإنترنت.');
+        throw new Error('PDF blob is empty or invalid');
+      }
+    } catch (pdfError) {
+      console.warn('[shareInvoiceViaWhatsApp] PDF generation failed, falling back to image:', pdfError);
+
+      try {
+        console.log('[shareInvoiceViaWhatsApp] Generating high-quality image...');
+        const imageBlob = await generateInvoiceImage(sale, items);
+
+        if (imageBlob && imageBlob.size > 0) {
+          console.log('[shareInvoiceViaWhatsApp] Image generated successfully, size:', imageBlob.size);
+          fileName = `BLOOV-Invoice-${sale.sale_number}.png`;
+          fileToShare = new File([imageBlob], fileName, { type: 'image/png' });
+          console.log('[shareInvoiceViaWhatsApp] Image file created:', fileToShare.name, fileToShare.size);
+        } else {
+          throw new Error('Image blob is empty or invalid');
+        }
+      } catch (imageError) {
+        console.error('[shareInvoiceViaWhatsApp] Image generation also failed:', imageError);
+        throw new Error('فشل توليد الفاتورة. حاول مرة أخرى.');
       }
     }
-  } catch (error) {
-    console.error('Error in shareInvoiceViaWhatsApp:', error);
+
+    if (!fileToShare) {
+      throw new Error('فشل إنشاء ملف الفاتورة');
+    }
+
+    const shareData: ShareData = {
+      files: [fileToShare],
+      text: cleanMessageText
+    };
+
+    if (!navigator.canShare(shareData)) {
+      console.warn('[shareInvoiceViaWhatsApp] Cannot share file, opening WhatsApp with text only');
+      const message = encodeURIComponent(cleanMessageText);
+      const whatsappUrl = `https://wa.me/${cleanPhone}?text=${message}`;
+      window.open(whatsappUrl, '_blank');
+      return;
+    }
+
+    console.log('[shareInvoiceViaWhatsApp] Opening share sheet with file...');
+    await navigator.share(shareData);
+    console.log('[shareInvoiceViaWhatsApp] Share completed successfully!');
+
+  } catch (error: any) {
+    console.error('[shareInvoiceViaWhatsApp] Error:', error);
+
+    if (error.name === 'AbortError') {
+      console.log('[shareInvoiceViaWhatsApp] User cancelled share');
+      return;
+    }
+
     throw error;
   }
 }
