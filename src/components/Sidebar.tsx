@@ -15,6 +15,7 @@ import {
   Wallet,
   Receipt,
   Store,
+  Brain,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -35,6 +36,7 @@ const MENU_ACCESS: Record<string, string[]> = {
   salla: ['admin', 'accountant'],
   cashregister: ['admin', 'accountant', 'viewer'],
   reports: ['admin', 'accountant', 'viewer'],
+  aianalysis: ['admin', 'accountant', 'viewer'],
   users: ['admin'],
   settings: ['admin'],
 };
@@ -56,6 +58,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'salla', icon: Store, label: isRTL ? 'سلة' : 'Salla' },
     { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
     { id: 'reports', icon: FileText, label: t('nav.reports') },
+    { id: 'aianalysis', icon: Brain, label: isRTL ? 'التحليل الذكي' : 'AI Analysis' },
     { id: 'users', icon: UserCog, label: t('nav.users') },
     { id: 'settings', icon: Settings, label: t('nav.settings') },
   ];

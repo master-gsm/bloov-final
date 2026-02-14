@@ -22,6 +22,7 @@ import { Reports } from './components/Reports';
 import { Settings } from './components/Settings';
 import { CashRegister } from './components/CashRegister';
 import { SallaOrders } from './components/SallaOrders';
+import { AIAnalysis } from './components/AIAnalysis';
 import { supabase } from './lib/supabase';
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
@@ -37,6 +38,7 @@ const SECTION_PERMISSIONS: Record<string, string[]> = {
   salla: ['admin', 'accountant'],
   cashregister: ['admin', 'accountant', 'viewer'],
   reports: ['admin', 'accountant', 'viewer'],
+  aianalysis: ['admin', 'accountant', 'viewer'],
   users: ['admin'],
   settings: ['admin'],
 };
@@ -149,6 +151,7 @@ function AppContent() {
       case 'salla': return <SallaOrders />;
       case 'cashregister': return <CashRegister />;
       case 'reports': return <Reports />;
+      case 'aianalysis': return <AIAnalysis />;
       case 'users': return <UserManagement />;
       case 'settings': return <Settings />;
       default: return <Dashboard />;

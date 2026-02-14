@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import {
   Settings as SettingsIcon, Globe, Building2, Shield, Save, Receipt,
   Truck, Heart, Bell, Package, CreditCard, FileText, QrCode, CheckCircle, Loader2,
-  Database, Download, Upload, HardDrive, Clock, Wifi, WifiOff, RefreshCw, FolderOpen, AlertCircle, MessageSquare
+  Database, Download, Upload, HardDrive, Clock, Wifi, WifiOff, RefreshCw, FolderOpen, AlertCircle, MessageSquare, Brain, Sparkles
 } from 'lucide-react';
 import { createBackup, downloadBackupAsJSON, downloadBackupAsExcel, restoreFromBackup, getLastBackupTime } from '../lib/backup';
 import { useAutoBackup } from '../hooks/useAutoBackup';
@@ -14,7 +14,7 @@ import { diskBackupManager } from '../lib/diskBackup';
 
 type SettingsMap = Record<string, string>;
 
-const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'backup', 'language'] as const;
+const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'ai', 'backup', 'language'] as const;
 type Tab = typeof TABS[number];
 
 export function Settings() {
@@ -53,7 +53,7 @@ export function Settings() {
       const { data: keyValueSettings, error: kvError } = await supabase.from('settings').select('key, value');
       const { data: globalSettings, error: gsError } = await supabase
         .from('settings')
-        .select('salla_api_key, business_whatsapp, sms_api_key, sms_sender_id, sms_provider_url, sms_provider_name, sms_enabled')
+        .select('salla_api_key, business_whatsapp, sms_api_key, sms_sender_id, sms_provider_url, sms_provider_name, sms_enabled, ai_enabled, ai_api_key, ai_model, ai_provider')
         .eq('id', 1)
         .maybeSingle();
 
@@ -70,6 +70,10 @@ export function Settings() {
         if (globalSettings.sms_provider_url) map['sms_provider_url'] = globalSettings.sms_provider_url;
         if (globalSettings.sms_provider_name) map['sms_provider_name'] = globalSettings.sms_provider_name;
         map['sms_enabled'] = globalSettings.sms_enabled ? 'true' : 'false';
+        if (globalSettings.ai_api_key) map['ai_api_key'] = globalSettings.ai_api_key;
+        if (globalSettings.ai_model) map['ai_model'] = globalSettings.ai_model;
+        if (globalSettings.ai_provider) map['ai_provider'] = globalSettings.ai_provider;
+        map['ai_enabled'] = globalSettings.ai_enabled ? 'true' : 'false';
       }
 
       setSettings(map);
@@ -88,13 +92,13 @@ export function Settings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const globalSettingsKeys = ['salla_api_key', 'business_whatsapp', 'sms_api_key', 'sms_sender_id', 'sms_provider_url', 'sms_provider_name', 'sms_enabled'];
+      const globalSettingsKeys = ['salla_api_key', 'business_whatsapp', 'sms_api_key', 'sms_sender_id', 'sms_provider_url', 'sms_provider_name', 'sms_enabled', 'ai_enabled', 'ai_api_key', 'ai_model', 'ai_provider'];
       const globalSettingsUpdate: any = {};
       const keyValueUpdates: any[] = [];
 
       Object.entries(settings).forEach(([key, value]) => {
         if (globalSettingsKeys.includes(key)) {
-          if (key === 'sms_enabled') {
+          if (key === 'sms_enabled' || key === 'ai_enabled') {
             globalSettingsUpdate[key] = value === 'true';
           } else {
             globalSettingsUpdate[key] = value;
@@ -249,6 +253,7 @@ export function Settings() {
     inventory: { icon: Package, label: 'Inventory', labelAr: 'المخزون' },
     loyalty: { icon: Heart, label: 'Loyalty', labelAr: 'الولاء' },
     sms: { icon: MessageSquare, label: 'SMS Gateway', labelAr: 'الرسائل النصية' },
+    ai: { icon: Brain, label: 'AI Analysis', labelAr: 'التحليل الذكي' },
     backup: { icon: Database, label: 'Backup & Restore', labelAr: 'النسخ الاحتياطي' },
     language: { icon: Globe, label: 'Language', labelAr: 'اللغة والعرض' },
   };
@@ -610,6 +615,106 @@ export function Settings() {
                     <p><strong>{isRTL ? 'رابط API:' : 'API URL:'}</strong> <code className="bg-white px-2 py-0.5 rounded text-xs">{isRTL ? 'حسب مزود الخدمة' : 'Per provider documentation'}</code></p>
                     <p><strong>{isRTL ? 'المعاملات:' : 'Parameters:'}</strong> sender, recipient, message</p>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'ai' && (
+          <div className="grid grid-cols-1 gap-6">
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+                  <Brain className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">
+                    {isRTL ? 'إعدادات الذكاء الاصطناعي' : 'AI Analysis Settings'}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {isRTL ? 'تفعيل وتكوين ميزات التحليل الذكي' : 'Enable and configure AI-powered analysis features'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-amber-900 mb-1">
+                      {isRTL ? 'ماذا تحصل مع الذكاء الاصطناعي؟' : 'What You Get with AI:'}
+                    </h4>
+                    <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                      <li>{isRTL ? 'توقعات ذكية للمبيعات والمخزون' : 'Smart sales & inventory forecasts'}</li>
+                      <li>{isRTL ? 'تصنيف تلقائي للمصروفات' : 'Auto-categorize expenses'}</li>
+                      <li>{isRTL ? 'استعلامات باللغة الطبيعية' : 'Natural language queries'}</li>
+                      <li>{isRTL ? 'تحليل العملاء وتحديد المعرضين للخطر' : 'Customer insights & at-risk detection'}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'الإعدادات الأساسية' : 'Basic Settings'}</h3>
+
+              {renderToggle('ai_enabled', 'Enable AI Analysis', 'تفعيل التحليل الذكي',
+                'Enable AI-powered features', 'تفعيل ميزات الذكاء الاصطناعي')}
+
+              {renderSelect('ai_provider', 'AI Provider', 'مزود الذكاء الاصطناعي', [
+                { value: 'openai', label: 'OpenAI' },
+                { value: 'gemini', label: 'Google Gemini' },
+              ])}
+
+              {settings['ai_provider'] === 'openai' && renderSelect('ai_model', 'OpenAI Model', 'نموذج OpenAI', [
+                { value: 'gpt-4o-mini', label: 'GPT-4o Mini (Recommended)' },
+                { value: 'gpt-4o', label: 'GPT-4o (Most Capable)' },
+                { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+                { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Cheapest)' },
+              ])}
+
+              {renderInput('ai_api_key', 'API Key', 'مفتاح API', 'password', 'sk-...')}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                <h4 className="font-semibold text-blue-900 mb-2">
+                  {isRTL ? 'كيفية الحصول على مفتاح API:' : 'How to Get API Key:'}
+                </h4>
+                <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                  <li>
+                    {isRTL ? 'اذهب إلى' : 'Go to'}{' '}
+                    <a
+                      href="https://platform.openai.com/api-keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-semibold hover:text-blue-600"
+                    >
+                      platform.openai.com/api-keys
+                    </a>
+                  </li>
+                  <li>{isRTL ? 'سجل دخول أو أنشئ حساب جديد' : 'Sign in or create a new account'}</li>
+                  <li>{isRTL ? 'انقر على "Create new secret key"' : 'Click "Create new secret key"'}</li>
+                  <li>{isRTL ? 'انسخ المفتاح والصقه أعلاه' : 'Copy the key and paste it above'}</li>
+                </ol>
+                <p className="text-xs text-blue-700 mt-3">
+                  {isRTL
+                    ? 'ملاحظة: OpenAI تفرض رسوم بناءً على الاستخدام. GPT-4o Mini موصى به للتكلفة المناسبة.'
+                    : 'Note: OpenAI charges per usage. GPT-4o Mini is recommended for cost-effectiveness.'}
+                </p>
+              </div>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4">
+                <h4 className="font-semibold text-green-900 mb-2">
+                  {isRTL ? 'التكلفة المتوقعة:' : 'Estimated Costs:'}
+                </h4>
+                <div className="text-sm text-green-800 space-y-1">
+                  <p><strong>GPT-4o Mini:</strong> ~$0.01 per query (Budget-friendly)</p>
+                  <p><strong>GPT-4o:</strong> ~$0.10 per query (High quality)</p>
+                  <p className="text-xs mt-2">
+                    {isRTL
+                      ? 'هذه تقديرات تقريبية. التكلفة الفعلية تعتمد على طول وتعقيد الاستعلام.'
+                      : 'These are approximate estimates. Actual costs depend on query length and complexity.'}
+                  </p>
                 </div>
               </div>
             </div>
