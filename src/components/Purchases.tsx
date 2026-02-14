@@ -74,10 +74,32 @@ export function Purchases() {
   const [viewingAttachment, setViewingAttachment] = useState<{ url: string; type: string } | null>(null);
   const attachmentFileInputRef = useRef<HTMLInputElement>(null);
   const attachmentCameraInputRef = useRef<HTMLInputElement>(null);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     loadData();
+    loadUserBranch();
   }, []);
+
+  const loadUserBranch = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('branch_id, role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) {
+        setUserBranchId(data.branch_id);
+        setIsSuperAdmin(data.role === 'super_admin');
+      }
+    } catch (err) {
+      console.error('Error loading user branch:', err);
+    }
+  };
 
   const handleViewAttachment = (attachmentPath: string) => {
     const url = getFileUrl(attachmentPath);
@@ -98,8 +120,18 @@ export function Purchases() {
 
   const loadData = async () => {
     try {
+      let purchasesQuery = supabase
+        .from('purchases')
+        .select('*, suppliers(name, name_ar)')
+        .order('created_at', { ascending: false });
+
+      // RLS will handle filtering, but we can optimize the query
+      if (!isSuperAdmin && userBranchId) {
+        purchasesQuery = purchasesQuery.eq('branch_id', userBranchId);
+      }
+
       const [purchasesRes, productsRes, suppliersRes] = await Promise.all([
-        supabase.from('purchases').select('*, suppliers(name, name_ar)').order('created_at', { ascending: false }),
+        purchasesQuery,
         supabase.from('products').select('id, name, name_ar, purchase_price, sku').eq('is_active', true),
         supabase.from('suppliers').select('id, name, name_ar, code').eq('is_active', true),
       ]);
@@ -186,6 +218,7 @@ export function Purchases() {
           payment_method: paymentMethod,
           notes: purchaseNotes || null,
           attachment_url: attachmentUrl,
+          branch_id: userBranchId,
           created_by: user?.id,
         })
         .select()

@@ -31,6 +31,8 @@ interface Customer {
   tier: 'vip' | 'frequent' | 'regular' | 'inactive';
   is_top_spender: boolean;
   is_most_frequent: boolean;
+  branch_id: string | null;
+  branches?: { name: string; code: string } | null;
 }
 
 const emptyForm = {
@@ -75,16 +77,51 @@ export function Customers() {
   const [filterDaysInactive, setFilterDaysInactive] = useState<string>('');
   const [sortBy, setSortBy] = useState<'spend' | 'orders' | 'none'>('none');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [branches, setBranches] = useState<any[]>([]);
 
   useEffect(() => {
     loadCustomers();
+    loadUserBranch();
+    loadBranches();
   }, []);
+
+  const loadUserBranch = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('branch_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) setUserBranchId(data.branch_id);
+    } catch (err) {
+      console.error('Error loading user branch:', err);
+    }
+  };
+
+  const loadBranches = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('id, name, code')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      if (data) setBranches(data);
+    } catch (err) {
+      console.error('Error loading branches:', err);
+    }
+  };
 
   const loadCustomers = async () => {
     try {
       const { data, error } = await supabase
         .from('customers')
-        .select('*')
+        .select('*, branches(name, code)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       if (data) setCustomers(data);
@@ -158,9 +195,10 @@ export function Customers() {
           .eq('id', editingCustomer.id);
         if (error) throw error;
       } else {
+        // New customer - assign to current user's branch (branch of origin)
         const { error } = await supabase
           .from('customers')
-          .insert(payload);
+          .insert({ ...payload, branch_id: userBranchId });
         if (error) throw error;
       }
 

@@ -41,6 +41,8 @@ export default function Expenses() {
   const [viewingAttachment, setViewingAttachment] = useState<{ url: string; type: string } | null>(null);
   const attachmentFileInputRef = useRef<HTMLInputElement>(null);
   const attachmentCameraInputRef = useRef<HTMLInputElement>(null);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const [formData, setFormData] = useState({
     expense_type: 'other',
@@ -56,7 +58,27 @@ export default function Expenses() {
   useEffect(() => {
     loadExpenses();
     checkAdmin();
+    loadUserBranch();
   }, []);
+
+  const loadUserBranch = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('branch_id, role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) {
+        setUserBranchId(data.branch_id);
+        setIsSuperAdmin(data.role === 'super_admin');
+      }
+    } catch (err) {
+      console.error('Error loading user branch:', err);
+    }
+  };
 
   const checkAdmin = async () => {
     if (!user) return;
@@ -70,10 +92,17 @@ export default function Expenses() {
 
   const loadExpenses = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('operating_expenses')
         .select('*')
         .order('expense_date', { ascending: false });
+
+      // RLS will handle filtering, but we can optimize the query
+      if (!isSuperAdmin && userBranchId) {
+        query = query.eq('branch_id', userBranchId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       if (data) setExpenses(data);
@@ -138,6 +167,7 @@ export default function Expenses() {
           notes: formData.notes,
           notes_ar: formData.notes_ar,
           attachment_url: attachmentUrl,
+          branch_id: userBranchId,
           created_by: user?.id,
         },
       ]);
