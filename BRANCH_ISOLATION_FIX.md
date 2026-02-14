@@ -250,11 +250,41 @@ CREATE POLICY "Users can update customers"
 5. Audit trail maintained through activity logs and sales records
 
 ### Database Migrations Applied
-- `fix_conflicting_customer_policies.sql` - Removed conflicting policy
-- `simplify_customer_update_for_credit_sales.sql` - Allow cross-branch customer balance updates
+1. `fix_conflicting_customer_policies.sql` - Removed conflicting ALL policy from customers
+2. `simplify_customer_update_for_credit_sales.sql` - Allow cross-branch customer balance updates
+3. `fix_inventory_rls_policy_conflict.sql` - Removed conflicting ALL policy from inventory
+4. `fix_all_conflicting_rls_policies.sql` - Removed conflicting ALL policies from sales and purchases
+
+### Complete Fix Summary
+
+#### Before Fix:
+- ❌ Multiple UPDATE/ALL policies per table causing conflicts
+- ❌ PostgreSQL requires ALL policies to be satisfied (AND logic)
+- ❌ Generic ALL policies conflicting with branch-specific UPDATE policies
+- ❌ "UPDATE requires a WHERE clause" errors
+
+#### After Fix:
+- ✅ **customers**: 1 UPDATE policy only
+- ✅ **inventory**: 1 UPDATE policy only
+- ✅ **sales**: 1 UPDATE policy only
+- ✅ **purchases**: 1 UPDATE policy only
+- ✅ **branch_stock**: 1 ALL policy (super_admin) + 1 UPDATE policy (users) - no conflict
+
+#### Policy Status Check:
+```sql
+-- All tables now have proper non-conflicting policies:
+- branch_stock: Super admin ALL + User UPDATE (branch-specific)
+- customers: User UPDATE (cross-branch for credit sales)
+- inventory: User UPDATE (branch-specific)
+- purchases: User UPDATE (branch-specific)
+- sales: User UPDATE (branch-specific)
+```
 
 ## Date
 2026-02-14
 
 ## Build Status
 ✅ Build Successful - All RLS policy conflicts resolved
+✅ All UPDATE statements have proper WHERE clauses
+✅ No conflicting ALL policies remaining
+✅ Ready for production use
