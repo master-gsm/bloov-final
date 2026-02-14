@@ -12,8 +12,8 @@ interface Product {
   description: string | null;
   description_ar: string | null;
   category_id: string | null;
-  type: 'natural' | 'artificial' | 'preserved' | 'greenery' | 'indoor_plants' | 'dried';
-  classification: 'ready_bouquets' | 'vases' | 'gifts' | 'wrapping' | 'cards' | 'services' | 'vases_glass' | 'wrapping_paper' | 'ribbons' | 'floral_tools' | 'gift_boxes' | null;
+  type: 'natural_flowers' | 'artificial_flowers' | 'vases' | 'wrapping' | 'ribbons' | 'additions_gifts' | 'services';
+  classification: 'bouquet' | 'single' | 'branch' | 'glass' | 'ceramic' | 'marble' | 'metal' | 'wood' | 'paper' | 'plastic' | 'fabric' | 'satin' | 'burlap' | null;
   unit: string;
   unit_ar: string;
   sale_price: number;
@@ -45,8 +45,8 @@ const emptyForm = {
   description: '',
   description_ar: '',
   category_id: '',
-  type: 'natural' as 'natural' | 'artificial' | 'preserved' | 'greenery' | 'indoor_plants' | 'dried',
-  classification: null as 'ready_bouquets' | 'vases' | 'gifts' | 'wrapping' | 'cards' | 'services' | 'vases_glass' | 'wrapping_paper' | 'ribbons' | 'floral_tools' | 'gift_boxes' | null,
+  type: 'natural_flowers' as 'natural_flowers' | 'artificial_flowers' | 'vases' | 'wrapping' | 'ribbons' | 'additions_gifts' | 'services',
+  classification: null as 'bouquet' | 'single' | 'branch' | 'glass' | 'ceramic' | 'marble' | 'metal' | 'wood' | 'paper' | 'plastic' | 'fabric' | 'satin' | 'burlap' | null,
   unit: 'piece',
   unit_ar: 'قطعة',
   sale_price: 0,
@@ -245,6 +245,13 @@ export function Products() {
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, { en: string, ar: string }> = {
+      natural_flowers: { en: 'Natural Flowers', ar: 'ورد طبيعي' },
+      artificial_flowers: { en: 'Artificial Flowers', ar: 'ورد صناعي' },
+      vases: { en: 'Vases', ar: 'فازات' },
+      wrapping: { en: 'Wrapping', ar: 'تغليف' },
+      ribbons: { en: 'Ribbons', ar: 'شرائط' },
+      additions_gifts: { en: 'Additions & Gifts', ar: 'إضافات وهدايا' },
+      services: { en: 'Services', ar: 'خدمات' },
       natural: { en: 'Natural Flowers', ar: 'ورد طبيعي' },
       artificial: { en: 'Artificial Flowers', ar: 'ورد صناعي' },
       preserved: { en: 'Preserved Flowers', ar: 'ورد دائم' },
@@ -257,6 +264,19 @@ export function Products() {
 
   const getClassificationLabel = (classification: string) => {
     const labels: Record<string, { en: string, ar: string }> = {
+      bouquet: { en: 'Bouquet', ar: 'باقة' },
+      single: { en: 'Single', ar: 'حبة' },
+      branch: { en: 'Branch', ar: 'غصن' },
+      glass: { en: 'Glass', ar: 'زجاج' },
+      ceramic: { en: 'Ceramic', ar: 'سيراميك' },
+      marble: { en: 'Marble', ar: 'رخام' },
+      metal: { en: 'Metal', ar: 'معدن' },
+      wood: { en: 'Wood', ar: 'خشب' },
+      paper: { en: 'Paper', ar: 'ورق' },
+      plastic: { en: 'Plastic', ar: 'بلاستيك' },
+      fabric: { en: 'Fabric', ar: 'قماش' },
+      satin: { en: 'Satin', ar: 'ستان' },
+      burlap: { en: 'Burlap', ar: 'خيش' },
       ready_bouquets: { en: 'Ready Bouquets', ar: 'باقات جاهزة' },
       vases: { en: 'Vases & Arrangements', ar: 'فازات وتنسيقات' },
       gifts: { en: 'Gifts & Additions', ar: 'هدايا وإضافات' },
@@ -270,6 +290,33 @@ export function Products() {
       gift_boxes: { en: 'Gift Boxes', ar: 'صناديق هدايا' },
     };
     return isRTL ? labels[classification]?.ar || classification : labels[classification]?.en || classification;
+  };
+
+  const getClassificationOptions = (type: string) => {
+    if (type === 'natural_flowers' || type === 'artificial_flowers') {
+      return [
+        { value: 'bouquet', label: isRTL ? 'باقة' : 'Bouquet' },
+        { value: 'single', label: isRTL ? 'حبة' : 'Single' },
+        { value: 'branch', label: isRTL ? 'غصن' : 'Branch' },
+      ];
+    } else if (type === 'vases') {
+      return [
+        { value: 'glass', label: isRTL ? 'زجاج' : 'Glass' },
+        { value: 'ceramic', label: isRTL ? 'سيراميك' : 'Ceramic' },
+        { value: 'marble', label: isRTL ? 'رخام' : 'Marble' },
+        { value: 'metal', label: isRTL ? 'معدن' : 'Metal' },
+        { value: 'wood', label: isRTL ? 'خشب' : 'Wood' },
+      ];
+    } else if (type === 'wrapping' || type === 'ribbons') {
+      return [
+        { value: 'paper', label: isRTL ? 'ورق' : 'Paper' },
+        { value: 'plastic', label: isRTL ? 'بلاستيك' : 'Plastic' },
+        { value: 'fabric', label: isRTL ? 'قماش' : 'Fabric' },
+        { value: 'satin', label: isRTL ? 'ستان' : 'Satin' },
+        { value: 'burlap', label: isRTL ? 'خيش' : 'Burlap' },
+      ];
+    }
+    return [];
   };
 
   const formatCurrency = (amount: number) =>
@@ -324,9 +371,16 @@ export function Products() {
               className="border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
             >
               <option value="all">{isRTL ? 'كل الأنواع' : 'All Types'}</option>
-              <option value="natural">{isRTL ? 'ورد طبيعي' : 'Natural Flowers'}</option>
-              <option value="artificial">{isRTL ? 'ورد صناعي' : 'Artificial Flowers'}</option>
-              <option value="preserved">{isRTL ? 'ورد دائم' : 'Preserved Flowers'}</option>
+              <option value="natural_flowers">{isRTL ? 'ورد طبيعي' : 'Natural Flowers'}</option>
+              <option value="artificial_flowers">{isRTL ? 'ورد صناعي' : 'Artificial Flowers'}</option>
+              <option value="vases">{isRTL ? 'فازات' : 'Vases'}</option>
+              <option value="wrapping">{isRTL ? 'تغليف' : 'Wrapping'}</option>
+              <option value="ribbons">{isRTL ? 'شرائط' : 'Ribbons'}</option>
+              <option value="additions_gifts">{isRTL ? 'إضافات وهدايا' : 'Additions & Gifts'}</option>
+              <option value="services">{isRTL ? 'خدمات' : 'Services'}</option>
+              <option value="natural">{isRTL ? 'ورد طبيعي (قديم)' : 'Natural (old)'}</option>
+              <option value="artificial">{isRTL ? 'ورد صناعي (قديم)' : 'Artificial (old)'}</option>
+              <option value="preserved">{isRTL ? 'ورد دائم (قديم)' : 'Preserved (old)'}</option>
               <option value="greenery">{isRTL ? 'أوراق خضراء' : 'Greenery'}</option>
               <option value="indoor_plants">{isRTL ? 'نباتات داخلية' : 'Indoor Plants'}</option>
               <option value="dried">{isRTL ? 'ورد مجفف' : 'Dried Flowers'}</option>
@@ -391,12 +445,17 @@ export function Products() {
                       </td>
                       <td className="py-3.5 px-4">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                          product.type === 'natural' ? 'bg-green-100 text-green-700' :
-                          product.type === 'artificial' ? 'bg-blue-100 text-blue-700' :
+                          product.type === 'natural_flowers' || product.type === 'natural' ? 'bg-green-100 text-green-700' :
+                          product.type === 'artificial_flowers' || product.type === 'artificial' ? 'bg-blue-100 text-blue-700' :
+                          product.type === 'vases' ? 'bg-purple-100 text-purple-700' :
+                          product.type === 'wrapping' ? 'bg-pink-100 text-pink-700' :
+                          product.type === 'ribbons' ? 'bg-rose-100 text-rose-700' :
+                          product.type === 'additions_gifts' ? 'bg-amber-100 text-amber-700' :
+                          product.type === 'services' ? 'bg-teal-100 text-teal-700' :
                           product.type === 'preserved' ? 'bg-purple-100 text-purple-700' :
                           product.type === 'greenery' ? 'bg-emerald-100 text-emerald-700' :
                           product.type === 'indoor_plants' ? 'bg-teal-100 text-teal-700' :
-                          'bg-amber-100 text-amber-700'
+                          'bg-gray-100 text-gray-700'
                         }`}>
                           {getTypeLabel(product.type)}
                         </span>
@@ -489,34 +548,46 @@ export function Products() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'النوع' : 'Type'}</label>
-                  <select required value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as any })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
-                    <option value="natural">{isRTL ? 'ورد طبيعي' : 'Natural Flowers'}</option>
-                    <option value="artificial">{isRTL ? 'ورد صناعي' : 'Artificial Flowers'}</option>
-                    <option value="preserved">{isRTL ? 'ورد دائم' : 'Preserved Flowers'}</option>
-                    <option value="greenery">{isRTL ? 'أوراق خضراء' : 'Greenery'}</option>
-                    <option value="indoor_plants">{isRTL ? 'نباتات داخلية' : 'Indoor Plants'}</option>
-                    <option value="dried">{isRTL ? 'ورد مجفف' : 'Dried Flowers'}</option>
+                  <select
+                    required
+                    value={formData.type}
+                    onChange={(e) => {
+                      const newType = e.target.value as any;
+                      setFormData({ ...formData, type: newType, classification: null });
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  >
+                    <option value="natural_flowers">{isRTL ? 'ورد طبيعي' : 'Natural Flowers'}</option>
+                    <option value="artificial_flowers">{isRTL ? 'ورد صناعي' : 'Artificial Flowers'}</option>
+                    <option value="vases">{isRTL ? 'فازات' : 'Vases'}</option>
+                    <option value="wrapping">{isRTL ? 'تغليف' : 'Wrapping'}</option>
+                    <option value="ribbons">{isRTL ? 'شرائط' : 'Ribbons'}</option>
+                    <option value="additions_gifts">{isRTL ? 'إضافات وهدايا' : 'Additions & Gifts'}</option>
+                    <option value="services">{isRTL ? 'خدمات' : 'Services'}</option>
                   </select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'التصنيف' : 'Classification'}</label>
-                <select value={formData.classification || ''} onChange={(e) => setFormData({ ...formData, classification: e.target.value as any || null })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
-                  <option value="">{isRTL ? 'بدون تصنيف' : 'No Classification'}</option>
-                  <option value="ready_bouquets">{isRTL ? 'باقات جاهزة' : 'Ready Bouquets'}</option>
-                  <option value="vases">{isRTL ? 'فازات وتنسيقات' : 'Vases & Arrangements'}</option>
-                  <option value="gifts">{isRTL ? 'هدايا وإضافات' : 'Gifts & Additions'}</option>
-                  <option value="wrapping">{isRTL ? 'مواد تغليف' : 'Wrapping Materials'}</option>
-                  <option value="cards">{isRTL ? 'كروت إهداء' : 'Greeting Cards'}</option>
-                  <option value="services">{isRTL ? 'خدمات' : 'Services'}</option>
-                  <option value="vases_glass">{isRTL ? 'فازات وزجاجيات' : 'Vases & Glassware'}</option>
-                  <option value="wrapping_paper">{isRTL ? 'ورق تغليف' : 'Wrapping Paper'}</option>
-                  <option value="ribbons">{isRTL ? 'شرائط وإكسسوارات' : 'Ribbons & Accessories'}</option>
-                  <option value="floral_tools">{isRTL ? 'أدوات تنسيق' : 'Floral Tools'}</option>
-                  <option value="gift_boxes">{isRTL ? 'صناديق هدايا' : 'Gift Boxes'}</option>
-                </select>
-              </div>
+              {getClassificationOptions(formData.type).length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRTL ? 'التصنيف' : 'Classification'}
+                    <span className="text-xs text-gray-500 ml-2">
+                      {isRTL ? '(اختياري)' : '(Optional)'}
+                    </span>
+                  </label>
+                  <select
+                    value={formData.classification || ''}
+                    onChange={(e) => setFormData({ ...formData, classification: e.target.value as any || null })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  >
+                    <option value="">{isRTL ? 'بدون تصنيف' : 'No Classification'}</option>
+                    {getClassificationOptions(formData.type).map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -14,8 +14,8 @@ interface Product {
   sale_price: number;
   purchase_price: number;
   sku: string;
-  type: 'natural' | 'artificial' | 'preserved' | 'greenery' | 'indoor_plants' | 'dried';
-  classification: 'ready_bouquets' | 'vases' | 'gifts' | 'wrapping' | 'cards' | 'services' | 'vases_glass' | 'wrapping_paper' | 'ribbons' | 'floral_tools' | 'gift_boxes' | null;
+  type: 'natural_flowers' | 'artificial_flowers' | 'vases' | 'wrapping' | 'ribbons' | 'additions_gifts' | 'services' | 'natural' | 'artificial' | 'preserved' | 'greenery' | 'indoor_plants' | 'dried';
+  classification: 'bouquet' | 'single' | 'branch' | 'glass' | 'ceramic' | 'marble' | 'metal' | 'wood' | 'paper' | 'plastic' | 'fabric' | 'satin' | 'burlap' | 'ready_bouquets' | 'vases' | 'gifts' | 'wrapping' | 'cards' | 'services' | 'vases_glass' | 'wrapping_paper' | 'ribbons' | 'floral_tools' | 'gift_boxes' | null;
 }
 
 interface Customer {
@@ -684,14 +684,24 @@ export function Sales() {
                     {isRTL ? 'الكل' : 'All'}
                   </button>
                   <button
-                    onClick={() => setClassificationFilter('ready_bouquets')}
+                    onClick={() => setClassificationFilter('natural_flowers')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                      classificationFilter === 'ready_bouquets'
+                      classificationFilter === 'natural_flowers'
                         ? 'bg-teal-600 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {isRTL ? 'باقات جاهزة' : 'Bouquets'}
+                    {isRTL ? 'ورد طبيعي' : 'Natural Flowers'}
+                  </button>
+                  <button
+                    onClick={() => setClassificationFilter('artificial_flowers')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      classificationFilter === 'artificial_flowers'
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isRTL ? 'ورد صناعي' : 'Artificial'}
                   </button>
                   <button
                     onClick={() => setClassificationFilter('vases')}
@@ -704,16 +714,6 @@ export function Sales() {
                     {isRTL ? 'فازات' : 'Vases'}
                   </button>
                   <button
-                    onClick={() => setClassificationFilter('vases_glass')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                      classificationFilter === 'vases_glass'
-                        ? 'bg-teal-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {isRTL ? 'زجاجيات' : 'Glassware'}
-                  </button>
-                  <button
                     onClick={() => setClassificationFilter('wrapping')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                       classificationFilter === 'wrapping'
@@ -724,14 +724,24 @@ export function Sales() {
                     {isRTL ? 'تغليف' : 'Wrapping'}
                   </button>
                   <button
-                    onClick={() => setClassificationFilter('gifts')}
+                    onClick={() => setClassificationFilter('ribbons')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                      classificationFilter === 'gifts'
+                      classificationFilter === 'ribbons'
                         ? 'bg-teal-600 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {isRTL ? 'هدايا' : 'Gifts'}
+                    {isRTL ? 'شرائط' : 'Ribbons'}
+                  </button>
+                  <button
+                    onClick={() => setClassificationFilter('additions_gifts')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      classificationFilter === 'additions_gifts'
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isRTL ? 'إضافات' : 'Additions'}
                   </button>
                 </div>
               </div>
@@ -753,8 +763,8 @@ export function Sales() {
                               p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
                               p.name_ar.includes(productSearchTerm) ||
                               p.sku.toLowerCase().includes(productSearchTerm.toLowerCase());
-                            const matchesClassification = classificationFilter === 'all' || p.classification === classificationFilter;
-                            return matchesSearch && matchesClassification;
+                            const matchesType = classificationFilter === 'all' || p.type === classificationFilter;
+                            return matchesSearch && matchesType;
                           })
                           .map((p) => (
                             <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name} ({formatCurrency(p.sale_price)})</option>
