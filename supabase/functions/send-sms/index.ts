@@ -11,6 +11,7 @@ interface SMSRequest {
     phone: string;
     name: string;
     customerId?: string;
+    message?: string;
   }>;
   message: string;
 }
@@ -86,12 +87,13 @@ Deno.serve(async (req: Request) => {
 
     for (const recipient of recipients) {
       try {
+        const personalizedMessage = recipient.message || message;
         let smsResult;
 
         if (smsSettings.sms_provider_name.toLowerCase() === 'unifonic') {
           smsResult = await sendViaUnifonic(
             recipient.phone,
-            message,
+            personalizedMessage,
             smsSettings.sms_api_key,
             smsSettings.sms_sender_id,
             smsSettings.sms_provider_url
@@ -99,7 +101,7 @@ Deno.serve(async (req: Request) => {
         } else if (smsSettings.sms_provider_name.toLowerCase() === 'yamamah') {
           smsResult = await sendViaYamamah(
             recipient.phone,
-            message,
+            personalizedMessage,
             smsSettings.sms_api_key,
             smsSettings.sms_sender_id,
             smsSettings.sms_provider_url
@@ -107,7 +109,7 @@ Deno.serve(async (req: Request) => {
         } else {
           smsResult = await sendViaGeneric(
             recipient.phone,
-            message,
+            personalizedMessage,
             smsSettings.sms_api_key,
             smsSettings.sms_sender_id,
             smsSettings.sms_provider_url
@@ -117,7 +119,7 @@ Deno.serve(async (req: Request) => {
         await supabase.from('sms_logs').insert({
           recipient_phone: recipient.phone,
           recipient_name: recipient.name,
-          message_body: message,
+          message_body: personalizedMessage,
           status: smsResult.success ? 'success' : 'failed',
           provider_message_id: smsResult.messageId,
           error_message: smsResult.error,

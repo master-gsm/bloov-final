@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Download, MessageSquare, Send, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Download, MessageSquare, Send, CheckCircle, AlertCircle, Loader2, Crown, Star, UserX, Filter, TrendingUp, Calendar, Award, StickyNote } from 'lucide-react';
 
 interface Customer {
   id: string;
@@ -22,6 +22,12 @@ interface Customer {
   current_balance: number;
   is_active: boolean;
   created_at: string;
+  total_spend: number;
+  total_orders: number;
+  loyalty_points: number;
+  last_purchase_date: string | null;
+  preference_note: string | null;
+  tier: 'VIP' | 'Frequent' | 'Inactive';
 }
 
 const emptyForm = {
@@ -37,6 +43,7 @@ const emptyForm = {
   notes: '',
   notes_ar: '',
   credit_limit: 0,
+  preference_note: '',
 };
 
 export function Customers() {
@@ -58,6 +65,11 @@ export function Customers() {
   const [smsMessage, setSmsMessage] = useState('');
   const [sendingSms, setSendingSms] = useState(false);
   const [smsResult, setSmsResult] = useState<{ success: number; failed: number; total: number; errors: string[] } | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterTier, setFilterTier] = useState<string>('all');
+  const [filterMinSpend, setFilterMinSpend] = useState<string>('');
+  const [filterMaxSpend, setFilterMaxSpend] = useState<string>('');
+  const [filterDaysInactive, setFilterDaysInactive] = useState<string>('');
 
   useEffect(() => {
     loadCustomers();
@@ -105,6 +117,7 @@ export function Customers() {
       notes: customer.notes || '',
       notes_ar: customer.notes_ar || '',
       credit_limit: customer.credit_limit,
+      preference_note: customer.preference_note || '',
     });
     setError('');
     setShowModal(true);
@@ -129,6 +142,7 @@ export function Customers() {
         notes: formData.notes || null,
         notes_ar: formData.notes_ar || null,
         credit_limit: formData.credit_limit,
+        preference_note: formData.preference_note || null,
         created_by: user?.id,
       };
 
@@ -165,16 +179,60 @@ export function Customers() {
     }
   };
 
+  const getTierBadge = (tier: string) => {
+    switch (tier) {
+      case 'VIP':
+        return {
+          icon: Crown,
+          color: 'bg-gradient-to-r from-yellow-400 to-amber-500',
+          textColor: 'text-white',
+          label: isRTL ? 'VIP' : 'VIP',
+        };
+      case 'Frequent':
+        return {
+          icon: Star,
+          color: 'bg-gradient-to-r from-blue-500 to-blue-600',
+          textColor: 'text-white',
+          label: isRTL ? 'متكرر' : 'Frequent',
+        };
+      default:
+        return {
+          icon: UserX,
+          color: 'bg-gradient-to-r from-gray-400 to-gray-500',
+          textColor: 'text-white',
+          label: isRTL ? 'غير نشط' : 'Inactive',
+        };
+    }
+  };
+
   const filtered = customers.filter((c) => {
     if (!c.is_active) return false;
+
     const s = searchTerm.toLowerCase();
-    return (
+    const matchesSearch =
       c.name.toLowerCase().includes(s) ||
       (c.name_ar && c.name_ar.includes(searchTerm)) ||
       c.code.toLowerCase().includes(s) ||
       (c.phone && c.phone.includes(s)) ||
-      (c.email && c.email.toLowerCase().includes(s))
-    );
+      (c.email && c.email.toLowerCase().includes(s));
+
+    if (!matchesSearch) return false;
+
+    if (filterTier !== 'all' && c.tier !== filterTier) return false;
+
+    if (filterMinSpend && c.total_spend < parseFloat(filterMinSpend)) return false;
+    if (filterMaxSpend && c.total_spend > parseFloat(filterMaxSpend)) return false;
+
+    if (filterDaysInactive && c.last_purchase_date) {
+      const daysSinceLastPurchase = Math.floor(
+        (new Date().getTime() - new Date(c.last_purchase_date).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      if (daysSinceLastPurchase < parseInt(filterDaysInactive)) return false;
+    } else if (filterDaysInactive && !c.last_purchase_date) {
+      return true;
+    }
+
+    return true;
   });
 
   const formatCurrency = (amount: number) =>
@@ -247,18 +305,26 @@ export function Customers() {
     setSmsResult(null);
 
     try {
-      const recipients = customers
-        .filter((c) => selectedCustomers.has(c.id) && c.phone)
-        .map((c) => ({
-          phone: c.phone!,
-          name: isRTL ? c.name_ar || c.name : c.name,
-          customerId: c.id,
-        }));
-
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('Not authenticated');
       }
+
+      const selectedCustomersList = customers.filter((c) => selectedCustomers.has(c.id) && c.phone);
+
+      const recipients = selectedCustomersList.map((c) => {
+        const customerName = isRTL ? c.name_ar || c.name : c.name;
+        const personalizedMessage = smsMessage
+          .replace(/\{customer_name\}/gi, customerName)
+          .replace(/\{name\}/gi, customerName);
+
+        return {
+          phone: c.phone!,
+          name: customerName,
+          customerId: c.id,
+          message: personalizedMessage,
+        };
+      });
 
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`;
       const response = await fetch(apiUrl, {
@@ -342,6 +408,96 @@ export function Customers() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {isRTL ? `${filtered.length} عميل` : `${filtered.length} Customers`}
+          </h3>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition font-medium ${
+              showFilters ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            {isRTL ? 'الفلاتر الذكية' : 'Smart Filters'}
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-4 mb-6 border border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {isRTL ? 'الفئة' : 'Tier'}
+                </label>
+                <select
+                  value={filterTier}
+                  onChange={(e) => setFilterTier(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="all">{isRTL ? 'الكل' : 'All'}</option>
+                  <option value="VIP">VIP</option>
+                  <option value="Frequent">{isRTL ? 'متكرر' : 'Frequent'}</option>
+                  <option value="Inactive">{isRTL ? 'غير نشط' : 'Inactive'}</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {isRTL ? 'الحد الأدنى للإنفاق (ريال)' : 'Min Spend (SAR)'}
+                </label>
+                <input
+                  type="number"
+                  value={filterMinSpend}
+                  onChange={(e) => setFilterMinSpend(e.target.value)}
+                  placeholder={isRTL ? 'مثال: 1000' : 'e.g., 1000'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {isRTL ? 'الحد الأقصى للإنفاق (ريال)' : 'Max Spend (SAR)'}
+                </label>
+                <input
+                  type="number"
+                  value={filterMaxSpend}
+                  onChange={(e) => setFilterMaxSpend(e.target.value)}
+                  placeholder={isRTL ? 'مثال: 10000' : 'e.g., 10000'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {isRTL ? 'غير نشط منذ (أيام)' : 'Inactive Since (Days)'}
+                </label>
+                <input
+                  type="number"
+                  value={filterDaysInactive}
+                  onChange={(e) => setFilterDaysInactive(e.target.value)}
+                  placeholder={isRTL ? 'مثال: 60' : 'e.g., 60'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => {
+                  setFilterTier('all');
+                  setFilterMinSpend('');
+                  setFilterMaxSpend('');
+                  setFilterDaysInactive('');
+                }}
+                className="px-4 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+              >
+                {isRTL ? 'إعادة تعيين' : 'Reset Filters'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-4 mb-6">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -374,78 +530,128 @@ export function Customers() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((customer) => (
-              <div key={customer.id} className={`border rounded-xl p-5 hover:shadow-md transition group ${selectedCustomers.has(customer.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-start gap-3 flex-1">
-                    {customer.phone && customer.phone.trim().length > 0 && (
-                      <input
-                        type="checkbox"
-                        checked={selectedCustomers.has(customer.id)}
-                        onChange={() => toggleCustomerSelection(customer.id)}
-                        className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 mt-0.5"
-                      />
+            {filtered.map((customer) => {
+              const tierBadge = getTierBadge(customer.tier);
+              const TierIcon = tierBadge.icon;
+
+              return (
+                <div key={customer.id} className={`border rounded-xl p-5 hover:shadow-lg transition group ${selectedCustomers.has(customer.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start gap-3 flex-1">
+                      {customer.phone && customer.phone.trim().length > 0 && (
+                        <input
+                          type="checkbox"
+                          checked={selectedCustomers.has(customer.id)}
+                          onChange={() => toggleCustomerSelection(customer.id)}
+                          className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 mt-0.5"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-bold text-gray-900">
+                            {isRTL ? customer.name_ar || customer.name : customer.name}
+                          </h3>
+                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${tierBadge.color} ${tierBadge.textColor} text-xs font-semibold`}>
+                            <TierIcon className="w-3 h-3" />
+                            <span>{tierBadge.label}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-400 font-mono">{customer.code}</p>
+                      </div>
+                    </div>
+                    {canEdit && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                        <button
+                          onClick={() => openEditModal(customer)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(customer.id)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
+                  </div>
+
+                  <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-lg p-3 mb-3 border border-teal-100">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <div className="flex items-center justify-center gap-1 mb-0.5">
+                          <TrendingUp className="w-3 h-3 text-teal-600" />
+                          <p className="text-xs text-gray-600 font-medium">{isRTL ? 'الإنفاق' : 'Spend'}</p>
+                        </div>
+                        <p className="text-sm font-bold text-teal-700">{formatCurrency(customer.total_spend || 0)}</p>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-center gap-1 mb-0.5">
+                          <Calendar className="w-3 h-3 text-blue-600" />
+                          <p className="text-xs text-gray-600 font-medium">{isRTL ? 'الطلبات' : 'Orders'}</p>
+                        </div>
+                        <p className="text-sm font-bold text-blue-700">{customer.total_orders || 0}</p>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-center gap-1 mb-0.5">
+                          <Award className="w-3 h-3 text-amber-600" />
+                          <p className="text-xs text-gray-600 font-medium">{isRTL ? 'النقاط' : 'Points'}</p>
+                        </div>
+                        <p className="text-sm font-bold text-amber-700">{customer.loyalty_points || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 text-sm text-gray-600 mb-3">
+                    {customer.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-gray-400" />
+                        <span dir="ltr">{customer.phone}</span>
+                      </div>
+                    )}
+                    {customer.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="truncate">{customer.email}</span>
+                      </div>
+                    )}
+                    {(customer.city || customer.city_ar) && (
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                        <span>{isRTL ? customer.city_ar || customer.city : customer.city}</span>
+                      </div>
+                    )}
+                    {customer.preference_note && (
+                      <div className="flex items-start gap-2 mt-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                        <StickyNote className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <span className="text-xs text-amber-800 italic">{customer.preference_note}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {customer.last_purchase_date && (
+                    <div className="text-xs text-gray-500 mb-2">
+                      {isRTL ? 'آخر شراء: ' : 'Last Purchase: '}
+                      {new Date(customer.last_purchase_date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')}
+                    </div>
+                  )}
+
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-gray-900">
-                        {isRTL ? customer.name_ar || customer.name : customer.name}
-                      </h3>
-                      <p className="text-xs text-gray-400 font-mono">{customer.code}</p>
+                      <p className="text-xs text-gray-400">{isRTL ? 'الرصيد' : 'Balance'}</p>
+                      <p className={`font-bold ${customer.current_balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(customer.current_balance)} {isRTL ? 'ر.س' : 'SAR'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">{isRTL ? 'حد الائتمان' : 'Credit Limit'}</p>
+                      <p className="font-medium text-gray-700">{formatCurrency(customer.credit_limit)}</p>
                     </div>
                   </div>
-                  {canEdit && (
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                      <button
-                        onClick={() => openEditModal(customer)}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(customer.id)}
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
                 </div>
-
-                <div className="space-y-1.5 text-sm text-gray-600">
-                  {customer.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-gray-400" />
-                      <span dir="ltr">{customer.phone}</span>
-                    </div>
-                  )}
-                  {customer.email && (
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-gray-400" />
-                      <span>{customer.email}</span>
-                    </div>
-                  )}
-                  {(customer.city || customer.city_ar) && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-gray-400" />
-                      <span>{isRTL ? customer.city_ar || customer.city : customer.city}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-400">{isRTL ? 'الرصيد' : 'Balance'}</p>
-                    <p className={`font-bold ${customer.current_balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatCurrency(customer.current_balance)} {isRTL ? 'ر.س' : 'SAR'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-400">{isRTL ? 'حد الائتمان' : 'Credit Limit'}</p>
-                    <p className="font-medium text-gray-700">{formatCurrency(customer.credit_limit)}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -653,6 +859,29 @@ export function Customers() {
                 />
               </div>
 
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <StickyNote className="w-4 h-4 text-amber-600" />
+                  <label className="block text-sm font-semibold text-amber-900">
+                    {isRTL ? 'ملاحظة التفضيلات (للخدمة الشخصية)' : 'Preference Note (For Personalized Service)'}
+                  </label>
+                </div>
+                <textarea
+                  value={formData.preference_note}
+                  onChange={(e) => setFormData({ ...formData, preference_note: e.target.value })}
+                  disabled={!canEdit}
+                  rows={2}
+                  placeholder={isRTL ? 'مثال: يحب الورود الحمراء، حساس من الزنبق' : 'e.g., Loves Red Roses, Allergic to Lily'}
+                  className="w-full px-4 py-2.5 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none"
+                  dir={isRTL ? 'rtl' : 'ltr'}
+                />
+                <p className="text-xs text-amber-700 mt-1">
+                  {isRTL
+                    ? 'سجل تفضيلات العميل وملاحظات مهمة لتقديم خدمة شخصية مميزة'
+                    : 'Record customer preferences and important notes for providing exceptional personalized service'}
+                </p>
+              </div>
+
               <div className="flex gap-3 pt-2">
                 {canEdit && (
                   <button
@@ -800,7 +1029,7 @@ export function Customers() {
                     <textarea
                       value={smsMessage}
                       onChange={(e) => setSmsMessage(e.target.value)}
-                      placeholder={isRTL ? 'اكتب رسالتك هنا...' : 'Type your message here...'}
+                      placeholder={isRTL ? 'مثال: مرحباً {customer_name}، لدينا عرض خاص لك!' : 'e.g., Hello {customer_name}, we have a special offer for you!'}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                       rows={6}
                       dir={isRTL ? 'rtl' : 'ltr'}
@@ -814,6 +1043,14 @@ export function Customers() {
                           ? `تقريباً ${Math.ceil(smsMessage.length / 70)} رسالة`
                           : `~${Math.ceil(smsMessage.length / 70)} SMS parts`}
                       </span>
+                    </div>
+                    <div className="mt-2 p-2 bg-purple-50 rounded-lg border border-purple-200">
+                      <p className="text-xs text-purple-800 font-medium">
+                        <strong>{isRTL ? '💡 نصيحة:' : '💡 Tip:'}</strong>{' '}
+                        {isRTL
+                          ? 'استخدم {customer_name} أو {name} لإضافة اسم العميل تلقائياً في الرسالة'
+                          : 'Use {customer_name} or {name} to automatically insert customer names'}
+                      </p>
                     </div>
                   </div>
 
