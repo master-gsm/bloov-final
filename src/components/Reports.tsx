@@ -40,6 +40,7 @@ export function Reports() {
   const [salesData, setSalesData] = useState<SalesData>({ total: 0, storeTotal: 0, sallaTotal: 0, totalCost: 0, grossProfit: 0, count: 0 });
   const [purchasesData, setPurchasesData] = useState<PurchasesData>({ total: 0, count: 0 });
   const [expensesData, setExpensesData] = useState<ExpensesData>({ total: 0, count: 0 });
+  const [inventoryValue, setInventoryValue] = useState(0);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [recentSales, setRecentSales] = useState<any[]>([]);
 
@@ -83,7 +84,7 @@ export function Reports() {
     try {
       const { start, end } = getDateRange();
 
-      const [salesRes, purchasesRes, expensesRes, recentRes] = await Promise.all([
+      const [salesRes, purchasesRes, expensesRes, recentRes, inventoryRes] = await Promise.all([
         supabase
           .from('sales')
           .select('total, total_cost, gross_profit, source')
@@ -107,6 +108,9 @@ export function Reports() {
           .eq('status', 'confirmed')
           .order('sale_date', { ascending: false })
           .limit(10),
+        supabase
+          .from('inventory')
+          .select('quantity, products!inner(purchase_price)')
       ]);
 
       const storeTotalAmount = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
@@ -116,6 +120,7 @@ export function Reports() {
       const salesGrossProfit = salesRes.data?.reduce((sum, s) => sum + (s.gross_profit || 0), 0) || 0;
       const purchasesTotalAmount = purchasesRes.data?.reduce((sum, p) => sum + (p.total || 0), 0) || 0;
       const expensesTotalAmount = expensesRes.data?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+      const inventoryValue = inventoryRes.data?.reduce((sum, inv: any) => sum + (inv.quantity * (inv.products?.purchase_price || 0)), 0) || 0;
 
       setSalesData({
         total: salesTotalAmount,
@@ -128,6 +133,7 @@ export function Reports() {
       setPurchasesData({ total: purchasesTotalAmount, count: purchasesRes.data?.length || 0 });
       setExpensesData({ total: expensesTotalAmount, count: expensesRes.data?.length || 0 });
       setRecentSales(recentRes.data || []);
+      setInventoryValue(inventoryValue);
 
       const { data: saleItemsData } = await supabase
         .from('sale_items')
@@ -230,7 +236,51 @@ export function Reports() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 rounded-xl p-5 mb-6">
+        <div className="flex items-start gap-4">
+          <div className="p-2.5 bg-white rounded-lg shadow-sm">
+            <FileText className="w-6 h-6 text-teal-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              {isRTL ? 'كيف يتم حساب صافي الربح؟' : 'How is Net Profit Calculated?'}
+            </h3>
+            <div className={`grid ${isRTL ? 'grid-cols-1 md:grid-cols-5' : 'grid-cols-1 md:grid-cols-5'} gap-2 text-sm`}>
+              <div className="bg-white rounded-lg p-3 shadow-sm">
+                <p className="text-gray-600 mb-1">{isRTL ? '١. الإيرادات' : '1. Revenue'}</p>
+                <p className="font-bold text-green-600">{formatCurrency(salesData.total)}</p>
+              </div>
+              <div className="flex items-center justify-center text-2xl text-gray-400">-</div>
+              <div className="bg-white rounded-lg p-3 shadow-sm">
+                <p className="text-gray-600 mb-1">{isRTL ? '٢. تكلفة البضاعة المباعة' : '2. COGS'}</p>
+                <p className="font-bold text-amber-600">{formatCurrency(salesData.totalCost)}</p>
+              </div>
+              <div className="flex items-center justify-center text-2xl text-gray-400">-</div>
+              <div className="bg-white rounded-lg p-3 shadow-sm">
+                <p className="text-gray-600 mb-1">{isRTL ? '٣. المصاريف التشغيلية' : '3. Operating Expenses'}</p>
+                <p className="font-bold text-orange-600">{formatCurrency(expensesData.total)}</p>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-teal-200">
+              <div className="flex items-center justify-between">
+                <p className="text-gray-700 font-semibold">
+                  {isRTL ? '= صافي الربح' : '= Net Profit'}
+                </p>
+                <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(netProfit)}
+                </p>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                {isRTL
+                  ? 'ملاحظة: المشتريات تضاف إلى المخزون وليست مصروفات مباشرة. فقط تكلفة المنتجات المباعة يتم خصمها من الربح.'
+                  : 'Note: Purchases add to inventory and are not direct expenses. Only the cost of sold items is deducted from profit.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2.5 bg-teal-100 rounded-lg">
@@ -266,13 +316,26 @@ export function Reports() {
 
         <div className="bg-white rounded-xl shadow-sm border p-5">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-red-100 rounded-lg">
-              <TrendingDown className="w-5 h-5 text-red-600" />
+            <div className="p-2.5 bg-amber-100 rounded-lg">
+              <TrendingDown className="w-5 h-5 text-amber-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'إجمالي المشتريات' : 'Total Purchases'}</p>
+            <p className="text-sm text-gray-500">{isRTL ? 'تكلفة البضاعة المباعة' : 'Cost of Goods Sold'}</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(purchasesData.total)}</p>
-          <p className="text-xs text-gray-400 mt-1">{purchasesData.count} {isRTL ? 'عملية' : 'transactions'}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.totalCost)}</p>
+          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'تكلفة المنتجات المباعة فقط' : 'Cost of sold items only'}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 bg-emerald-100 rounded-lg">
+              <DollarSign className="w-5 h-5 text-emerald-600" />
+            </div>
+            <p className="text-sm text-gray-500">{isRTL ? 'إجمالي الربح' : 'Gross Profit'}</p>
+          </div>
+          <p className={`text-2xl font-bold ${salesData.grossProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            {formatCurrency(salesData.grossProfit)}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'الإيرادات - تكلفة البضاعة' : 'Revenue - COGS'}</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border p-5">
@@ -288,15 +351,37 @@ export function Reports() {
 
         <div className="bg-white rounded-xl shadow-sm border p-5">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-blue-100 rounded-lg">
-              <DollarSign className="w-5 h-5 text-blue-600" />
+            <div className={`p-2.5 ${netProfit >= 0 ? 'bg-green-100' : 'bg-red-100'} rounded-lg`}>
+              <DollarSign className={`w-5 h-5 ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`} />
             </div>
             <p className="text-sm text-gray-500">{isRTL ? 'صافي الربح' : 'Net Profit'}</p>
           </div>
           <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {formatCurrency(netProfit)}
           </p>
-          <p className="text-xs text-gray-400 mt-1">{profitMargin}% {isRTL ? 'هامش ربح' : 'margin'}</p>
+          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'إجمالي الربح - المصاريف' : 'Gross Profit - OpEx'}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 bg-purple-100 rounded-lg">
+              <BarChart3 className="w-5 h-5 text-purple-600" />
+            </div>
+            <p className="text-sm text-gray-500">{isRTL ? 'قيمة المخزون' : 'Inventory Value'}</p>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(inventoryValue)}</p>
+          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'رأس المال المستثمر' : 'Capital invested'}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 bg-indigo-100 rounded-lg">
+              <TrendingDown className="w-5 h-5 text-indigo-600" />
+            </div>
+            <p className="text-sm text-gray-500">{isRTL ? 'مشتريات المخزون' : 'Inventory Purchases'}</p>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(purchasesData.total)}</p>
+          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'استثمار في المخزون' : 'Investment in stock'}</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border p-5">
@@ -310,6 +395,19 @@ export function Reports() {
             {formatCurrency(salesData.count > 0 ? salesData.total / salesData.count : 0)}
           </p>
           <p className="text-xs text-gray-400 mt-1">{isRTL ? 'لكل عملية' : 'per transaction'}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 bg-cyan-100 rounded-lg">
+              <BarChart3 className="w-5 h-5 text-cyan-600" />
+            </div>
+            <p className="text-sm text-gray-500">{isRTL ? 'هامش الربح' : 'Profit Margin'}</p>
+          </div>
+          <p className={`text-2xl font-bold ${parseFloat(profitMargin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {profitMargin}%
+          </p>
+          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'نسبة الربح للإيراد' : 'Net profit to revenue'}</p>
         </div>
       </div>
 
