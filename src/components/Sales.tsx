@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
-import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download } from 'lucide-react';
+import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, Edit, RotateCcw } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
 import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
 
@@ -76,6 +76,7 @@ export function Sales() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [canManageSales, setCanManageSales] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
@@ -137,7 +138,8 @@ export function Sales() {
     if (!user) return;
     try {
       const { data: role } = await supabase.rpc('get_my_role');
-      setIsAdmin(role === 'admin');
+      setIsAdmin(role === 'admin' || role === 'super_admin');
+      setCanManageSales(role === 'admin' || role === 'super_admin' || role === 'accountant');
     } catch (err) {
       console.error('Error checking role:', err);
     }
@@ -626,6 +628,54 @@ export function Sales() {
     }
   };
 
+  const deleteSale = async (saleId: string) => {
+    if (!canManageSales) {
+      alert(isRTL ? 'يتطلب صلاحيات الأدمن أو المحاسب' : 'Admin or Accountant privileges required');
+      return;
+    }
+    const confirmMsg = isRTL
+      ? 'هل أنت متأكد من حذف هذه الفاتورة؟ لا يمكن التراجع عن هذا الإجراء'
+      : 'Are you sure you want to delete this sale? This action cannot be undone';
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const { error: itemsError } = await supabase.from('sale_items').delete().eq('sale_id', saleId);
+      if (itemsError) throw itemsError;
+
+      const { error: saleError } = await supabase.from('sales').delete().eq('id', saleId);
+      if (saleError) throw saleError;
+
+      await loadData();
+      setViewingSale(null);
+      alert(isRTL ? 'تم حذف الفاتورة بنجاح' : 'Sale deleted successfully');
+    } catch (error) {
+      console.error('Error deleting sale:', error);
+      alert(isRTL ? 'حدث خطأ أثناء حذف الفاتورة' : 'Error deleting sale');
+    }
+  };
+
+  const returnSale = async (saleId: string) => {
+    if (!canManageSales) {
+      alert(isRTL ? 'يتطلب صلاحيات الأدمن أو المحاسب' : 'Admin or Accountant privileges required');
+      return;
+    }
+    const confirmMsg = isRTL
+      ? 'هل تريد تحويل هذه الفاتورة إلى مرتجع؟'
+      : 'Do you want to mark this sale as returned?';
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const { error } = await supabase.from('sales').update({ status: 'returned' }).eq('id', saleId);
+      if (error) throw error;
+      await loadData();
+      setViewingSale(null);
+      alert(isRTL ? 'تم تحويل الفاتورة إلى مرتجع' : 'Sale marked as returned');
+    } catch (error) {
+      console.error('Error returning sale:', error);
+      alert(isRTL ? 'حدث خطأ أثناء تحويل الفاتورة إلى مرتجع' : 'Error marking sale as returned');
+    }
+  };
+
   const filtered = sales.filter((s) => {
     if (statusFilter !== 'all' && s.status !== statusFilter) return false;
     const term = searchTerm.toLowerCase();
@@ -646,6 +696,7 @@ export function Sales() {
     draft: 'bg-yellow-100 text-yellow-700',
     confirmed: 'bg-green-100 text-green-700',
     cancelled: 'bg-red-100 text-red-700',
+    returned: 'bg-orange-100 text-orange-700',
   };
 
   const paymentColors: Record<string, string> = {
@@ -1168,6 +1219,7 @@ export function Sales() {
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-teal-500 focus:border-transparent">
             <option value="all">{isRTL ? 'الكل' : 'All Status'}</option>
             <option value="confirmed">{isRTL ? 'مؤكد' : 'Confirmed'}</option>
+            <option value="returned">{isRTL ? 'مرتجع' : 'Returned'}</option>
             <option value="cancelled">{isRTL ? 'ملغي' : 'Cancelled'}</option>
           </select>
         </div>
@@ -1199,7 +1251,10 @@ export function Sales() {
                     <td className="py-3.5 px-4 font-bold text-gray-900">{formatCurrency(sale.total)} {isRTL ? 'ر.س' : 'SAR'}</td>
                     <td className="py-3.5 px-4">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[sale.status] || ''}`}>
-                        {sale.status === 'confirmed' ? (isRTL ? 'مؤكد' : 'Confirmed') : (isRTL ? 'ملغي' : 'Cancelled')}
+                        {sale.status === 'confirmed' && (isRTL ? 'مؤكد' : 'Confirmed')}
+                        {sale.status === 'returned' && (isRTL ? 'مرتجع' : 'Returned')}
+                        {sale.status === 'cancelled' && (isRTL ? 'ملغي' : 'Cancelled')}
+                        {sale.status === 'draft' && (isRTL ? 'مسودة' : 'Draft')}
                       </span>
                     </td>
                     <td className="py-3.5 px-4">
@@ -1278,27 +1333,48 @@ export function Sales() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => { setViewingSale(null); openPrintView(viewingSale); }} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium">
-                  <Printer className="w-4 h-4" /> {isRTL ? 'طباعة' : 'Print'}
-                </button>
-                <button onClick={() => downloadPDF(viewingSale)} className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white py-2.5 rounded-lg hover:bg-purple-700 transition font-medium">
-                  <Download className="w-4 h-4" /> PDF
-                </button>
-                {(viewingSale.customer_phone || viewingSale.customers?.phone) && (
-                  <button onClick={() => sendWhatsApp(viewingSale)} className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition font-medium">
-                    <MessageCircle className="w-4 h-4" /> WhatsApp
+              <div className="space-y-3 pt-2">
+                <div className="flex gap-2">
+                  <button onClick={() => { setViewingSale(null); openPrintView(viewingSale); }} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium text-sm">
+                    <Printer className="w-4 h-4" /> {isRTL ? 'طباعة' : 'Print'}
                   </button>
+                  <button onClick={() => downloadPDF(viewingSale)} className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white py-2.5 rounded-lg hover:bg-purple-700 transition font-medium text-sm">
+                    <Download className="w-4 h-4" /> PDF
+                  </button>
+                  {(viewingSale.customer_phone || viewingSale.customers?.phone) && (
+                    <button onClick={() => sendWhatsApp(viewingSale)} className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition font-medium text-sm">
+                      <MessageCircle className="w-4 h-4" /> WhatsApp
+                    </button>
+                  )}
+                </div>
+
+                {canManageSales && (
+                  <div className="flex gap-2">
+                    {viewingSale.status === 'confirmed' && (
+                      <>
+                        <button onClick={() => returnSale(viewingSale.id)} className="flex-1 flex items-center justify-center gap-2 bg-orange-600 text-white py-2.5 rounded-lg hover:bg-orange-700 transition font-medium text-sm">
+                          <RotateCcw className="w-4 h-4" /> {isRTL ? 'مرتجع' : 'Return'}
+                        </button>
+                        <button onClick={() => updateSaleStatus(viewingSale.id, 'cancelled')} className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 transition font-medium text-sm">
+                          <XCircle className="w-4 h-4" /> {isRTL ? 'إلغاء' : 'Cancel'}
+                        </button>
+                      </>
+                    )}
+                    {viewingSale.status === 'cancelled' && isAdmin && (
+                      <button onClick={() => reactivateSale(viewingSale.id, 'confirmed')} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium text-sm">
+                        <Check className="w-4 h-4" /> {isRTL ? 'استعادة' : 'Restore'}
+                      </button>
+                    )}
+                    {viewingSale.status === 'returned' && isAdmin && (
+                      <button onClick={() => reactivateSale(viewingSale.id, 'confirmed')} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium text-sm">
+                        <Check className="w-4 h-4" /> {isRTL ? 'استعادة' : 'Restore'}
+                      </button>
+                    )}
+                    <button onClick={() => deleteSale(viewingSale.id)} className="flex-1 flex items-center justify-center gap-2 bg-gray-800 text-white py-2.5 rounded-lg hover:bg-gray-900 transition font-medium text-sm">
+                      <Trash2 className="w-4 h-4" /> {isRTL ? 'حذف' : 'Delete'}
+                    </button>
+                  </div>
                 )}
-                {viewingSale.status === 'cancelled' && isAdmin ? (
-                  <button onClick={() => reactivateSale(viewingSale.id, 'confirmed')} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium">
-                    <Check className="w-4 h-4" /> {isRTL ? 'استعادة' : 'Restore'}
-                  </button>
-                ) : viewingSale.status !== 'cancelled' ? (
-                  <button onClick={() => updateSaleStatus(viewingSale.id, 'cancelled')} className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 transition font-medium">
-                    <XCircle className="w-4 h-4" /> {isRTL ? 'إلغاء' : 'Cancel'}
-                  </button>
-                ) : null}
               </div>
             </div>
           </div>
