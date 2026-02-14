@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Download, MessageSquare, Send, CheckCircle, AlertCircle, Loader2, Crown, Star, UserX, Filter, TrendingUp, Calendar, Award, StickyNote } from 'lucide-react';
+import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Download, MessageSquare, Send, CheckCircle, AlertCircle, Loader2, Crown, Star, UserX, Filter, TrendingUp, Calendar, Award, StickyNote, ArrowUpDown, ArrowUp, ArrowDown, Trophy, Zap } from 'lucide-react';
 
 interface Customer {
   id: string;
@@ -25,9 +25,12 @@ interface Customer {
   total_spend: number;
   total_orders: number;
   loyalty_points: number;
+  valid_loyalty_points: number;
   last_purchase_date: string | null;
   preference_note: string | null;
-  tier: 'VIP' | 'Frequent' | 'Inactive';
+  tier: 'vip' | 'frequent' | 'regular' | 'inactive';
+  is_top_spender: boolean;
+  is_most_frequent: boolean;
 }
 
 const emptyForm = {
@@ -70,6 +73,8 @@ export function Customers() {
   const [filterMinSpend, setFilterMinSpend] = useState<string>('');
   const [filterMaxSpend, setFilterMaxSpend] = useState<string>('');
   const [filterDaysInactive, setFilterDaysInactive] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'spend' | 'orders' | 'none'>('none');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     loadCustomers();
@@ -181,19 +186,26 @@ export function Customers() {
 
   const getTierBadge = (tier: string) => {
     switch (tier) {
-      case 'VIP':
+      case 'vip':
         return {
           icon: Crown,
           color: 'bg-gradient-to-r from-yellow-400 to-amber-500',
           textColor: 'text-white',
           label: isRTL ? 'VIP' : 'VIP',
         };
-      case 'Frequent':
+      case 'frequent':
         return {
           icon: Star,
           color: 'bg-gradient-to-r from-blue-500 to-blue-600',
           textColor: 'text-white',
           label: isRTL ? 'متكرر' : 'Frequent',
+        };
+      case 'regular':
+        return {
+          icon: Users,
+          color: 'bg-gradient-to-r from-green-400 to-green-500',
+          textColor: 'text-white',
+          label: isRTL ? 'عادي' : 'Regular',
         };
       default:
         return {
@@ -202,6 +214,15 @@ export function Customers() {
           textColor: 'text-white',
           label: isRTL ? 'غير نشط' : 'Inactive',
         };
+    }
+  };
+
+  const handleSort = (type: 'spend' | 'orders') => {
+    if (sortBy === type) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(type);
+      setSortDirection('desc');
     }
   };
 
@@ -233,6 +254,17 @@ export function Customers() {
     }
 
     return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === 'spend') {
+      const diff = (a.total_spend || 0) - (b.total_spend || 0);
+      return sortDirection === 'asc' ? diff : -diff;
+    } else if (sortBy === 'orders') {
+      const diff = (a.total_orders || 0) - (b.total_orders || 0);
+      return sortDirection === 'asc' ? diff : -diff;
+    }
+    return 0;
   });
 
   const formatCurrency = (amount: number) =>
@@ -278,7 +310,7 @@ export function Customers() {
   };
 
   const toggleSelectAll = () => {
-    const customersWithPhone = filtered.filter((c) => c.phone && c.phone.trim().length > 0);
+    const customersWithPhone = sorted.filter((c) => c.phone && c.phone.trim().length > 0);
     if (selectedCustomers.size === customersWithPhone.length) {
       setSelectedCustomers(new Set());
     } else {
@@ -410,17 +442,45 @@ export function Customers() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">
-            {isRTL ? `${filtered.length} عميل` : `${filtered.length} Customers`}
+            {isRTL ? `${sorted.length} عميل` : `${sorted.length} Customers`}
           </h3>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition font-medium ${
-              showFilters ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            {isRTL ? 'الفلاتر الذكية' : 'Smart Filters'}
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-gray-50 rounded-lg p-1">
+              <button
+                onClick={() => handleSort('spend')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition text-sm font-medium ${
+                  sortBy === 'spend'
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                {isRTL ? 'الإنفاق' : 'Spend'}
+                {sortBy === 'spend' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+              </button>
+              <button
+                onClick={() => handleSort('orders')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition text-sm font-medium ${
+                  sortBy === 'orders'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-white hover:text-gray-900'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                {isRTL ? 'الطلبات' : 'Orders'}
+                {sortBy === 'orders' && (sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+              </button>
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition font-medium ${
+                showFilters ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              {isRTL ? 'الفلاتر الذكية' : 'Smart Filters'}
+            </button>
+          </div>
         </div>
 
         {showFilters && (
@@ -436,9 +496,10 @@ export function Customers() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
                 >
                   <option value="all">{isRTL ? 'الكل' : 'All'}</option>
-                  <option value="VIP">VIP</option>
-                  <option value="Frequent">{isRTL ? 'متكرر' : 'Frequent'}</option>
-                  <option value="Inactive">{isRTL ? 'غير نشط' : 'Inactive'}</option>
+                  <option value="vip">VIP</option>
+                  <option value="frequent">{isRTL ? 'متكرر' : 'Frequent'}</option>
+                  <option value="regular">{isRTL ? 'عادي' : 'Regular'}</option>
+                  <option value="inactive">{isRTL ? 'غير نشط' : 'Inactive'}</option>
                 </select>
               </div>
 
@@ -502,7 +563,7 @@ export function Customers() {
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
-              checked={selectedCustomers.size > 0 && selectedCustomers.size === filtered.filter((c) => c.phone && c.phone.trim().length > 0).length}
+              checked={selectedCustomers.size > 0 && selectedCustomers.size === sorted.filter((c) => c.phone && c.phone.trim().length > 0).length}
               onChange={toggleSelectAll}
               className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
             />
@@ -522,7 +583,7 @@ export function Customers() {
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {sorted.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <Users className="w-16 h-16 mx-auto mb-3 opacity-30" />
             <p className="text-lg font-medium">{isRTL ? 'لا يوجد عملاء' : 'No customers found'}</p>
@@ -530,7 +591,7 @@ export function Customers() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((customer) => {
+            {sorted.map((customer) => {
               const tierBadge = getTierBadge(customer.tier);
               const TierIcon = tierBadge.icon;
 
@@ -547,7 +608,7 @@ export function Customers() {
                         />
                       )}
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <h3 className="font-bold text-gray-900">
                             {isRTL ? customer.name_ar || customer.name : customer.name}
                           </h3>
@@ -555,6 +616,18 @@ export function Customers() {
                             <TierIcon className="w-3 h-3" />
                             <span>{tierBadge.label}</span>
                           </div>
+                          {customer.is_top_spender && (
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-semibold shadow-sm">
+                              <Trophy className="w-3 h-3" />
+                              <span>{isRTL ? 'أعلى إنفاق' : 'Top Spender'}</span>
+                            </div>
+                          )}
+                          {customer.is_most_frequent && (
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs font-semibold shadow-sm">
+                              <Zap className="w-3 h-3" />
+                              <span>{isRTL ? 'الأكثر تكراراً' : 'Most Frequent'}</span>
+                            </div>
+                          )}
                         </div>
                         <p className="text-xs text-gray-400 font-mono">{customer.code}</p>
                       </div>
@@ -596,9 +669,9 @@ export function Customers() {
                       <div>
                         <div className="flex items-center justify-center gap-1 mb-0.5">
                           <Award className="w-3 h-3 text-amber-600" />
-                          <p className="text-xs text-gray-600 font-medium">{isRTL ? 'النقاط' : 'Points'}</p>
+                          <p className="text-xs text-gray-600 font-medium">{isRTL ? 'النقاط الصالحة' : 'Valid Points'}</p>
                         </div>
-                        <p className="text-sm font-bold text-amber-700">{customer.loyalty_points || 0}</p>
+                        <p className="text-sm font-bold text-amber-700">{customer.valid_loyalty_points || 0}</p>
                       </div>
                     </div>
                   </div>
