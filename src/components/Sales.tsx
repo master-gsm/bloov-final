@@ -379,7 +379,8 @@ export function Sales() {
                 quantity: branchStock.quantity - item.quantity,
                 updated_at: new Date().toISOString()
               })
-              .eq('id', branchStock.id);
+              .eq('id', branchStock.id)
+              .eq('branch_id', userBranchId);
           }
         }
 

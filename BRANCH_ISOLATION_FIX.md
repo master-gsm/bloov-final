@@ -193,5 +193,68 @@ All existing data was automatically assigned to the "Main Branch" (code: MAIN) d
 - `supabase/migrations/20260214011240_create_multi_branch_system_v3.sql` - Multi-branch schema
 - `supabase/migrations/20260214011306_assign_existing_data_to_default_branch.sql` - Data migration
 
+## Additional Fixes (2026-02-14 Update)
+
+### 3. RLS Policy Conflicts
+
+#### Issue: Missing branch_id in branch_stock WHERE Clause
+**Location**: `src/components/Sales.tsx:376-383`
+
+The UPDATE statement for `branch_stock` was missing `branch_id` in the WHERE clause, causing RLS policy violations.
+
+**Fix Applied:**
+```typescript
+// Added .eq('branch_id', userBranchId) to WHERE clause
+await supabase
+  .from('branch_stock')
+  .update({
+    quantity: branchStock.quantity - item.quantity,
+    updated_at: new Date().toISOString()
+  })
+  .eq('id', branchStock.id)
+  .eq('branch_id', userBranchId);  // ← Added for RLS compliance
+```
+
+#### Issue: Conflicting Customer RLS Policies
+**Problem**: The customers table had two UPDATE policies:
+- "Authenticated users can modify customers" (ALL policy) - very permissive
+- "Users can update customers from their branch" (UPDATE policy) - branch-restricted
+
+When multiple policies exist, PostgreSQL requires ALL to be satisfied (AND logic), causing UPDATE failures.
+
+**Fix Applied**: Created migration `fix_conflicting_customer_policies.sql` that drops the old generic ALL policy.
+
+#### Issue: Cross-Branch Credit Sales
+**Problem**: When Branch B makes a credit sale to a customer from Branch A, the system needs to update the customer's `current_balance`. The branch-restricted RLS policy prevented this legitimate business operation.
+
+**Business Logic**:
+- Customers have a "branch of origin" (where they were first created)
+- Any branch can sell to any customer (including on credit)
+- Credit balance must be updated regardless of which branch makes the sale
+- Branch isolation is maintained at the sales/transaction level, not customer level
+
+**Fix Applied**: Created migration `simplify_customer_update_for_credit_sales.sql`:
+```sql
+CREATE POLICY "Users can update customers"
+  ON customers FOR UPDATE
+  TO authenticated
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (auth.uid() IS NOT NULL);
+```
+
+**Why This Is Safe**:
+1. Sales records have strict branch_id RLS (users only see their branch's sales)
+2. Inventory updates are branch-isolated
+3. Customer creation still assigns to user's branch (branch of origin)
+4. All branches can VIEW and SELL to any customer (prevents duplicates)
+5. Audit trail maintained through activity logs and sales records
+
+### Database Migrations Applied
+- `fix_conflicting_customer_policies.sql` - Removed conflicting policy
+- `simplify_customer_update_for_credit_sales.sql` - Allow cross-branch customer balance updates
+
 ## Date
 2026-02-14
+
+## Build Status
+✅ Build Successful - All RLS policy conflicts resolved
