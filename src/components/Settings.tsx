@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import {
   Settings as SettingsIcon, Globe, Building2, Shield, Save, Receipt,
   Truck, Heart, Bell, Package, CreditCard, FileText, QrCode, CheckCircle, Loader2,
-  Database, Download, Upload, HardDrive, Clock, Wifi, WifiOff, RefreshCw, FolderOpen, AlertCircle
+  Database, Download, Upload, HardDrive, Clock, Wifi, WifiOff, RefreshCw, FolderOpen, AlertCircle, MessageSquare
 } from 'lucide-react';
 import { createBackup, downloadBackupAsJSON, downloadBackupAsExcel, restoreFromBackup, getLastBackupTime } from '../lib/backup';
 import { useAutoBackup } from '../hooks/useAutoBackup';
@@ -14,7 +14,7 @@ import { diskBackupManager } from '../lib/diskBackup';
 
 type SettingsMap = Record<string, string>;
 
-const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'backup', 'language'] as const;
+const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'backup', 'language'] as const;
 type Tab = typeof TABS[number];
 
 export function Settings() {
@@ -53,7 +53,7 @@ export function Settings() {
       const { data: keyValueSettings, error: kvError } = await supabase.from('settings').select('key, value');
       const { data: globalSettings, error: gsError } = await supabase
         .from('settings')
-        .select('salla_api_key, business_whatsapp')
+        .select('salla_api_key, business_whatsapp, sms_api_key, sms_sender_id, sms_provider_url, sms_provider_name, sms_enabled')
         .eq('id', 1)
         .maybeSingle();
 
@@ -65,6 +65,11 @@ export function Settings() {
       if (globalSettings) {
         if (globalSettings.salla_api_key) map['salla_api_key'] = globalSettings.salla_api_key;
         if (globalSettings.business_whatsapp) map['business_whatsapp'] = globalSettings.business_whatsapp;
+        if (globalSettings.sms_api_key) map['sms_api_key'] = globalSettings.sms_api_key;
+        if (globalSettings.sms_sender_id) map['sms_sender_id'] = globalSettings.sms_sender_id;
+        if (globalSettings.sms_provider_url) map['sms_provider_url'] = globalSettings.sms_provider_url;
+        if (globalSettings.sms_provider_name) map['sms_provider_name'] = globalSettings.sms_provider_name;
+        map['sms_enabled'] = globalSettings.sms_enabled ? 'true' : 'false';
       }
 
       setSettings(map);
@@ -83,13 +88,17 @@ export function Settings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const globalSettingsKeys = ['salla_api_key', 'business_whatsapp'];
+      const globalSettingsKeys = ['salla_api_key', 'business_whatsapp', 'sms_api_key', 'sms_sender_id', 'sms_provider_url', 'sms_provider_name', 'sms_enabled'];
       const globalSettingsUpdate: any = {};
       const keyValueUpdates: any[] = [];
 
       Object.entries(settings).forEach(([key, value]) => {
         if (globalSettingsKeys.includes(key)) {
-          globalSettingsUpdate[key] = value;
+          if (key === 'sms_enabled') {
+            globalSettingsUpdate[key] = value === 'true';
+          } else {
+            globalSettingsUpdate[key] = value;
+          }
         } else {
           keyValueUpdates.push({
             key,
@@ -239,6 +248,7 @@ export function Settings() {
     pos: { icon: CreditCard, label: 'POS & Payments', labelAr: 'نقاط البيع والدفع' },
     inventory: { icon: Package, label: 'Inventory', labelAr: 'المخزون' },
     loyalty: { icon: Heart, label: 'Loyalty', labelAr: 'الولاء' },
+    sms: { icon: MessageSquare, label: 'SMS Gateway', labelAr: 'الرسائل النصية' },
     backup: { icon: Database, label: 'Backup & Restore', labelAr: 'النسخ الاحتياطي' },
     language: { icon: Globe, label: 'Language', labelAr: 'اللغة والعرض' },
   };
@@ -499,6 +509,109 @@ export function Settings() {
                 'Earn points on purchases', 'كسب نقاط على المشتريات')}
               {renderInput('loyalty_points_per_sar', 'Points per SAR', 'نقاط لكل ريال', { type: 'number', dir: 'ltr' })}
               {renderInput('loyalty_redemption_rate', 'Points for 1 SAR Discount', 'نقاط مقابل 1 ريال خصم', { type: 'number', dir: 'ltr' })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'sms' && (
+          <div className="grid grid-cols-1 gap-6">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+              <div className="flex items-start gap-3">
+                <MessageSquare className="w-6 h-6 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    {isRTL ? 'إعدادات بوابة الرسائل النصية' : 'SMS Gateway Configuration'}
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-3">
+                    {isRTL
+                      ? 'قم بتكوين إعدادات بوابة الرسائل النصية لإرسال رسائل جماعية للعملاء عبر مزود خدمة احترافي مثل Unifonic أو Yamamah.'
+                      : 'Configure SMS gateway settings to send bulk messages to customers through a professional SMS provider like Unifonic or Yamamah.'}
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                    <span className="px-2 py-1 bg-white rounded border border-gray-200">✓ Unifonic</span>
+                    <span className="px-2 py-1 bg-white rounded border border-gray-200">✓ Yamamah</span>
+                    <span className="px-2 py-1 bg-white rounded border border-gray-200">✓ {isRTL ? 'مزودات أخرى' : 'Other Providers'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'الإعدادات الأساسية' : 'Basic Settings'}</h3>
+
+                {renderToggle('sms_enabled', 'Enable SMS Feature', 'تفعيل خدمة الرسائل النصية',
+                  'Enable bulk SMS messaging', 'تفعيل إرسال الرسائل النصية الجماعية')}
+
+                {renderSelect('sms_provider_name', 'SMS Provider', 'مزود خدمة الرسائل', [
+                  { value: 'Unifonic', label: 'Unifonic', labelAr: 'Unifonic' },
+                  { value: 'Yamamah', label: 'Yamamah', labelAr: 'Yamamah' },
+                  { value: 'Generic', label: 'Other/Generic', labelAr: 'آخر / عام' },
+                ])}
+
+                {renderInput('sms_sender_id', 'Sender ID/Name', 'اسم المرسل', {
+                  dir: 'ltr',
+                  placeholder: 'BLOOV'
+                })}
+
+                <div className="text-xs text-gray-500 p-3 bg-gray-50 rounded-lg">
+                  <strong>{isRTL ? 'ملاحظة:' : 'Note:'}</strong> {isRTL
+                    ? 'اسم المرسل هو ما يظهر للعميل عند استلام الرسالة (مثل: BLOOV). تأكد من تسجيله لدى مزود الخدمة.'
+                    : 'Sender ID is what appears to customers when receiving SMS (e.g., BLOOV). Make sure it\'s registered with your provider.'}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'إعدادات API' : 'API Settings'}</h3>
+
+                {renderInput('sms_api_key', 'API Key', 'مفتاح API', {
+                  type: 'password',
+                  dir: 'ltr',
+                  placeholder: '••••••••••••••••'
+                })}
+
+                {renderInput('sms_provider_url', 'API Endpoint URL', 'رابط API', {
+                  dir: 'ltr',
+                  placeholder: 'https://api.unifonic.com/rest/SMS/messages'
+                })}
+
+                <div className="text-xs text-gray-500 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <AlertCircle className="w-4 h-4 inline mr-1 text-yellow-600" />
+                  <strong>{isRTL ? 'مهم:' : 'Important:'}</strong> {isRTL
+                    ? 'احتفظ بمفتاح API الخاص بك بشكل آمن. لا تشاركه مع أحد.'
+                    : 'Keep your API key secure. Never share it with anyone.'}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
+                {isRTL ? 'إعدادات المزودات الشائعة' : 'Common Provider Settings'}
+              </h3>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    Unifonic
+                  </h4>
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <p><strong>{isRTL ? 'رابط API:' : 'API URL:'}</strong> <code className="bg-white px-2 py-0.5 rounded text-xs">https://api.unifonic.com/rest/SMS/messages</code></p>
+                    <p><strong>{isRTL ? 'المعاملات:' : 'Parameters:'}</strong> AppSid, SenderID, Recipient, Body</p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    Yamamah
+                  </h4>
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <p><strong>{isRTL ? 'رابط API:' : 'API URL:'}</strong> <code className="bg-white px-2 py-0.5 rounded text-xs">{isRTL ? 'حسب مزود الخدمة' : 'Per provider documentation'}</code></p>
+                    <p><strong>{isRTL ? 'المعاملات:' : 'Parameters:'}</strong> sender, recipient, message</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
