@@ -16,6 +16,8 @@ import {
   Receipt,
   Store,
   Brain,
+  Building2,
+  DollarSign,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,21 +26,23 @@ interface SidebarProps {
 }
 
 const MENU_ACCESS: Record<string, string[]> = {
-  dashboard: ['admin', 'viewer'],
-  sales: ['admin', 'accountant', 'salesperson', 'viewer'],
-  purchases: ['admin', 'accountant', 'viewer'],
-  expenses: ['admin', 'accountant', 'viewer'],
-  products: ['admin', 'accountant', 'salesperson', 'viewer'],
-  inventory: ['admin', 'accountant', 'salesperson', 'viewer'],
-  customers: ['admin', 'accountant', 'viewer'],
-  suppliers: ['admin', 'accountant', 'viewer'],
-  partners: ['admin', 'viewer'],
-  salla: ['admin', 'accountant'],
-  cashregister: ['admin', 'accountant', 'viewer'],
-  reports: ['admin', 'accountant', 'viewer'],
-  aianalysis: ['admin', 'accountant', 'viewer'],
-  users: ['admin'],
-  settings: ['admin'],
+  dashboard: ['admin', 'viewer', 'super_admin'],
+  sales: ['admin', 'accountant', 'salesperson', 'viewer', 'super_admin'],
+  purchases: ['admin', 'accountant', 'viewer', 'super_admin'],
+  expenses: ['admin', 'accountant', 'viewer', 'super_admin'],
+  products: ['admin', 'accountant', 'salesperson', 'viewer', 'super_admin'],
+  inventory: ['admin', 'accountant', 'salesperson', 'viewer', 'super_admin'],
+  customers: ['admin', 'accountant', 'viewer', 'super_admin'],
+  suppliers: ['admin', 'accountant', 'viewer', 'super_admin'],
+  partners: ['admin', 'viewer', 'super_admin'],
+  branches: ['admin', 'super_admin'],
+  setupexpenses: ['admin', 'super_admin'],
+  salla: ['admin', 'accountant', 'super_admin'],
+  cashregister: ['admin', 'accountant', 'viewer', 'super_admin'],
+  reports: ['admin', 'accountant', 'viewer', 'super_admin'],
+  aianalysis: ['admin', 'accountant', 'viewer', 'super_admin'],
+  users: ['admin', 'super_admin'],
+  settings: ['admin', 'super_admin'],
 };
 
 export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
@@ -50,11 +54,13 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'sales', icon: ShoppingCart, label: t('nav.sales') },
     { id: 'purchases', icon: ShoppingBag, label: t('nav.purchases') },
     { id: 'expenses', icon: Receipt, label: isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses' },
+    { id: 'setupexpenses', icon: DollarSign, label: isRTL ? 'مصاريف التأسيس' : 'Setup Expenses' },
     { id: 'products', icon: Package, label: t('nav.products') },
     { id: 'inventory', icon: Warehouse, label: t('nav.inventory') },
     { id: 'customers', icon: Users, label: t('nav.customers') },
     { id: 'suppliers', icon: Truck, label: t('nav.suppliers') },
     { id: 'partners', icon: UsersRound, label: t('nav.partners') },
+    { id: 'branches', icon: Building2, label: isRTL ? 'الفروع' : 'Branches' },
     { id: 'salla', icon: Store, label: isRTL ? 'سلة' : 'Salla' },
     { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
     { id: 'reports', icon: FileText, label: t('nav.reports') },

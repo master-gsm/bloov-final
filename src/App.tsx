@@ -23,24 +23,28 @@ import { Settings } from './components/Settings';
 import { CashRegister } from './components/CashRegister';
 import { SallaOrders } from './components/SallaOrders';
 import { AIAnalysis } from './components/AIAnalysis';
+import Branches from './components/Branches';
+import SetupExpenses from './components/SetupExpenses';
 import { supabase } from './lib/supabase';
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
-  dashboard: ['admin', 'viewer'],
-  sales: ['admin', 'accountant', 'salesperson', 'viewer'],
-  purchases: ['admin', 'accountant', 'viewer'],
-  expenses: ['admin', 'accountant', 'viewer'],
-  products: ['admin', 'accountant', 'salesperson', 'viewer'],
-  inventory: ['admin', 'accountant', 'salesperson', 'viewer'],
-  customers: ['admin', 'accountant', 'viewer'],
-  suppliers: ['admin', 'accountant', 'viewer'],
-  partners: ['admin', 'viewer'],
-  salla: ['admin', 'accountant'],
-  cashregister: ['admin', 'accountant', 'viewer'],
-  reports: ['admin', 'accountant', 'viewer'],
-  aianalysis: ['admin', 'accountant', 'viewer'],
-  users: ['admin'],
-  settings: ['admin'],
+  dashboard: ['admin', 'viewer', 'super_admin'],
+  sales: ['admin', 'accountant', 'salesperson', 'viewer', 'super_admin'],
+  purchases: ['admin', 'accountant', 'viewer', 'super_admin'],
+  expenses: ['admin', 'accountant', 'viewer', 'super_admin'],
+  setupexpenses: ['admin', 'super_admin'],
+  products: ['admin', 'accountant', 'salesperson', 'viewer', 'super_admin'],
+  inventory: ['admin', 'accountant', 'salesperson', 'viewer', 'super_admin'],
+  customers: ['admin', 'accountant', 'viewer', 'super_admin'],
+  suppliers: ['admin', 'accountant', 'viewer', 'super_admin'],
+  partners: ['admin', 'viewer', 'super_admin'],
+  branches: ['admin', 'super_admin'],
+  salla: ['admin', 'accountant', 'super_admin'],
+  cashregister: ['admin', 'accountant', 'viewer', 'super_admin'],
+  reports: ['admin', 'accountant', 'viewer', 'super_admin'],
+  aianalysis: ['admin', 'accountant', 'viewer', 'super_admin'],
+  users: ['admin', 'super_admin'],
+  settings: ['admin', 'super_admin'],
 };
 
 function AppContent() {
@@ -145,9 +149,11 @@ function AppContent() {
       case 'sales': return <Sales />;
       case 'purchases': return <Purchases />;
       case 'expenses': return <Expenses />;
+      case 'setupexpenses': return <SetupExpenses />;
       case 'inventory': return <Inventory />;
       case 'customers': return <Customers />;
       case 'suppliers': return <Suppliers />;
+      case 'branches': return <Branches />;
       case 'salla': return <SallaOrders />;
       case 'cashregister': return <CashRegister />;
       case 'reports': return <Reports />;
