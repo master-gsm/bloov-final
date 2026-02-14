@@ -51,10 +51,28 @@ export function Inventory() {
   const [countQty, setCountQty] = useState('');
   const [countNotes, setCountNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
+    loadUserBranch();
   }, []);
+
+  const loadUserBranch = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('branch_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) setUserBranchId(data.branch_id);
+    } catch (err) {
+      console.error('Error loading user branch:', err);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -83,8 +101,16 @@ export function Inventory() {
     setSubmitting(true);
     const qty = parseInt(damageQty);
     const inv = inventory.find(i => i.product_id === damageProductId);
-    if (inv) {
-      await supabase.from('inventory').update({ quantity: Math.max(0, inv.quantity - qty), last_updated: new Date().toISOString() }).eq('id', inv.id);
+    if (inv && userBranchId) {
+      await supabase
+        .from('inventory')
+        .update({
+          quantity: Math.max(0, inv.quantity - qty),
+          last_updated: new Date().toISOString()
+        })
+        .eq('id', inv.id)
+        .eq('product_id', damageProductId)
+        .eq('branch_id', userBranchId);
     }
     await supabase.from('inventory_movements').insert({
       product_id: damageProductId,
@@ -107,9 +133,17 @@ export function Inventory() {
     setSubmitting(true);
     const newQty = parseInt(countQty);
     const inv = inventory.find(i => i.product_id === countProductId);
-    if (inv) {
+    if (inv && userBranchId) {
       const diff = newQty - inv.quantity;
-      await supabase.from('inventory').update({ quantity: newQty, last_updated: new Date().toISOString() }).eq('id', inv.id);
+      await supabase
+        .from('inventory')
+        .update({
+          quantity: newQty,
+          last_updated: new Date().toISOString()
+        })
+        .eq('id', inv.id)
+        .eq('product_id', countProductId)
+        .eq('branch_id', userBranchId);
       await supabase.from('inventory_movements').insert({
         product_id: countProductId,
         movement_type: 'adjustment',

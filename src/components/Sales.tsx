@@ -109,11 +109,29 @@ export function Sales() {
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [showQuickRegister, setShowQuickRegister] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
     checkAdmin();
+    loadUserBranch();
   }, []);
+
+  const loadUserBranch = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('branch_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) setUserBranchId(data.branch_id);
+    } catch (err) {
+      console.error('Error loading user branch:', err);
+    }
+  };
 
   const checkAdmin = async () => {
     if (!user) return;
@@ -322,6 +340,7 @@ export function Sales() {
           source: saleSource,
           salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
           salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
+          branch_id: userBranchId,
           created_by: user?.id,
         })
         .select('*, customers(name, name_ar, phone)')
@@ -344,14 +363,43 @@ export function Sales() {
 
       for (const item of saleItems) {
         if (!item.product_id) continue;
+
+        if (userBranchId) {
+          const { data: branchStock } = await supabase
+            .from('branch_stock')
+            .select('id, quantity')
+            .eq('product_id', item.product_id)
+            .eq('branch_id', userBranchId)
+            .maybeSingle();
+
+          if (branchStock) {
+            await supabase
+              .from('branch_stock')
+              .update({
+                quantity: branchStock.quantity - item.quantity,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', branchStock.id);
+          }
+        }
+
         const { data: inv } = await supabase
           .from('inventory')
           .select('id, quantity')
           .eq('product_id', item.product_id)
+          .eq('branch_id', userBranchId)
           .maybeSingle();
 
         if (inv) {
-          await supabase.from('inventory').update({ quantity: inv.quantity - item.quantity, last_updated: new Date().toISOString() }).eq('id', inv.id);
+          await supabase
+            .from('inventory')
+            .update({
+              quantity: inv.quantity - item.quantity,
+              last_updated: new Date().toISOString()
+            })
+            .eq('id', inv.id)
+            .eq('product_id', item.product_id)
+            .eq('branch_id', userBranchId);
         }
 
         await supabase.from('inventory_movements').insert({
