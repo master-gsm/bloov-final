@@ -11,6 +11,7 @@ import {
 import { createBackup, downloadBackupAsJSON, downloadBackupAsExcel, restoreFromBackup, getLastBackupTime } from '../lib/backup';
 import { useAutoBackup } from '../hooks/useAutoBackup';
 import { diskBackupManager } from '../lib/diskBackup';
+import BackupSettings from './BackupSettings';
 
 type SettingsMap = Record<string, string>;
 
@@ -1022,6 +1023,8 @@ export function Settings() {
                 </ul>
               </div>
             </div>
+
+            <BackupSettings />
           </div>
         )}
 

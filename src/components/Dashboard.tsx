@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { TrendingUp, TrendingDown, DollarSign, Package, Users, ShoppingCart } from 'lucide-react';
+import BackupMonitor from './BackupMonitor';
 
 interface Partner {
   id: string;
@@ -144,6 +145,8 @@ export function Dashboard() {
           {isRTL ? 'نظام محاسبي متكامل صُمم خصيصاً لبلوف' : 'A comprehensive accounting system designed specifically for BLOOV'}
         </p>
       </div>
+
+      <BackupMonitor />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {statCards.map((card) => {
