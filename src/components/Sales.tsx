@@ -323,22 +323,22 @@ export function Sales() {
         .from('sales')
         .insert({
           sale_number: saleNumber,
-          customer_id: selectedCustomer || null,
-          customer_name: !selectedCustomer ? walkinName || null : null,
-          customer_phone: !selectedCustomer ? walkinPhone || null : null,
+          customer_id: selectedCustomer && selectedCustomer.trim() !== '' ? selectedCustomer : null,
+          customer_name: !selectedCustomer || selectedCustomer.trim() === '' ? (walkinName && walkinName.trim() !== '' ? walkinName : null) : null,
+          customer_phone: !selectedCustomer || selectedCustomer.trim() === '' ? (walkinPhone && walkinPhone.trim() !== '' ? walkinPhone : null) : null,
           sale_date: new Date().toISOString(),
           status: 'confirmed',
           subtotal,
           tax: vatAmount,
           discount: saleDiscount,
           delivery_charge: deliveryCharge,
-          delivery_address: deliveryAddress || null,
-          card_message: cardMessage || null,
+          delivery_address: deliveryAddress && deliveryAddress.trim() !== '' ? deliveryAddress : null,
+          card_message: cardMessage && cardMessage.trim() !== '' ? cardMessage : null,
           total,
           paid_amount: isCredit ? 0 : total,
           payment_status: isCredit ? 'unpaid' : 'paid',
           payment_method: paymentMethod,
-          notes: saleNotes || null,
+          notes: saleNotes && saleNotes.trim() !== '' ? saleNotes : null,
           source: saleSource,
           salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
           salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
@@ -846,15 +846,22 @@ export function Sales() {
                 </div>
               </div>
 
-              {saleItems.length === 0 ? (
+{saleItems.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-30" />
                   <p>{isRTL ? 'أضف منتجات للفاتورة' : 'Add items to the sale'}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
+                  <div className={`flex items-center gap-3 px-3 py-2 bg-teal-50 rounded-lg border border-teal-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className="flex-1 text-sm font-bold text-teal-900">{isRTL ? 'المنتج' : 'Product'}</div>
+                    <div className="w-20 text-sm font-bold text-teal-900 text-center">{isRTL ? 'الكمية' : 'Qty'}</div>
+                    <div className="w-28 text-sm font-bold text-teal-900 text-center">{isRTL ? 'السعر' : 'Price'}</div>
+                    <div className="w-28 text-sm font-bold text-teal-900 text-center">{isRTL ? 'الإجمالي' : 'Total'}</div>
+                    {canEdit && <div className="w-8"></div>}
+                  </div>
                   {saleItems.map((item, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div key={index} className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
                       <select value={item.product_id} onChange={(e) => updateItem(index, 'product_id', e.target.value)} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent">
                         <option value="">{isRTL ? 'اختر منتج' : 'Select Product'}</option>
                         {products
@@ -870,8 +877,8 @@ export function Sales() {
                             <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name} ({formatCurrency(p.sale_price)})</option>
                           ))}
                       </select>
-                      <input type="number" min="1" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" disabled={!canEdit} />
-                      <input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" disabled={!canEdit} />
+                      <input type="number" min="1" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} placeholder={isRTL ? 'الكمية' : 'Qty'} className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" disabled={!canEdit} />
+                      <input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} placeholder={isRTL ? 'السعر' : 'Price'} className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-teal-500 focus:border-transparent" disabled={!canEdit} />
                       <div className="w-28 text-sm font-bold text-gray-900 text-center">{formatCurrency(item.total)}</div>
                       {canEdit && <button onClick={() => removeItem(index)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>}
                     </div>
