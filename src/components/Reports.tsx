@@ -2,47 +2,104 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { FileText, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, Receipt, ShieldAlert } from 'lucide-react';
+import {
+  FileText, TrendingUp, TrendingDown, DollarSign, Calendar,
+  BarChart3, Receipt, ShieldAlert, Package, AlertTriangle,
+  Building2, Download, FileSpreadsheet
+} from 'lucide-react';
+import * as XLSX from 'xlsx';
 
-interface SalesData {
-  total: number;
-  storeTotal: number;
-  sallaTotal: number;
-  totalCost: number;
-  grossProfit: number;
-  count: number;
-}
-
-interface PurchasesData {
-  total: number;
-  count: number;
-}
-
-interface ExpensesData {
-  total: number;
-  count: number;
-}
-
-interface TopProduct {
-  product_name: string;
-  product_name_ar: string;
-  total_qty: number;
-  total_amount: number;
+interface ReportData {
+  sales: {
+    total: number;
+    totalVAT: number;
+    totalWithoutVAT: number;
+    count: number;
+    totalCost: number;
+    grossProfit: number;
+    bySource: {
+      store: number;
+      salla: number;
+    };
+  };
+  purchases: {
+    total: number;
+    totalVAT: number;
+    totalWithoutVAT: number;
+    count: number;
+  };
+  expenses: {
+    total: number;
+    operating: number;
+    setup: number;
+    count: number;
+  };
+  inventory: {
+    totalValue: number;
+    totalQuantity: number;
+    lowStock: number;
+    outOfStock: number;
+  };
+  wastage: {
+    totalValue: number;
+    totalQuantity: number;
+    items: Array<{
+      product_name: string;
+      product_name_ar: string;
+      quantity: number;
+      value: number;
+    }>;
+  };
+  slowMoving: Array<{
+    product_name: string;
+    product_name_ar: string;
+    current_stock: number;
+    last_sale_date: string | null;
+    days_since_sale: number;
+  }>;
+  topProducts: Array<{
+    product_name: string;
+    product_name_ar: string;
+    total_qty: number;
+    total_amount: number;
+  }>;
+  branches: Array<{
+    branch_id: string;
+    branch_name: string;
+    branch_name_ar: string;
+    sales: number;
+    expenses: number;
+    profit: number;
+  }>;
 }
 
 export function Reports() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const isRTL = language === 'ar';
+
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [period, setPeriod] = useState<'today' | 'week' | 'month' | 'year'>('month');
-  const [salesData, setSalesData] = useState<SalesData>({ total: 0, storeTotal: 0, sallaTotal: 0, totalCost: 0, grossProfit: 0, count: 0 });
-  const [purchasesData, setPurchasesData] = useState<PurchasesData>({ total: 0, count: 0 });
-  const [expensesData, setExpensesData] = useState<ExpensesData>({ total: 0, count: 0 });
-  const [inventoryValue, setInventoryValue] = useState(0);
-  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [recentSales, setRecentSales] = useState<any[]>([]);
+
+  // Date filter state
+  const [dateFrom, setDateFrom] = useState(() => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 1);
+    return date.toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Report data state
+  const [reportData, setReportData] = useState<ReportData>({
+    sales: { total: 0, totalVAT: 0, totalWithoutVAT: 0, count: 0, totalCost: 0, grossProfit: 0, bySource: { store: 0, salla: 0 } },
+    purchases: { total: 0, totalVAT: 0, totalWithoutVAT: 0, count: 0 },
+    expenses: { total: 0, operating: 0, setup: 0, count: 0 },
+    inventory: { totalValue: 0, totalQuantity: 0, lowStock: 0, outOfStock: 0 },
+    wastage: { totalValue: 0, totalQuantity: 0, items: [] },
+    slowMoving: [],
+    topProducts: [],
+    branches: []
+  });
 
   useEffect(() => {
     checkAdminAndLoad();
@@ -52,7 +109,7 @@ export function Reports() {
     if (isAdmin) {
       loadReportData();
     }
-  }, [period, isAdmin]);
+  }, [dateFrom, dateTo, isAdmin]);
 
   const checkAdminAndLoad = async () => {
     if (!user) return;
@@ -67,103 +124,249 @@ export function Reports() {
     }
   };
 
-  const getDateRange = () => {
-    const now = new Date();
-    const start = new Date();
-    switch (period) {
-      case 'today': start.setHours(0, 0, 0, 0); break;
-      case 'week': start.setDate(now.getDate() - 7); break;
-      case 'month': start.setMonth(now.getMonth() - 1); break;
-      case 'year': start.setFullYear(now.getFullYear() - 1); break;
-    }
-    return { start: start.toISOString(), end: now.toISOString() };
-  };
-
   const loadReportData = async () => {
     setLoading(true);
     try {
-      const { start, end } = getDateRange();
+      const startDate = new Date(dateFrom).toISOString();
+      const endDate = new Date(dateTo + 'T23:59:59').toISOString();
 
-      const [salesRes, purchasesRes, expensesRes, recentRes, inventoryRes] = await Promise.all([
+      // Fetch all data in parallel
+      const [
+        salesRes,
+        purchasesRes,
+        operatingExpensesRes,
+        setupExpensesRes,
+        inventoryRes,
+        wastageRes,
+        saleItemsRes,
+        branchesRes
+      ] = await Promise.all([
+        // Sales data
         supabase
           .from('sales')
-          .select('total, total_cost, gross_profit, source')
+          .select('total, tax, total_cost, gross_profit, source, branch_id')
           .eq('status', 'confirmed')
-          .gte('sale_date', start)
-          .lte('sale_date', end),
+          .gte('sale_date', startDate)
+          .lte('sale_date', endDate),
+
+        // Purchases data
         supabase
           .from('purchases')
-          .select('total')
+          .select('total, tax')
           .in('status', ['confirmed', 'received'])
-          .gte('purchase_date', start)
-          .lte('purchase_date', end),
+          .gte('purchase_date', startDate)
+          .lte('purchase_date', endDate),
+
+        // Operating expenses
         supabase
           .from('operating_expenses')
-          .select('amount')
-          .gte('expense_date', start)
-          .lte('expense_date', end),
+          .select('amount, branch_id')
+          .gte('expense_date', startDate)
+          .lte('expense_date', endDate),
+
+        // Setup expenses
         supabase
-          .from('sales')
-          .select('*, customers(name, name_ar)')
-          .eq('status', 'confirmed')
-          .order('sale_date', { ascending: false })
-          .limit(10),
+          .from('setup_expenses')
+          .select('amount')
+          .gte('expense_date', startDate)
+          .lte('expense_date', endDate),
+
+        // Current inventory
         supabase
           .from('inventory')
-          .select('quantity, products!inner(purchase_price)')
+          .select(`
+            quantity,
+            reorder_level,
+            products!inner(
+              name,
+              name_ar,
+              purchase_price,
+              selling_price
+            )
+          `),
+
+        // Wastage data
+        supabase
+          .from('wastage')
+          .select(`
+            quantity,
+            products!inner(
+              name,
+              name_ar,
+              purchase_price
+            )
+          `)
+          .gte('wastage_date', startDate)
+          .lte('wastage_date', endDate),
+
+        // Sale items for top products
+        supabase
+          .from('sale_items')
+          .select(`
+            quantity,
+            total,
+            sales!inner(sale_date, status),
+            products!inner(name, name_ar)
+          `)
+          .eq('sales.status', 'confirmed')
+          .gte('sales.sale_date', startDate)
+          .lte('sales.sale_date', endDate),
+
+        // Branches
+        supabase.from('branches').select('*')
       ]);
 
-      const storeTotalAmount = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
-      const sallaTotalAmount = salesRes.data?.filter(s => s.source === 'salla').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
-      const salesTotalAmount = storeTotalAmount + sallaTotalAmount;
-      const salesTotalCost = salesRes.data?.reduce((sum, s) => sum + (s.total_cost || 0), 0) || 0;
-      const salesGrossProfit = salesRes.data?.reduce((sum, s) => sum + (s.gross_profit || 0), 0) || 0;
-      const purchasesTotalAmount = purchasesRes.data?.reduce((sum, p) => sum + (p.total || 0), 0) || 0;
-      const expensesTotalAmount = expensesRes.data?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
-      const inventoryValue = inventoryRes.data?.reduce((sum, inv: any) => sum + (inv.quantity * (inv.products?.purchase_price || 0)), 0) || 0;
+      // Process sales data
+      const salesTotal = salesRes.data?.reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
+      const salesVAT = salesRes.data?.reduce((sum, s) => sum + Number(s.tax || 0), 0) || 0;
+      const salesTotalCost = salesRes.data?.reduce((sum, s) => sum + Number(s.total_cost || 0), 0) || 0;
+      const salesGrossProfit = salesRes.data?.reduce((sum, s) => sum + Number(s.gross_profit || 0), 0) || 0;
+      const storeTotal = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
+      const sallaTotal = salesRes.data?.filter(s => s.source === 'salla').reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
 
-      setSalesData({
-        total: salesTotalAmount,
-        storeTotal: storeTotalAmount,
-        sallaTotal: sallaTotalAmount,
-        totalCost: salesTotalCost,
-        grossProfit: salesGrossProfit,
-        count: salesRes.data?.length || 0
+      // Process purchases data
+      const purchasesTotal = purchasesRes.data?.reduce((sum, p) => sum + Number(p.total || 0), 0) || 0;
+      const purchasesVAT = purchasesRes.data?.reduce((sum, p) => sum + Number(p.tax || 0), 0) || 0;
+
+      // Process expenses data
+      const operatingExpensesTotal = operatingExpensesRes.data?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
+      const setupExpensesTotal = setupExpensesRes.data?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
+
+      // Process inventory data
+      let totalInventoryValue = 0;
+      let totalInventoryQty = 0;
+      let lowStockCount = 0;
+      let outOfStockCount = 0;
+
+      inventoryRes.data?.forEach((inv: any) => {
+        const qty = Number(inv.quantity || 0);
+        const price = Number(inv.products?.purchase_price || 0);
+        totalInventoryValue += qty * price;
+        totalInventoryQty += qty;
+
+        if (qty === 0) {
+          outOfStockCount++;
+        } else if (inv.reorder_level && qty <= inv.reorder_level) {
+          lowStockCount++;
+        }
       });
-      setPurchasesData({ total: purchasesTotalAmount, count: purchasesRes.data?.length || 0 });
-      setExpensesData({ total: expensesTotalAmount, count: expensesRes.data?.length || 0 });
-      setRecentSales(recentRes.data || []);
-      setInventoryValue(inventoryValue);
 
-      const { data: saleItemsData } = await supabase
-        .from('sale_items')
-        .select('quantity, total, products(name, name_ar)')
-        .limit(100);
+      // Process wastage data
+      const wastageItems: any[] = [];
+      let totalWastageValue = 0;
+      let totalWastageQty = 0;
 
-      if (saleItemsData) {
-        const productMap = new Map<string, TopProduct>();
-        saleItemsData.forEach((item: any) => {
-          if (!item.products) return;
-          const key = item.products.name;
-          const existing = productMap.get(key);
-          if (existing) {
-            existing.total_qty += Number(item.quantity);
-            existing.total_amount += Number(item.total);
-          } else {
-            productMap.set(key, {
-              product_name: item.products.name,
-              product_name_ar: item.products.name_ar,
-              total_qty: Number(item.quantity),
-              total_amount: Number(item.total),
-            });
-          }
+      wastageRes.data?.forEach((w: any) => {
+        const qty = Number(w.quantity || 0);
+        const price = Number(w.products?.purchase_price || 0);
+        const value = qty * price;
+
+        totalWastageValue += value;
+        totalWastageQty += qty;
+
+        wastageItems.push({
+          product_name: w.products?.name || '',
+          product_name_ar: w.products?.name_ar || '',
+          quantity: qty,
+          value: value
         });
-        setTopProducts(
-          Array.from(productMap.values())
-            .sort((a, b) => b.total_amount - a.total_amount)
-            .slice(0, 5)
-        );
-      }
+      });
+
+      // Process top products
+      const productMap = new Map<string, any>();
+      saleItemsRes.data?.forEach((item: any) => {
+        if (!item.products) return;
+        const key = item.products.name;
+        const existing = productMap.get(key);
+        if (existing) {
+          existing.total_qty += Number(item.quantity);
+          existing.total_amount += Number(item.total);
+        } else {
+          productMap.set(key, {
+            product_name: item.products.name,
+            product_name_ar: item.products.name_ar,
+            total_qty: Number(item.quantity),
+            total_amount: Number(item.total)
+          });
+        }
+      });
+
+      const topProducts = Array.from(productMap.values())
+        .sort((a, b) => b.total_amount - a.total_amount)
+        .slice(0, 10);
+
+      // Find slow-moving products (no sales in the period)
+      const soldProductIds = new Set(saleItemsRes.data?.map((item: any) => item.products?.name));
+      const slowMoving = inventoryRes.data
+        ?.filter((inv: any) => {
+          const hasStock = Number(inv.quantity || 0) > 0;
+          const notSold = !soldProductIds.has(inv.products?.name);
+          return hasStock && notSold;
+        })
+        .map((inv: any) => ({
+          product_name: inv.products?.name || '',
+          product_name_ar: inv.products?.name_ar || '',
+          current_stock: Number(inv.quantity || 0),
+          last_sale_date: null,
+          days_since_sale: -1
+        }))
+        .slice(0, 10) || [];
+
+      // Process branch data
+      const branchData: any[] = [];
+      branchesRes.data?.forEach((branch: any) => {
+        const branchSales = salesRes.data?.filter(s => s.branch_id === branch.id).reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
+        const branchExpenses = operatingExpensesRes.data?.filter(e => e.branch_id === branch.id).reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
+        const branchProfit = branchSales - branchExpenses;
+
+        branchData.push({
+          branch_id: branch.id,
+          branch_name: branch.name,
+          branch_name_ar: branch.name_ar,
+          sales: branchSales,
+          expenses: branchExpenses,
+          profit: branchProfit
+        });
+      });
+
+      setReportData({
+        sales: {
+          total: salesTotal,
+          totalVAT: salesVAT,
+          totalWithoutVAT: salesTotal - salesVAT,
+          count: salesRes.data?.length || 0,
+          totalCost: salesTotalCost,
+          grossProfit: salesGrossProfit,
+          bySource: { store: storeTotal, salla: sallaTotal }
+        },
+        purchases: {
+          total: purchasesTotal,
+          totalVAT: purchasesVAT,
+          totalWithoutVAT: purchasesTotal - purchasesVAT,
+          count: purchasesRes.data?.length || 0
+        },
+        expenses: {
+          total: operatingExpensesTotal + setupExpensesTotal,
+          operating: operatingExpensesTotal,
+          setup: setupExpensesTotal,
+          count: (operatingExpensesRes.data?.length || 0) + (setupExpensesRes.data?.length || 0)
+        },
+        inventory: {
+          totalValue: totalInventoryValue,
+          totalQuantity: totalInventoryQty,
+          lowStock: lowStockCount,
+          outOfStock: outOfStockCount
+        },
+        wastage: {
+          totalValue: totalWastageValue,
+          totalQuantity: totalWastageQty,
+          items: wastageItems.slice(0, 10)
+        },
+        slowMoving,
+        topProducts,
+        branches: branchData
+      });
+
     } catch (err) {
       console.error('Error loading report data:', err);
     } finally {
@@ -171,14 +374,112 @@ export function Reports() {
     }
   };
 
-  const netProfit = salesData.grossProfit - expensesData.total;
-  const profitMargin = salesData.total > 0 ? ((netProfit / salesData.total) * 100).toFixed(1) : '0.0';
+  const handleQuickDateRange = (range: 'today' | 'week' | 'month' | 'quarter' | 'year') => {
+    const today = new Date();
+    const to = today.toISOString().split('T')[0];
+    let from = new Date();
+
+    switch (range) {
+      case 'today':
+        from = today;
+        break;
+      case 'week':
+        from.setDate(today.getDate() - 7);
+        break;
+      case 'month':
+        from.setMonth(today.getMonth() - 1);
+        break;
+      case 'quarter':
+        from.setMonth(today.getMonth() - 3);
+        break;
+      case 'year':
+        from.setFullYear(today.getFullYear() - 1);
+        break;
+    }
+
+    setDateFrom(from.toISOString().split('T')[0]);
+    setDateTo(to);
+  };
+
+  const exportToExcel = () => {
+    const workbook = XLSX.utils.book_new();
+
+    // Summary sheet
+    const summaryData = [
+      [isRTL ? 'التقرير المالي الشامل' : 'Comprehensive Financial Report'],
+      [isRTL ? 'نظام بلوف المحاسبي' : 'BLOOV Accounting System'],
+      [isRTL ? `الفترة: من ${dateFrom} إلى ${dateTo}` : `Period: From ${dateFrom} To ${dateTo}`],
+      [],
+      [isRTL ? 'المبيعات' : 'Sales', formatCurrency(reportData.sales.total)],
+      [isRTL ? 'ضريبة المبيعات' : 'Sales VAT', formatCurrency(reportData.sales.totalVAT)],
+      [isRTL ? 'تكلفة البضاعة المباعة' : 'Cost of Goods Sold', formatCurrency(reportData.sales.totalCost)],
+      [isRTL ? 'الربح الإجمالي' : 'Gross Profit', formatCurrency(reportData.sales.grossProfit)],
+      [],
+      [isRTL ? 'المشتريات' : 'Purchases', formatCurrency(reportData.purchases.total)],
+      [isRTL ? 'ضريبة المشتريات' : 'Purchases VAT', formatCurrency(reportData.purchases.totalVAT)],
+      [],
+      [isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses', formatCurrency(reportData.expenses.operating)],
+      [isRTL ? 'مصاريف التأسيس' : 'Setup Expenses', formatCurrency(reportData.expenses.setup)],
+      [isRTL ? 'إجمالي المصاريف' : 'Total Expenses', formatCurrency(reportData.expenses.total)],
+      [],
+      [isRTL ? 'صافي الربح' : 'Net Profit', formatCurrency(reportData.sales.grossProfit - reportData.expenses.total)],
+      [isRTL ? 'صافي الضريبة المستحقة' : 'Net VAT Payable', formatCurrency(reportData.sales.totalVAT - reportData.purchases.totalVAT)],
+    ];
+
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws1['!cols'] = [{ wch: 30 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(workbook, ws1, isRTL ? 'الملخص' : 'Summary');
+
+    // Top products sheet
+    const topProductsData = [
+      [isRTL ? 'المنتجات الأكثر مبيعاً' : 'Top Selling Products'],
+      [],
+      [isRTL ? 'المنتج' : 'Product', isRTL ? 'الكمية' : 'Quantity', isRTL ? 'المبلغ' : 'Amount']
+    ];
+    reportData.topProducts.forEach(p => {
+      topProductsData.push([
+        isRTL ? p.product_name_ar : p.product_name,
+        p.total_qty.toString(),
+        formatCurrency(p.total_amount)
+      ]);
+    });
+
+    const ws2 = XLSX.utils.aoa_to_sheet(topProductsData);
+    ws2['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(workbook, ws2, isRTL ? 'المنتجات' : 'Products');
+
+    // Branch comparison sheet
+    if (reportData.branches.length > 0) {
+      const branchData = [
+        [isRTL ? 'مقارنة الفروع' : 'Branch Comparison'],
+        [],
+        [isRTL ? 'الفرع' : 'Branch', isRTL ? 'المبيعات' : 'Sales', isRTL ? 'المصاريف' : 'Expenses', isRTL ? 'الربح' : 'Profit']
+      ];
+      reportData.branches.forEach(b => {
+        branchData.push([
+          isRTL ? b.branch_name_ar : b.branch_name,
+          formatCurrency(b.sales),
+          formatCurrency(b.expenses),
+          formatCurrency(b.profit)
+        ]);
+      });
+
+      const ws3 = XLSX.utils.aoa_to_sheet(branchData);
+      ws3['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(workbook, ws3, isRTL ? 'الفروع' : 'Branches');
+    }
+
+    XLSX.writeFile(workbook, `Financial_Report_${dateFrom}_${dateTo}.xlsx`);
+  };
 
   const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat(isRTL ? 'ar-SA' : 'en-US', { style: 'decimal', minimumFractionDigits: 2 }).format(amount);
+    new Intl.NumberFormat(isRTL ? 'ar-SA' : 'en-US', {
+      style: 'decimal',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
   if (loading) {
     return (
@@ -201,286 +502,480 @@ export function Reports() {
           </h3>
           <p className="text-gray-600">
             {isRTL
-              ? 'التقارير المالية متاحة للمديرين فقط. يرجى التواصل مع المدير للحصول على الصلاحيات المطلوبة.'
-              : 'Financial reports are available to administrators only. Please contact your administrator for access.'}
+              ? 'التقارير المالية متاحة للمديرين فقط'
+              : 'Financial reports are available to administrators only'}
           </p>
         </div>
       </div>
     );
   }
 
+  const netProfit = reportData.sales.grossProfit - reportData.expenses.total;
+  const netVAT = reportData.sales.totalVAT - reportData.purchases.totalVAT;
+  const profitMargin = reportData.sales.total > 0
+    ? ((netProfit / reportData.sales.total) * 100)
+    : 0;
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header with Date Filter */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">{t('nav.reports')}</h2>
-          <p className="text-gray-500 mt-1">{isRTL ? 'التقارير المالية والإحصائيات' : 'Financial reports and statistics'}</p>
-        </div>
-        <div className="flex items-center gap-2 bg-white rounded-lg border p-1">
-          {([
-            { key: 'today', label: isRTL ? 'اليوم' : 'Today' },
-            { key: 'week', label: isRTL ? 'أسبوع' : 'Week' },
-            { key: 'month', label: isRTL ? 'شهر' : 'Month' },
-            { key: 'year', label: isRTL ? 'سنة' : 'Year' },
-          ] as const).map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPeriod(p.key)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                period === p.key ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 rounded-xl p-5 mb-6">
-        <div className="flex items-start gap-4">
-          <div className="p-2.5 bg-white rounded-lg shadow-sm">
-            <FileText className="w-6 h-6 text-teal-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              {isRTL ? 'كيف يتم حساب صافي الربح؟' : 'How is Net Profit Calculated?'}
-            </h3>
-            <div className={`grid ${isRTL ? 'grid-cols-1 md:grid-cols-5' : 'grid-cols-1 md:grid-cols-5'} gap-2 text-sm`}>
-              <div className="bg-white rounded-lg p-3 shadow-sm">
-                <p className="text-gray-600 mb-1">{isRTL ? '١. الإيرادات' : '1. Revenue'}</p>
-                <p className="font-bold text-green-600">{formatCurrency(salesData.total)}</p>
-              </div>
-              <div className="flex items-center justify-center text-2xl text-gray-400">-</div>
-              <div className="bg-white rounded-lg p-3 shadow-sm">
-                <p className="text-gray-600 mb-1">{isRTL ? '٢. تكلفة البضاعة المباعة' : '2. COGS'}</p>
-                <p className="font-bold text-amber-600">{formatCurrency(salesData.totalCost)}</p>
-              </div>
-              <div className="flex items-center justify-center text-2xl text-gray-400">-</div>
-              <div className="bg-white rounded-lg p-3 shadow-sm">
-                <p className="text-gray-600 mb-1">{isRTL ? '٣. المصاريف التشغيلية' : '3. Operating Expenses'}</p>
-                <p className="font-bold text-orange-600">{formatCurrency(expensesData.total)}</p>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-teal-200">
-              <div className="flex items-center justify-between">
-                <p className="text-gray-700 font-semibold">
-                  {isRTL ? '= صافي الربح' : '= Net Profit'}
-                </p>
-                <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency(netProfit)}
-                </p>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                {isRTL
-                  ? 'ملاحظة: المشتريات تضاف إلى المخزون وليست مصروفات مباشرة. فقط تكلفة المنتجات المباعة يتم خصمها من الربح.'
-                  : 'Note: Purchases add to inventory and are not direct expenses. Only the cost of sold items is deducted from profit.'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-teal-100 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-teal-600" />
-            </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'مبيعات المحل' : 'Store Sales'}</p>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.storeTotal)}</p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'مبيعات محلية' : 'Local sales'}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-blue-100 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-            </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'مبيعات المتجر الإلكتروني' : 'Online Sales'}</p>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.sallaTotal)}</p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'مبيعات سلة' : 'Salla sales'}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-green-100 rounded-lg">
-              <DollarSign className="w-5 h-5 text-green-600" />
-            </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'إجمالي الإيرادات' : 'Total Revenue'}</p>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.total)}</p>
-          <p className="text-xs text-gray-400 mt-1">{salesData.count} {isRTL ? 'عملية' : 'transactions'}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-amber-100 rounded-lg">
-              <TrendingDown className="w-5 h-5 text-amber-600" />
-            </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'تكلفة البضاعة المباعة' : 'Cost of Goods Sold'}</p>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(salesData.totalCost)}</p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'تكلفة المنتجات المباعة فقط' : 'Cost of sold items only'}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-emerald-100 rounded-lg">
-              <DollarSign className="w-5 h-5 text-emerald-600" />
-            </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'إجمالي الربح' : 'Gross Profit'}</p>
-          </div>
-          <p className={`text-2xl font-bold ${salesData.grossProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            {formatCurrency(salesData.grossProfit)}
+          <p className="text-gray-500 mt-1">
+            {isRTL ? 'التقارير المالية والإحصائيات المتكاملة' : 'Comprehensive financial reports and analytics'}
           </p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'الإيرادات - تكلفة البضاعة' : 'Revenue - COGS'}</p>
+        </div>
+        <button
+          onClick={exportToExcel}
+          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 transition font-medium"
+        >
+          <FileSpreadsheet className="w-5 h-5" />
+          {isRTL ? 'تصدير Excel' : 'Export Excel'}
+        </button>
+      </div>
+
+      {/* Date Range Filter */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Calendar className="w-5 h-5 text-teal-600" />
+            <span className="font-medium">{isRTL ? 'الفترة الزمنية:' : 'Period:'}</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600">{isRTL ? 'من:' : 'From:'}</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600">{isRTL ? 'إلى:' : 'To:'}</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            {[
+              { key: 'today', label: isRTL ? 'اليوم' : 'Today' },
+              { key: 'week', label: isRTL ? 'أسبوع' : 'Week' },
+              { key: 'month', label: isRTL ? 'شهر' : 'Month' },
+              { key: 'quarter', label: isRTL ? '3 أشهر' : 'Quarter' },
+              { key: 'year', label: isRTL ? 'سنة' : 'Year' }
+            ].map((period) => (
+              <button
+                key={period.key}
+                onClick={() => handleQuickDateRange(period.key as any)}
+                className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-teal-100 hover:text-teal-700 transition font-medium"
+              >
+                {period.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Key Metrics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Sales */}
+        <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl p-6 border border-teal-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-teal-600 p-2.5 rounded-lg">
+              <DollarSign className="w-5 h-5 text-white" />
+            </div>
+            <TrendingUp className="w-5 h-5 text-teal-600" />
+          </div>
+          <p className="text-sm text-teal-700 font-medium mb-1">
+            {isRTL ? 'إجمالي المبيعات' : 'Total Sales'}
+          </p>
+          <p className="text-2xl font-bold text-teal-900">
+            {formatCurrency(reportData.sales.total)}
+          </p>
+          <p className="text-xs text-teal-600 mt-2">
+            {reportData.sales.count} {isRTL ? 'عملية بيع' : 'transactions'}
+          </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-orange-100 rounded-lg">
-              <Receipt className="w-5 h-5 text-orange-600" />
+        {/* Gross Profit */}
+        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-6 border border-emerald-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-emerald-600 p-2.5 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-white" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses'}</p>
+            <span className="text-xs font-semibold text-emerald-700 bg-emerald-200 px-2 py-1 rounded">
+              {formatPercent(profitMargin)}
+            </span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(expensesData.total)}</p>
-          <p className="text-xs text-gray-400 mt-1">{expensesData.count} {isRTL ? 'عملية' : 'transactions'}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`p-2.5 ${netProfit >= 0 ? 'bg-green-100' : 'bg-red-100'} rounded-lg`}>
-              <DollarSign className={`w-5 h-5 ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`} />
-            </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'صافي الربح' : 'Net Profit'}</p>
-          </div>
-          <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <p className="text-sm text-emerald-700 font-medium mb-1">
+            {isRTL ? 'صافي الربح' : 'Net Profit'}
+          </p>
+          <p className="text-2xl font-bold text-emerald-900">
             {formatCurrency(netProfit)}
           </p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'إجمالي الربح - المصاريف' : 'Gross Profit - OpEx'}</p>
+          <p className="text-xs text-emerald-600 mt-2">
+            {isRTL ? 'بعد خصم المصاريف' : 'After expenses'}
+          </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-purple-100 rounded-lg">
-              <BarChart3 className="w-5 h-5 text-purple-600" />
+        {/* Net VAT */}
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-blue-600 p-2.5 rounded-lg">
+              <Receipt className="w-5 h-5 text-white" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'قيمة المخزون' : 'Inventory Value'}</p>
+            {netVAT > 0 ? (
+              <TrendingDown className="w-5 h-5 text-red-500" />
+            ) : (
+              <TrendingUp className="w-5 h-5 text-green-500" />
+            )}
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(inventoryValue)}</p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'رأس المال المستثمر' : 'Capital invested'}</p>
+          <p className="text-sm text-blue-700 font-medium mb-1">
+            {isRTL ? 'صافي الضريبة' : 'Net VAT'}
+          </p>
+          <p className="text-2xl font-bold text-blue-900">
+            {formatCurrency(Math.abs(netVAT))}
+          </p>
+          <p className="text-xs text-blue-600 mt-2">
+            {netVAT > 0
+              ? (isRTL ? 'مستحقة للدفع' : 'Payable')
+              : (isRTL ? 'مستحقة الاسترداد' : 'Refundable')
+            }
+          </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-indigo-100 rounded-lg">
-              <TrendingDown className="w-5 h-5 text-indigo-600" />
+        {/* Total Expenses */}
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="bg-orange-600 p-2.5 rounded-lg">
+              <TrendingDown className="w-5 h-5 text-white" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'مشتريات المخزون' : 'Inventory Purchases'}</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(purchasesData.total)}</p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'استثمار في المخزون' : 'Investment in stock'}</p>
+          <p className="text-sm text-orange-700 font-medium mb-1">
+            {isRTL ? 'إجمالي المصاريف' : 'Total Expenses'}
+          </p>
+          <p className="text-2xl font-bold text-orange-900">
+            {formatCurrency(reportData.expenses.total)}
+          </p>
+          <p className="text-xs text-orange-600 mt-2">
+            {reportData.expenses.count} {isRTL ? 'مصروف' : 'expenses'}
+          </p>
         </div>
+      </div>
 
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-teal-100 rounded-lg">
+      {/* VAT Breakdown */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-blue-100 p-2.5 rounded-lg">
+            <Receipt className="w-5 h-5 text-blue-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900">
+            {isRTL ? 'تفصيل الضريبة (VAT)' : 'VAT Breakdown'}
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-green-50 rounded-lg p-4">
+            <p className="text-sm text-green-700 font-medium mb-2">
+              {isRTL ? 'ضريبة المبيعات المحصلة' : 'Sales VAT Collected'}
+            </p>
+            <p className="text-xl font-bold text-green-900">
+              + {formatCurrency(reportData.sales.totalVAT)}
+            </p>
+          </div>
+          <div className="bg-red-50 rounded-lg p-4">
+            <p className="text-sm text-red-700 font-medium mb-2">
+              {isRTL ? 'ضريبة المشتريات المدفوعة' : 'Purchases VAT Paid'}
+            </p>
+            <p className="text-xl font-bold text-red-900">
+              - {formatCurrency(reportData.purchases.totalVAT)}
+            </p>
+          </div>
+          <div className={`${netVAT >= 0 ? 'bg-orange-50' : 'bg-emerald-50'} rounded-lg p-4`}>
+            <p className={`text-sm font-medium mb-2 ${netVAT >= 0 ? 'text-orange-700' : 'text-emerald-700'}`}>
+              {isRTL ? 'الصافي المستحق' : 'Net Amount'}
+            </p>
+            <p className={`text-xl font-bold ${netVAT >= 0 ? 'text-orange-900' : 'text-emerald-900'}`}>
+              {netVAT >= 0 ? '=' : '+'} {formatCurrency(Math.abs(netVAT))}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Sales Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-teal-100 p-2.5 rounded-lg">
               <BarChart3 className="w-5 h-5 text-teal-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'متوسط البيع' : 'Avg Sale'}</p>
+            <h3 className="text-lg font-bold text-gray-900">
+              {isRTL ? 'المبيعات حسب المصدر' : 'Sales by Source'}
+            </h3>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(salesData.count > 0 ? salesData.total / salesData.count : 0)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'لكل عملية' : 'per transaction'}</p>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-teal-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">
+                {isRTL ? 'المتجر' : 'Store'}
+              </span>
+              <span className="text-lg font-bold text-teal-900">
+                {formatCurrency(reportData.sales.bySource.store)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">
+                {isRTL ? 'سلة' : 'Salla'}
+              </span>
+              <span className="text-lg font-bold text-purple-900">
+                {formatCurrency(reportData.sales.bySource.salla)}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 bg-cyan-100 rounded-lg">
-              <BarChart3 className="w-5 h-5 text-cyan-600" />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-orange-100 p-2.5 rounded-lg">
+              <DollarSign className="w-5 h-5 text-orange-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'هامش الربح' : 'Profit Margin'}</p>
+            <h3 className="text-lg font-bold text-gray-900">
+              {isRTL ? 'المصاريف حسب النوع' : 'Expenses by Type'}
+            </h3>
           </div>
-          <p className={`text-2xl font-bold ${parseFloat(profitMargin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {profitMargin}%
-          </p>
-          <p className="text-xs text-gray-400 mt-1">{isRTL ? 'نسبة الربح للإيراد' : 'Net profit to revenue'}</p>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">
+                {isRTL ? 'تشغيلية' : 'Operating'}
+              </span>
+              <span className="text-lg font-bold text-orange-900">
+                {formatCurrency(reportData.expenses.operating)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">
+                {isRTL ? 'تأسيس' : 'Setup'}
+              </span>
+              <span className="text-lg font-bold text-purple-900">
+                {formatCurrency(reportData.expenses.setup)}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-teal-600" />
-            {isRTL ? 'أكثر المنتجات مبيعاً' : 'Top Selling Products'}
+      {/* Inventory Status */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-indigo-100 p-2.5 rounded-lg">
+            <Package className="w-5 h-5 text-indigo-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900">
+            {isRTL ? 'حالة المخزون' : 'Inventory Status'}
           </h3>
-          {topProducts.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <FileText className="w-12 h-12 mx-auto mb-2 opacity-30" />
-              <p>{isRTL ? 'لا توجد بيانات' : 'No data available'}</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center p-4 bg-indigo-50 rounded-lg">
+            <p className="text-2xl font-bold text-indigo-900">
+              {formatCurrency(reportData.inventory.totalValue)}
+            </p>
+            <p className="text-xs text-indigo-700 mt-1">
+              {isRTL ? 'قيمة المخزون' : 'Total Value'}
+            </p>
+          </div>
+          <div className="text-center p-4 bg-blue-50 rounded-lg">
+            <p className="text-2xl font-bold text-blue-900">
+              {reportData.inventory.totalQuantity.toFixed(0)}
+            </p>
+            <p className="text-xs text-blue-700 mt-1">
+              {isRTL ? 'إجمالي الكمية' : 'Total Quantity'}
+            </p>
+          </div>
+          <div className="text-center p-4 bg-yellow-50 rounded-lg">
+            <p className="text-2xl font-bold text-yellow-900">
+              {reportData.inventory.lowStock}
+            </p>
+            <p className="text-xs text-yellow-700 mt-1">
+              {isRTL ? 'مخزون منخفض' : 'Low Stock'}
+            </p>
+          </div>
+          <div className="text-center p-4 bg-red-50 rounded-lg">
+            <p className="text-2xl font-bold text-red-900">
+              {reportData.inventory.outOfStock}
+            </p>
+            <p className="text-xs text-red-700 mt-1">
+              {isRTL ? 'نفذ المخزون' : 'Out of Stock'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Wastage & Slow Moving */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Wastage */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-red-100 p-2.5 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
-          ) : (
-            <div className="space-y-3">
-              {topProducts.map((product, index) => {
-                const maxAmount = topProducts[0]?.total_amount || 1;
-                const width = (product.total_amount / maxAmount) * 100;
-                return (
-                  <div key={index} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-gray-900">
-                        {isRTL ? product.product_name_ar : product.product_name}
-                      </span>
-                      <span className="text-gray-500">
-                        {formatCurrency(product.total_amount)} ({product.total_qty} {isRTL ? 'قطعة' : 'pcs'})
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className="bg-teal-500 h-2 rounded-full transition-all"
-                        style={{ width: `${width}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+            <h3 className="text-lg font-bold text-gray-900">
+              {isRTL ? 'الهالك' : 'Wastage'}
+            </h3>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">
+                {isRTL ? 'القيمة الإجمالية' : 'Total Value'}
+              </span>
+              <span className="text-lg font-bold text-red-900">
+                {formatCurrency(reportData.wastage.totalValue)}
+              </span>
             </div>
-          )}
+            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">
+                {isRTL ? 'الكمية الإجمالية' : 'Total Quantity'}
+              </span>
+              <span className="text-lg font-bold text-orange-900">
+                {reportData.wastage.totalQuantity.toFixed(2)}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-teal-600" />
-            {isRTL ? 'آخر المبيعات' : 'Recent Sales'}
-          </h3>
-          {recentSales.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <FileText className="w-12 h-12 mx-auto mb-2 opacity-30" />
-              <p>{isRTL ? 'لا توجد مبيعات' : 'No recent sales'}</p>
+        {/* Slow Moving Products */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-amber-100 p-2.5 rounded-lg">
+              <Package className="w-5 h-5 text-amber-600" />
             </div>
-          ) : (
-            <div className="space-y-3">
-              {recentSales.map((sale: any) => (
-                <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">{sale.sale_number}</p>
-                    <p className="text-xs text-gray-400">
-                      {sale.customers
-                        ? (isRTL ? sale.customers.name_ar || sale.customers.name : sale.customers.name)
-                        : (isRTL ? 'عميل نقدي' : 'Walk-in')}
-                      {' - '}
-                      {formatDate(sale.sale_date)}
-                    </p>
-                  </div>
-                  <p className="font-bold text-teal-600">{formatCurrency(sale.total)}</p>
+            <h3 className="text-lg font-bold text-gray-900">
+              {isRTL ? 'المنتجات الراكدة' : 'Slow Moving'}
+            </h3>
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {reportData.slowMoving.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">
+                {isRTL ? 'لا توجد منتجات راكدة' : 'No slow-moving products'}
+              </p>
+            ) : (
+              reportData.slowMoving.map((product, index) => (
+                <div key={index} className="flex items-center justify-between p-2 bg-amber-50 rounded-lg text-sm">
+                  <span className="text-gray-700 font-medium">
+                    {isRTL ? product.product_name_ar : product.product_name}
+                  </span>
+                  <span className="text-amber-900 font-bold">
+                    {product.current_stock} {isRTL ? 'وحدة' : 'units'}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Top Products */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-emerald-100 p-2.5 rounded-lg">
+            <TrendingUp className="w-5 h-5 text-emerald-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900">
+            {isRTL ? 'المنتجات الأكثر مبيعاً' : 'Top Selling Products'}
+          </h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="py-3 px-4 text-left text-xs font-semibold text-gray-700">
+                  {isRTL ? 'المنتج' : 'Product'}
+                </th>
+                <th className="py-3 px-4 text-center text-xs font-semibold text-gray-700">
+                  {isRTL ? 'الكمية' : 'Quantity'}
+                </th>
+                <th className="py-3 px-4 text-right text-xs font-semibold text-gray-700">
+                  {isRTL ? 'المبلغ' : 'Amount'}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {reportData.topProducts.map((product, index) => (
+                <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4 text-sm text-gray-900">
+                    {isRTL ? product.product_name_ar : product.product_name}
+                  </td>
+                  <td className="py-3 px-4 text-center text-sm font-medium text-gray-700">
+                    {product.total_qty.toFixed(2)}
+                  </td>
+                  <td className="py-3 px-4 text-right text-sm font-bold text-emerald-900">
+                    {formatCurrency(product.total_amount)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Branch Comparison */}
+      {reportData.branches.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-cyan-100 p-2.5 rounded-lg">
+              <Building2 className="w-5 h-5 text-cyan-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">
+              {isRTL ? 'مقارنة الفروع' : 'Branch Comparison'}
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="py-3 px-4 text-left text-xs font-semibold text-gray-700">
+                    {isRTL ? 'الفرع' : 'Branch'}
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-semibold text-gray-700">
+                    {isRTL ? 'المبيعات' : 'Sales'}
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-semibold text-gray-700">
+                    {isRTL ? 'المصاريف' : 'Expenses'}
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-semibold text-gray-700">
+                    {isRTL ? 'صافي الربح' : 'Net Profit'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportData.branches.map((branch, index) => (
+                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                      {isRTL ? branch.branch_name_ar : branch.branch_name}
+                    </td>
+                    <td className="py-3 px-4 text-right text-sm font-bold text-teal-900">
+                      {formatCurrency(branch.sales)}
+                    </td>
+                    <td className="py-3 px-4 text-right text-sm font-bold text-orange-900">
+                      {formatCurrency(branch.expenses)}
+                    </td>
+                    <td className={`py-3 px-4 text-right text-sm font-bold ${
+                      branch.profit >= 0 ? 'text-emerald-900' : 'text-red-900'
+                    }`}>
+                      {formatCurrency(branch.profit)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
