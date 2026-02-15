@@ -3,7 +3,7 @@ import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 interface UserProfile {
-  role: 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer';
+  role: 'super_admin' | 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier';
   permissions: Record<string, boolean>;
 }
 
@@ -80,11 +80,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const isViewer = profile?.role === 'viewer';
 
   const hasPermission = (key: string): boolean => {
-    if (isAdmin) return true;
+    if (profile?.role === 'super_admin' || profile?.role === 'admin') return true;
     return profile?.permissions?.[key] === true;
   };
 
