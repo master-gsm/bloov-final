@@ -189,9 +189,13 @@ export function Purchases() {
     try {
       let attachmentUrl = null;
       if (attachmentFile) {
+        console.log('Uploading attachment file:', attachmentFile.name);
         attachmentUrl = await uploadFile(attachmentFile, 'purchases');
         if (!attachmentUrl) {
           console.warn('File upload failed, continuing without attachment');
+          setError(isRTL ? 'فشل رفع المرفق، سيتم حفظ المشتريات بدون مرفق' : 'File upload failed, purchase will be saved without attachment');
+        } else {
+          console.log('Attachment uploaded successfully:', attachmentUrl);
         }
       }
 

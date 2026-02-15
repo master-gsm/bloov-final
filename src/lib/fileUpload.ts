@@ -124,10 +124,18 @@ export const ensureBucketExists = async (): Promise<boolean> => {
 
 export const uploadFile = async (file: File, folder: string): Promise<string | null> => {
   try {
+    console.log('Starting file upload:', {
+      fileName: file.name,
+      fileSize: `${(file.size / 1024).toFixed(2)}KB`,
+      fileType: file.type,
+      folder
+    });
+
     const bucketReady = await ensureBucketExists();
 
     if (!bucketReady) {
       console.error('Storage bucket is not available');
+      alert('خطأ: نظام التخزين غير متاح. يرجى المحاولة لاحقاً');
       return null;
     }
 
@@ -145,6 +153,8 @@ export const uploadFile = async (file: File, folder: string): Promise<string | n
     const fileExt = fileToUpload.name.split('.').pop();
     const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
+    console.log('Uploading to:', fileName);
+
     const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(fileName, fileToUpload, {
@@ -154,28 +164,40 @@ export const uploadFile = async (file: File, folder: string): Promise<string | n
 
     if (error) {
       console.error('Error uploading file:', error);
+      alert(`خطأ في رفع الملف: ${error.message}`);
       return null;
     }
 
+    console.log('File uploaded successfully:', data.path);
     return data.path;
   } catch (err) {
     console.error('Error uploading file:', err);
+    alert('خطأ غير متوقع في رفع الملف');
     return null;
   }
 };
 
 export const getFileUrl = (filePath: string): string => {
   try {
+    if (!filePath) {
+      console.error('Empty file path provided to getFileUrl');
+      return '';
+    }
+
+    console.log('Getting public URL for:', filePath);
+
     // Try to get public URL first
     const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
 
     if (data && data.publicUrl) {
+      console.log('Public URL generated:', data.publicUrl);
       return data.publicUrl;
     }
 
     // Fallback: try 'invoices' bucket for backward compatibility
     const { data: invoicesData } = supabase.storage.from('invoices').getPublicUrl(filePath);
     if (invoicesData && invoicesData.publicUrl) {
+      console.log('Public URL generated from invoices bucket:', invoicesData.publicUrl);
       return invoicesData.publicUrl;
     }
 

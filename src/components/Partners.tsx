@@ -207,9 +207,13 @@ export function Partners() {
     try {
       let attachmentUrl = null;
       if (contributionFile) {
+        console.log('Uploading contribution file:', contributionFile.name);
         attachmentUrl = await uploadFile(contributionFile, 'partner_contributions');
         if (!attachmentUrl) {
           console.warn('File upload failed, continuing without attachment');
+          alert(isRTL ? 'فشل رفع المرفق، سيتم حفظ المساهمة بدون مرفق' : 'File upload failed, contribution will be saved without attachment');
+        } else {
+          console.log('Attachment uploaded successfully:', attachmentUrl);
         }
       }
 
@@ -271,9 +275,13 @@ export function Partners() {
     try {
       let attachmentUrl = null;
       if (settlementFile) {
+        console.log('Uploading settlement file:', settlementFile.name);
         attachmentUrl = await uploadFile(settlementFile, 'partner_settlements');
         if (!attachmentUrl) {
           console.warn('File upload failed, continuing without attachment');
+          alert(isRTL ? 'فشل رفع المرفق، سيتم حفظ التسوية بدون مرفق' : 'File upload failed, settlement will be saved without attachment');
+        } else {
+          console.log('Attachment uploaded successfully:', attachmentUrl);
         }
       }
 
@@ -332,7 +340,14 @@ export function Partners() {
     try {
       let attachmentPath = null;
       if (setupExpenseFile) {
+        console.log('Uploading setup expense file:', setupExpenseFile.name);
         attachmentPath = await uploadFile(setupExpenseFile, 'setup_expenses');
+        if (!attachmentPath) {
+          console.warn('File upload failed, continuing without attachment');
+          alert(isRTL ? 'فشل رفع المرفق، سيتم حفظ المصروف بدون مرفق' : 'File upload failed, expense will be saved without attachment');
+        } else {
+          console.log('Attachment uploaded successfully:', attachmentPath);
+        }
       }
 
       const expenseData = {
