@@ -148,7 +148,6 @@ export default function Expenses() {
         attachmentUrl = await uploadFile(attachmentFile, 'operating_expenses');
         if (!attachmentUrl) {
           console.warn('File upload failed, continuing without attachment');
-          alert(isRTL ? 'فشل رفع المرفق، سيتم حفظ المصروف بدون مرفق' : 'File upload failed, expense will be saved without attachment');
         } else {
           console.log('Attachment uploaded successfully:', attachmentUrl);
         }

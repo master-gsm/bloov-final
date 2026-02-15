@@ -211,7 +211,6 @@ export function Partners() {
         attachmentUrl = await uploadFile(contributionFile, 'partner_contributions');
         if (!attachmentUrl) {
           console.warn('File upload failed, continuing without attachment');
-          alert(isRTL ? 'فشل رفع المرفق، سيتم حفظ المساهمة بدون مرفق' : 'File upload failed, contribution will be saved without attachment');
         } else {
           console.log('Attachment uploaded successfully:', attachmentUrl);
         }
@@ -279,7 +278,6 @@ export function Partners() {
         attachmentUrl = await uploadFile(settlementFile, 'partner_settlements');
         if (!attachmentUrl) {
           console.warn('File upload failed, continuing without attachment');
-          alert(isRTL ? 'فشل رفع المرفق، سيتم حفظ التسوية بدون مرفق' : 'File upload failed, settlement will be saved without attachment');
         } else {
           console.log('Attachment uploaded successfully:', attachmentUrl);
         }
@@ -344,7 +342,6 @@ export function Partners() {
         attachmentPath = await uploadFile(setupExpenseFile, 'setup_expenses');
         if (!attachmentPath) {
           console.warn('File upload failed, continuing without attachment');
-          alert(isRTL ? 'فشل رفع المرفق، سيتم حفظ المصروف بدون مرفق' : 'File upload failed, expense will be saved without attachment');
         } else {
           console.log('Attachment uploaded successfully:', attachmentPath);
         }

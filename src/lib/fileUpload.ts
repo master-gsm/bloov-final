@@ -82,35 +82,42 @@ const compressImage = async (file: File): Promise<File> => {
 
 export const ensureBucketExists = async (): Promise<boolean> => {
   try {
-    const { data: buckets, error } = await supabase.storage.listBuckets();
+    // Try to list files in the bucket to verify it exists and is accessible
+    const { error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list('', { limit: 1 });
 
     if (error) {
-      console.error('Error checking buckets:', error);
-      return false;
-    }
+      console.error('Error accessing storage bucket:', error);
 
-    const bucketExists = buckets.some(bucket => bucket.id === BUCKET_NAME);
+      // If bucket doesn't exist, try to create it
+      if (error.message?.includes('not found') || error.message?.includes('does not exist')) {
+        console.log('Bucket does not exist, attempting to create...');
+        const { error: createError } = await supabase.storage.createBucket(BUCKET_NAME, {
+          public: true,
+          fileSizeLimit: 10485760,
+          allowedMimeTypes: [
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          ]
+        });
 
-    if (!bucketExists) {
-      const { error: createError } = await supabase.storage.createBucket(BUCKET_NAME, {
-        public: true,
-        fileSizeLimit: 10485760,
-        allowedMimeTypes: [
-          'image/jpeg',
-          'image/jpg',
-          'image/png',
-          'image/gif',
-          'image/webp',
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/vnd.ms-excel',
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        ]
-      });
+        if (createError) {
+          console.error('Error creating bucket:', createError);
+          return false;
+        }
 
-      if (createError) {
-        console.error('Error creating bucket:', createError);
+        console.log('Bucket created successfully');
+      } else {
+        // Other errors (permissions, network, etc.)
         return false;
       }
     }
@@ -134,9 +141,8 @@ export const uploadFile = async (file: File, folder: string): Promise<string | n
     const bucketReady = await ensureBucketExists();
 
     if (!bucketReady) {
-      console.error('Storage bucket is not available');
-      alert('خطأ: نظام التخزين غير متاح. يرجى المحاولة لاحقاً');
-      return null;
+      console.error('Storage bucket is not available - attempting upload anyway...');
+      // Don't block the upload, let it try and fail gracefully if needed
     }
 
     // ضغط الصورة قبل الرفع
@@ -164,15 +170,18 @@ export const uploadFile = async (file: File, folder: string): Promise<string | n
 
     if (error) {
       console.error('Error uploading file:', error);
-      alert(`خطأ في رفع الملف: ${error.message}`);
+      console.error('Error details:', {
+        message: error.message,
+        statusCode: error.statusCode,
+        name: error.name
+      });
       return null;
     }
 
     console.log('File uploaded successfully:', data.path);
     return data.path;
   } catch (err) {
-    console.error('Error uploading file:', err);
-    alert('خطأ غير متوقع في رفع الملف');
+    console.error('Unexpected error uploading file:', err);
     return null;
   }
 };
