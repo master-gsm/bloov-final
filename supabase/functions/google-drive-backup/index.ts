@@ -203,16 +203,19 @@ async function uploadToGoogleDrive(
     mimeType: "application/json",
   };
 
-  // رفع الملف
-  const form = new FormData();
-  form.append(
-    "metadata",
-    new Blob([JSON.stringify(metadata)], { type: "application/json" })
-  );
-  form.append(
-    "file",
-    new Blob([content], { type: "application/json" })
-  );
+  // رفع الملف باستخدام multipart/related
+  const boundary = "bloov_boundary_" + Date.now();
+  const delimiter = "\r\n--" + boundary + "\r\n";
+  const closeDelimiter = "\r\n--" + boundary + "--";
+
+  const multipartRequestBody =
+    delimiter +
+    "Content-Type: application/json\r\n\r\n" +
+    JSON.stringify(metadata) +
+    delimiter +
+    "Content-Type: application/json\r\n\r\n" +
+    content +
+    closeDelimiter;
 
   const response = await fetch(
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink",
@@ -220,8 +223,9 @@ async function uploadToGoogleDrive(
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        "Content-Type": `multipart/related; boundary=${boundary}`,
       },
-      body: form,
+      body: multipartRequestBody,
     }
   );
 

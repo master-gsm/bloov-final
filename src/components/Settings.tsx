@@ -12,6 +12,7 @@ import { createBackup, downloadBackupAsJSON, downloadBackupAsExcel, restoreFromB
 import { useAutoBackup } from '../hooks/useAutoBackup';
 import { diskBackupManager } from '../lib/diskBackup';
 import BackupSettings from './BackupSettings';
+import { ResetTestDatabaseButton } from './ResetTestDatabaseButton';
 
 type SettingsMap = Record<string, string>;
 
@@ -1022,6 +1023,35 @@ export function Settings() {
                   <li>{isRTL ? 'المجلد الافتراضي: المستندات/BloovBackups' : 'Default folder: Documents/BloovBackups'}</li>
                 </ul>
               </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-xl shadow-sm border-2 border-red-200 p-6 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-red-100 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-red-900">{isRTL ? 'تنظيف بيانات التجربة (Test Mode فقط)' : 'Reset Test Database (Test Mode Only)'}</h3>
+                  <p className="text-sm text-red-700">
+                    {isRTL ? 'حذف جميع البيانات التجريبية - للمسؤولين فقط' : 'Delete all test data - Admins only'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-red-100 border-2 border-red-300 rounded-lg p-4">
+                <p className="text-sm font-bold text-red-900 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" />
+                  {isRTL ? '⚠️ تحذير شديد' : '⚠️ Critical Warning'}
+                </p>
+                <ul className="text-xs text-red-800 mt-2 space-y-1 list-disc list-inside">
+                  <li>{isRTL ? 'هذا الإجراء سيحذف جميع البيانات بشكل نهائي' : 'This action will permanently delete all data'}</li>
+                  <li>{isRTL ? 'لا يمكن التراجع بعد التنفيذ' : 'Cannot be undone after execution'}</li>
+                  <li>{isRTL ? 'متاح فقط في وضع التجربة (Test Mode)' : 'Available only in Test Mode'}</li>
+                  <li>{isRTL ? 'يُسجل تلقائياً في سجل الأحداث' : 'Automatically logged in audit logs'}</li>
+                </ul>
+              </div>
+
+              <ResetTestDatabaseButton isRTL={isRTL} setBackupMessage={setBackupMessage} />
             </div>
 
             <BackupSettings />
