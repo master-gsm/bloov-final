@@ -43,6 +43,22 @@ interface Settlement {
   created_at: string;
 }
 
+interface SetupExpense {
+  id: string;
+  partner_id: string | null;
+  category: string;
+  description: string;
+  amount: number;
+  expense_date: string;
+  attachment: string | null;
+  notes: string | null;
+  created_at: string;
+  partner?: {
+    name: string;
+    name_ar: string;
+  };
+}
+
 export function Partners() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
@@ -82,6 +98,19 @@ export function Partners() {
   const settlementFileInputRef = useRef<HTMLInputElement>(null);
   const settlementCameraInputRef = useRef<HTMLInputElement>(null);
 
+  // Setup Expenses State
+  const [setupExpenses, setSetupExpenses] = useState<SetupExpense[]>([]);
+  const [showSetupExpenseForm, setShowSetupExpenseForm] = useState(false);
+  const [setupExpensePartner, setSetupExpensePartner] = useState('');
+  const [setupExpenseCategory, setSetupExpenseCategory] = useState('');
+  const [setupExpenseDescription, setSetupExpenseDescription] = useState('');
+  const [setupExpenseAmount, setSetupExpenseAmount] = useState('');
+  const [setupExpenseDate, setSetupExpenseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [setupExpenseNotes, setSetupExpenseNotes] = useState('');
+  const [setupExpenseFile, setSetupExpenseFile] = useState<File | null>(null);
+  const setupExpenseFileInputRef = useRef<HTMLInputElement>(null);
+  const [deleteSetupExpenseConfirm, setDeleteSetupExpenseConfirm] = useState<string | null>(null);
+
   useEffect(() => {
     checkAdminAndLoad();
   }, [user]);
@@ -108,18 +137,23 @@ export function Partners() {
 
   const loadData = async () => {
     try {
-      const [partnersRes, contribRes, settlementsRes, salesRes, purchasesRes, expensesRes] = await Promise.all([
+      const [partnersRes, contribRes, settlementsRes, salesRes, purchasesRes, expensesRes, setupExpensesRes] = await Promise.all([
         supabase.from('partners').select('*').eq('is_active', true).order('share_percentage', { ascending: false }),
         supabase.from('partner_contributions').select('*').order('contribution_date', { ascending: false }),
         supabase.from('partner_settlements').select('*').order('settlement_date', { ascending: false }),
         supabase.from('sales').select('total, status, salla_shipping_cost, salla_payment_gateway_fee'),
         supabase.from('purchases').select('total'),
         supabase.from('operating_expenses').select('amount'),
+        supabase.from('setup_expenses').select(`
+          *,
+          partner:partners(name, name_ar)
+        `).order('expense_date', { ascending: false }),
       ]);
 
       if (partnersRes.data) setPartners(partnersRes.data);
       if (contribRes.data) setContributions(contribRes.data);
       if (settlementsRes.data) setSettlements(settlementsRes.data);
+      if (setupExpensesRes.data) setSetupExpenses(setupExpensesRes.data);
 
       if (salesRes.data) {
         const revenue = salesRes.data
@@ -286,6 +320,70 @@ export function Partners() {
       console.error('Error deleting settlement:', err);
       alert(isRTL ? 'حدث خطأ أثناء الحذف' : 'Error deleting settlement');
     }
+  };
+
+  const handleAddSetupExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEdit || !isAdmin) {
+      alert(isRTL ? 'يتطلب صلاحيات المدير' : 'Admin privileges required');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      let attachmentPath = null;
+      if (setupExpenseFile) {
+        attachmentPath = await uploadFile(setupExpenseFile, 'setup_expenses');
+      }
+
+      const expenseData = {
+        partner_id: setupExpensePartner || null,
+        category: setupExpenseCategory,
+        description: setupExpenseDescription,
+        amount: parseFloat(setupExpenseAmount),
+        expense_date: setupExpenseDate,
+        attachment: attachmentPath,
+        notes: setupExpenseNotes || null,
+      };
+
+      const { error } = await supabase.from('setup_expenses').insert([expenseData]);
+      if (error) throw error;
+
+      alert(isRTL ? 'تم إضافة المصروف بنجاح' : 'Expense added successfully');
+      setShowSetupExpenseForm(false);
+      resetSetupExpenseForm();
+      await loadData();
+    } catch (err: any) {
+      console.error('Error adding setup expense:', err);
+      alert(err.message || (isRTL ? 'حدث خطأ أثناء الإضافة' : 'Error adding expense'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteSetupExpense = async (id: string) => {
+    if (!isAdmin) {
+      alert(isRTL ? 'يتطلب صلاحيات المدير' : 'Admin privileges required');
+      return;
+    }
+    try {
+      const { error } = await supabase.from('setup_expenses').delete().eq('id', id);
+      if (error) throw error;
+      setDeleteSetupExpenseConfirm(null);
+      await loadData();
+    } catch (err) {
+      console.error('Error deleting setup expense:', err);
+      alert(isRTL ? 'حدث خطأ أثناء الحذف' : 'Error deleting expense');
+    }
+  };
+
+  const resetSetupExpenseForm = () => {
+    setSetupExpensePartner('');
+    setSetupExpenseCategory('');
+    setSetupExpenseDescription('');
+    setSetupExpenseAmount('');
+    setSetupExpenseDate(new Date().toISOString().split('T')[0]);
+    setSetupExpenseNotes('');
+    setSetupExpenseFile(null);
   };
 
   const getPartnerTotal = (partnerId: string) =>
@@ -873,6 +971,129 @@ export function Partners() {
         </div>
       )}
 
+      {/* Startup Expenses Section */}
+      {canEdit && isAdmin && (
+        <div className="border border-gray-200 rounded-xl overflow-hidden mt-6">
+          <div className="bg-purple-50 p-5 border-b border-purple-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-purple-100 w-10 h-10 rounded-full flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-purple-700" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {isRTL ? 'مصاريف التأسيس' : 'Startup Expenses'}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {isRTL ? 'مصاريف إنشاء الشركة والتأسيس' : 'Company formation and startup costs'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSetupExpenseForm(true)}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
+              >
+                <Plus className="w-4 h-4" />
+                {isRTL ? 'إضافة مصروف' : 'Add Expense'}
+              </button>
+            </div>
+            <div className="mt-4 bg-white rounded-lg p-4 border border-purple-200">
+              <p className="text-2xl font-bold text-purple-900">
+                {formatCurrency(setupExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0))} {isRTL ? 'ر.س' : 'SAR'}
+              </p>
+              <p className="text-xs text-gray-600 mt-1">
+                {isRTL ? 'إجمالي مصاريف التأسيس' : 'Total Startup Expenses'}
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    {isRTL ? 'التاريخ' : 'Date'}
+                  </th>
+                  <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    {isRTL ? 'الفئة' : 'Category'}
+                  </th>
+                  <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    {isRTL ? 'الوصف' : 'Description'}
+                  </th>
+                  <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    {isRTL ? 'الشريك الممول' : 'Funded By'}
+                  </th>
+                  <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    {isRTL ? 'المبلغ' : 'Amount'}
+                  </th>
+                  <th className="py-3 px-6 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    {isRTL ? 'المرفق' : 'Attachment'}
+                  </th>
+                  <th className="py-3 px-6 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    {isRTL ? 'إجراءات' : 'Actions'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {setupExpenses.map((expense) => (
+                  <tr key={expense.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
+                    <td className="py-3 px-6 text-sm text-gray-600">
+                      {formatDate(expense.expense_date)}
+                    </td>
+                    <td className="py-3 px-6 text-sm">
+                      <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                        {expense.category}
+                      </span>
+                    </td>
+                    <td className="py-3 px-6 text-sm text-gray-900">
+                      {expense.description}
+                      {expense.notes && (
+                        <p className="text-xs text-gray-500 mt-1">{expense.notes}</p>
+                      )}
+                    </td>
+                    <td className="py-3 px-6 text-sm text-gray-700 font-medium">
+                      {expense.partner ? (isRTL ? expense.partner.name_ar : expense.partner.name) : (isRTL ? 'عام' : 'General')}
+                    </td>
+                    <td className="py-3 px-6 text-sm font-bold text-purple-900">
+                      {formatCurrency(Number(expense.amount))} {isRTL ? 'ر.س' : 'SAR'}
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      {expense.attachment && (
+                        <button
+                          onClick={() => handleViewAttachment(expense.attachment!)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                          title={isRTL ? 'عرض المرفق' : 'View attachment'}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      <button
+                        onClick={() => setDeleteSetupExpenseConfirm(expense.id)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
+                        title={isRTL ? 'حذف' : 'Delete'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {setupExpenses.length === 0 && (
+              <div className="text-center py-12">
+                <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">
+                  {isRTL ? 'لا توجد مصاريف تأسيس مسجلة' : 'No startup expenses recorded'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {showAddForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
@@ -1225,6 +1446,181 @@ export function Partners() {
               </button>
               <button
                 onClick={() => setDeleteSettlementConfirm(null)}
+                className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium"
+              >
+                {isRTL ? 'إلغاء' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Setup Expense Form Modal */}
+      {showSetupExpenseForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="border-b px-6 py-4 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-xl font-bold text-gray-900">
+                {isRTL ? 'إضافة مصروف تأسيس' : 'Add Startup Expense'}
+              </h3>
+              <button onClick={() => { setShowSetupExpenseForm(false); resetSetupExpenseForm(); }} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSetupExpense} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRTL ? 'الشريك الممول' : 'Funded By Partner'}
+                  </label>
+                  <select
+                    value={setupExpensePartner}
+                    onChange={(e) => setSetupExpensePartner(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">{isRTL ? 'عام (غير محدد)' : 'General (Not specified)'}</option>
+                    {partners.map((p) => (
+                      <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRTL ? 'الفئة' : 'Category'} *
+                  </label>
+                  <select
+                    required
+                    value={setupExpenseCategory}
+                    onChange={(e) => setSetupExpenseCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">{isRTL ? 'اختر فئة' : 'Select Category'}</option>
+                    <option value="Furniture">{isRTL ? 'الأثاث' : 'Furniture'}</option>
+                    <option value="Equipment">{isRTL ? 'المعدات' : 'Equipment'}</option>
+                    <option value="Renovation">{isRTL ? 'التجديد' : 'Renovation'}</option>
+                    <option value="Licenses">{isRTL ? 'التراخيص' : 'Licenses & Permits'}</option>
+                    <option value="Technology">{isRTL ? 'التكنولوجيا' : 'Technology & Software'}</option>
+                    <option value="Signage">{isRTL ? 'اللافتات' : 'Signage & Branding'}</option>
+                    <option value="Security">{isRTL ? 'الأمان' : 'Security Systems'}</option>
+                    <option value="Initial_Stock">{isRTL ? 'المخزون الأولي' : 'Initial Stock'}</option>
+                    <option value="Other">{isRTL ? 'أخرى' : 'Other'}</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRTL ? 'الوصف' : 'Description'} *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={setupExpenseDescription}
+                    onChange={(e) => setSetupExpenseDescription(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRTL ? 'المبلغ (ر.س)' : 'Amount (SAR)'} *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    value={setupExpenseAmount}
+                    onChange={(e) => setSetupExpenseAmount(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRTL ? 'التاريخ' : 'Date'} *
+                  </label>
+                  <input
+                    required
+                    type="date"
+                    value={setupExpenseDate}
+                    onChange={(e) => setSetupExpenseDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRTL ? 'ملاحظات' : 'Notes'}
+                  </label>
+                  <textarea
+                    value={setupExpenseNotes}
+                    onChange={(e) => setSetupExpenseNotes(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRTL ? 'المرفق (صورة أو PDF)' : 'Attachment (Image or PDF)'}
+                  </label>
+                  <input
+                    ref={setupExpenseFileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setSetupExpenseFile(e.target.files?.[0] || null)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                  {setupExpenseFile && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      {setupExpenseFile.name}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowSetupExpenseForm(false); resetSetupExpenseForm(); }}
+                  className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium"
+                >
+                  {isRTL ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium disabled:opacity-50"
+                >
+                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Setup Expense Delete Confirmation */}
+      {deleteSetupExpenseConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center">
+            <Trash2 className="w-12 h-12 text-red-500 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              {isRTL ? 'تأكيد الحذف' : 'Confirm Delete'}
+            </h3>
+            <p className="text-gray-500 mb-6 text-sm">
+              {isRTL ? 'هل أنت متأكد من حذف هذا المصروف؟' : 'Are you sure you want to delete this expense?'}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleDeleteSetupExpense(deleteSetupExpenseConfirm)}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 transition font-medium"
+              >
+                {isRTL ? 'حذف' : 'Delete'}
+              </button>
+              <button
+                onClick={() => setDeleteSetupExpenseConfirm(null)}
                 className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium"
               >
                 {isRTL ? 'إلغاء' : 'Cancel'}

@@ -24,7 +24,6 @@ import { CashRegister } from './components/CashRegister';
 import { SallaOrders } from './components/SallaOrders';
 import { AIAnalysis } from './components/AIAnalysis';
 import Branches from './components/Branches';
-import SetupExpenses from './components/SetupExpenses';
 import { supabase } from './lib/supabase';
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
@@ -149,7 +148,6 @@ function AppContent() {
       case 'sales': return <Sales />;
       case 'purchases': return <Purchases />;
       case 'expenses': return <Expenses />;
-      case 'setupexpenses': return <SetupExpenses />;
       case 'inventory': return <Inventory />;
       case 'customers': return <Customers />;
       case 'suppliers': return <Suppliers />;
