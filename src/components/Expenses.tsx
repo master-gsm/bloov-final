@@ -5,8 +5,9 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { expenseCategories, getCategoryLabel } from '../lib/expenseCategories';
 import { uploadFile, getFileUrl } from '../lib/fileUpload';
-import { Receipt, Plus, Trash2, Search, Calendar, DollarSign, FileText, Filter, Download, Users, Paperclip, Camera, Printer, X } from 'lucide-react';
+import { Receipt, Plus, Trash2, Search, Calendar, DollarSign, FileText, Filter, Download, Users, Paperclip, Camera, Printer, X, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { AttachmentPreviewModal } from './AttachmentPreviewModal';
 
 interface OperatingExpense {
   id: string;
@@ -38,7 +39,7 @@ export default function Expenses() {
   const [filterType, setFilterType] = useState('all');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-  const [viewingAttachment, setViewingAttachment] = useState<{ url: string; type: string } | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<{ url: string; type: string; name?: string; filePath?: string } | null>(null);
   const attachmentFileInputRef = useRef<HTMLInputElement>(null);
   const attachmentCameraInputRef = useRef<HTMLInputElement>(null);
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
@@ -122,18 +123,12 @@ export default function Expenses() {
   const handleViewAttachment = (attachmentPath: string) => {
     const url = getFileUrl(attachmentPath);
     const fileType = attachmentPath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
-    setViewingAttachment({ url, type: fileType });
-  };
-
-  const handlePrintAttachment = () => {
-    if (!viewingAttachment) return;
-
-    const printWindow = window.open(viewingAttachment.url, '_blank');
-    if (printWindow) {
-      printWindow.onload = () => {
-        printWindow.print();
-      };
-    }
+    setPreviewAttachment({
+      url,
+      type: fileType,
+      name: attachmentPath.split('/').pop(),
+      filePath: attachmentPath,
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -552,14 +547,16 @@ export default function Expenses() {
                   </td>
                   <td className="py-3 px-4 text-gray-600">{exp.payment_method}</td>
                   <td className="py-3 px-4 text-center">
-                    {exp.attachment_url && (
+                    {exp.attachment_url ? (
                       <button
                         onClick={() => handleViewAttachment(exp.attachment_url!)}
-                        className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition inline-flex items-center justify-center"
                         title={isRTL ? 'عرض المرفق' : 'View attachment'}
                       >
-                        <Download className="w-4 h-4" />
+                        <Eye className="w-4 h-4" />
                       </button>
+                    ) : (
+                      <span className="text-gray-400 text-xs">-</span>
                     )}
                   </td>
                   <td className="py-3 px-4">
@@ -610,61 +607,12 @@ export default function Expenses() {
         </div>
       </div>
 
-      {viewingAttachment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setViewingAttachment(null)}>
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-bold">{isRTL ? 'عرض المرفق' : 'View Attachment'}</h3>
-              <button
-                onClick={() => setViewingAttachment(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4">
-              {viewingAttachment.type === 'image' ? (
-                <img
-                  src={viewingAttachment.url}
-                  alt="Attachment"
-                  className="w-full h-auto rounded-lg"
-                />
-              ) : (
-                <iframe
-                  src={viewingAttachment.url}
-                  className="w-full h-[70vh] rounded-lg border"
-                  title="Document Viewer"
-                />
-              )}
-            </div>
-            <div className="p-4 border-t flex justify-end gap-2">
-              <button
-                onClick={handlePrintAttachment}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                <Printer className="w-4 h-4 inline mr-2" />
-                {isRTL ? 'طباعة' : 'Print'}
-              </button>
-              <a
-                href={viewingAttachment.url}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Download className="w-4 h-4 inline mr-2" />
-                {isRTL ? 'تحميل' : 'Download'}
-              </a>
-              <button
-                onClick={() => setViewingAttachment(null)}
-                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
-              >
-                {isRTL ? 'إغلاق' : 'Close'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AttachmentPreviewModal
+        isOpen={previewAttachment !== null}
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
+        isRTL={isRTL}
+      />
     </div>
   );
 }

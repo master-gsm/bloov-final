@@ -5,6 +5,7 @@ import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getSignedUrl, getFileUrl } from '../lib/fileUpload';
 import { ShoppingBag, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Paperclip, Download, Printer, Camera } from 'lucide-react';
+import { AttachmentPreviewModal } from './AttachmentPreviewModal';
 
 interface Product {
   id: string;
@@ -71,7 +72,7 @@ export function Purchases() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [viewingAttachment, setViewingAttachment] = useState<{ url: string; type: string } | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<{ url: string; type: string; name?: string; filePath?: string } | null>(null);
   const attachmentFileInputRef = useRef<HTMLInputElement>(null);
   const attachmentCameraInputRef = useRef<HTMLInputElement>(null);
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
@@ -104,18 +105,12 @@ export function Purchases() {
   const handleViewAttachment = (attachmentPath: string) => {
     const url = getFileUrl(attachmentPath);
     const fileType = attachmentPath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
-    setViewingAttachment({ url, type: fileType });
-  };
-
-  const handlePrintAttachment = () => {
-    if (!viewingAttachment) return;
-
-    const printWindow = window.open(viewingAttachment.url, '_blank');
-    if (printWindow) {
-      printWindow.onload = () => {
-        printWindow.print();
-      };
-    }
+    setPreviewAttachment({
+      url,
+      type: fileType,
+      name: attachmentPath.split('/').pop(),
+      filePath: attachmentPath,
+    });
   };
 
   const loadData = async () => {
@@ -529,6 +524,7 @@ export function Purchases() {
                   <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'المورد' : 'Supplier'}</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'الإجمالي' : 'Total'}</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'الحالة' : 'Status'}</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">{isRTL ? 'المرفق' : 'Attachment'}</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">{t('common.actions')}</th>
                 </tr>
               </thead>
@@ -548,6 +544,19 @@ export function Purchases() {
                          purchase.status === 'received' ? (isRTL ? 'مستلم' : 'Received') :
                          (isRTL ? 'ملغي' : 'Cancelled')}
                       </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      {purchase.attachment_url ? (
+                        <button
+                          onClick={() => handleViewAttachment(purchase.attachment_url!)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition inline-flex items-center justify-center"
+                          title={isRTL ? 'عرض المرفق' : 'View attachment'}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
                       <button onClick={() => viewPurchaseDetails(purchase)} className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition">
@@ -636,61 +645,12 @@ export function Purchases() {
         </div>
       )}
 
-      {viewingAttachment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setViewingAttachment(null)}>
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-bold">{isRTL ? 'عرض المرفق' : 'View Attachment'}</h3>
-              <button
-                onClick={() => setViewingAttachment(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4">
-              {viewingAttachment.type === 'image' ? (
-                <img
-                  src={viewingAttachment.url}
-                  alt="Attachment"
-                  className="w-full h-auto rounded-lg"
-                />
-              ) : (
-                <iframe
-                  src={viewingAttachment.url}
-                  className="w-full h-[70vh] rounded-lg border"
-                  title="Document Viewer"
-                />
-              )}
-            </div>
-            <div className="p-4 border-t flex justify-end gap-2">
-              <button
-                onClick={handlePrintAttachment}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                <Printer className="w-4 h-4 inline mr-2" />
-                {isRTL ? 'طباعة' : 'Print'}
-              </button>
-              <a
-                href={viewingAttachment.url}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Download className="w-4 h-4 inline mr-2" />
-                {isRTL ? 'تحميل' : 'Download'}
-              </a>
-              <button
-                onClick={() => setViewingAttachment(null)}
-                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
-              >
-                {isRTL ? 'إغلاق' : 'Close'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AttachmentPreviewModal
+        isOpen={previewAttachment !== null}
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
+        isRTL={isRTL}
+      />
     </div>
   );
 }
