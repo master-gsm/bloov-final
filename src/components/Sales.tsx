@@ -1199,7 +1199,10 @@ export function Sales() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">{t('nav.sales')}</h2>
+          <div className="flex items-center gap-2">
+            <ShoppingCart className="w-6 h-6 text-teal-600" />
+            <h2 className="text-2xl font-bold text-gray-900">{t('nav.sales')}</h2>
+          </div>
           <p className="text-gray-500 mt-1">{isRTL ? 'إدارة المبيعات والفواتير' : 'Manage sales and invoices'}</p>
         </div>
         {canEdit && (

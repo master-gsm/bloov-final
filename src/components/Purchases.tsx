@@ -479,7 +479,10 @@ export function Purchases() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">{t('nav.purchases')}</h2>
+          <div className="flex items-center gap-2">
+            <ShoppingBag className="w-6 h-6 text-purple-600" />
+            <h2 className="text-2xl font-bold text-gray-900">{t('nav.purchases')}</h2>
+          </div>
           <p className="text-gray-500 mt-1">{isRTL ? 'إدارة المشتريات وأوامر الشراء' : 'Manage purchases and orders'}</p>
         </div>
         {canEdit && (
