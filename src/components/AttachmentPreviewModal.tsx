@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Download, Printer } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Download, Printer, AlertCircle } from 'lucide-react';
 import { downloadFile } from '../lib/fileUpload';
 
 interface AttachmentPreviewModalProps {
@@ -15,6 +15,9 @@ export function AttachmentPreviewModal({
   onClose,
   isRTL,
 }: AttachmentPreviewModalProps) {
+  const [imageError, setImageError] = useState(false);
+  const [pdfError, setPdfError] = useState(false);
+
   if (!isOpen || !attachment) return null;
 
   const handleDownload = async () => {
@@ -69,22 +72,61 @@ export function AttachmentPreviewModal({
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center">
+        <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center p-4">
           {attachment.type === 'image' ? (
-            <img
-              src={attachment.url}
-              alt="Attachment"
-              className="max-w-full max-h-full object-contain"
-            />
+            imageError ? (
+              <div className="text-center text-red-600">
+                <AlertCircle className="w-16 h-16 mx-auto mb-4" />
+                <p className="font-semibold mb-2">{isRTL ? 'خطأ في تحميل الصورة' : 'Error loading image'}</p>
+                <p className="text-sm text-gray-500">{isRTL ? 'تأكد من رفع الملف بشكل صحيح' : 'Make sure the file was uploaded correctly'}</p>
+                <button
+                  onClick={handleDownload}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                >
+                  {isRTL ? 'محاولة التحميل' : 'Try Download'}
+                </button>
+              </div>
+            ) : (
+              <img
+                src={attachment.url}
+                alt="Attachment"
+                className="max-w-full max-h-full object-contain"
+                onError={() => setImageError(true)}
+                onLoad={() => setImageError(false)}
+              />
+            )
           ) : attachment.type === 'pdf' ? (
-            <iframe
-              src={attachment.url}
-              className="w-full h-full border-0"
-              title="PDF Preview"
-            />
+            pdfError ? (
+              <div className="text-center text-red-600">
+                <AlertCircle className="w-16 h-16 mx-auto mb-4" />
+                <p className="font-semibold mb-2">{isRTL ? 'خطأ في تحميل PDF' : 'Error loading PDF'}</p>
+                <p className="text-sm text-gray-500">{isRTL ? 'تأكد من رفع الملف بشكل صحيح' : 'Make sure the file was uploaded correctly'}</p>
+                <button
+                  onClick={handleDownload}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                >
+                  {isRTL ? 'محاولة التحميل' : 'Try Download'}
+                </button>
+              </div>
+            ) : (
+              <iframe
+                src={attachment.url}
+                className="w-full h-full border-0"
+                title="PDF Preview"
+                onError={() => setPdfError(true)}
+                onLoad={() => setPdfError(false)}
+              />
+            )
           ) : (
             <div className="text-center text-gray-500">
+              <AlertCircle className="w-16 h-16 mx-auto mb-4 text-gray-400" />
               <p>{isRTL ? 'نوع الملف غير مدعوم للمعاينة' : 'Preview not available for this file type'}</p>
+              <button
+                onClick={handleDownload}
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+              >
+                {isRTL ? 'تحميل الملف' : 'Download File'}
+              </button>
             </div>
           )}
         </div>

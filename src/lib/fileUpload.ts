@@ -165,13 +165,39 @@ export const uploadFile = async (file: File, folder: string): Promise<string | n
 };
 
 export const getFileUrl = (filePath: string): string => {
-  const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
-  return data.publicUrl;
+  try {
+    // Try to get public URL first
+    const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+
+    if (data && data.publicUrl) {
+      return data.publicUrl;
+    }
+
+    // Fallback: try 'invoices' bucket for backward compatibility
+    const { data: invoicesData } = supabase.storage.from('invoices').getPublicUrl(filePath);
+    if (invoicesData && invoicesData.publicUrl) {
+      return invoicesData.publicUrl;
+    }
+
+    console.error('Could not generate public URL for file:', filePath);
+    return '';
+  } catch (error) {
+    console.error('Error getting file URL:', error);
+    return '';
+  }
 };
 
 export const downloadFile = async (filePath: string): Promise<Blob | null> => {
   try {
-    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(filePath);
+    // Try primary bucket first
+    let { data, error } = await supabase.storage.from(BUCKET_NAME).download(filePath);
+
+    // If file not found in primary bucket, try 'invoices' bucket for backward compatibility
+    if (error && error.message?.includes('not found')) {
+      const invoicesResult = await supabase.storage.from('invoices').download(filePath);
+      data = invoicesResult.data;
+      error = invoicesResult.error;
+    }
 
     if (error) {
       console.error('Error downloading file:', error);
