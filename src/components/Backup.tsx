@@ -58,6 +58,8 @@ export default function Backup() {
   const [loadingDriveFiles, setLoadingDriveFiles] = useState(false);
   const [showRestoreSection, setShowRestoreSection] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -187,11 +189,15 @@ export default function Backup() {
     }
   };
 
-  const disconnectGoogleDrive = async () => {
-    if (!confirm(language === 'ar' ? 'هل تريد فصل الاتصال مع Google Drive؟' : 'Disconnect from Google Drive?')) {
-      return;
-    }
+  const disconnectGoogleDrive = () => {
+    setConfirmModal({
+      message: language === 'ar' ? 'هل تريد فصل الاتصال مع Google Drive؟' : 'Disconnect from Google Drive?',
+      onConfirm: executeDisconnectGoogleDrive,
+    });
+  };
 
+  const executeDisconnectGoogleDrive = async () => {
+    setConfirmModal(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
@@ -735,12 +741,19 @@ export default function Backup() {
     }
   };
 
-  const restoreFromFile = async (file: File) => {
-    if (!confirm(language === 'ar'
-      ? 'تحذير: استعادة النسخة الاحتياطية ستقوم بتحديث البيانات الحالية. هل تريد المتابعة؟'
-      : 'Warning: Restoring a backup will update current data. Continue?'
-    )) return;
+  const restoreFromFile = (file: File) => {
+    setPendingFile(file);
+    setConfirmModal({
+      message: language === 'ar'
+        ? 'تحذير: استعادة النسخة الاحتياطية ستقوم بتحديث البيانات الحالية. هل تريد المتابعة؟'
+        : 'Warning: Restoring a backup will update current data. Continue?',
+      onConfirm: () => executeFileRestore(file),
+    });
+  };
 
+  const executeFileRestore = async (file: File) => {
+    setConfirmModal(null);
+    setPendingFile(null);
     setRestoreLoading(true);
     setError('');
     setSuccessMessage('');
@@ -769,12 +782,17 @@ export default function Backup() {
     }
   };
 
-  const restoreFromGoogleDrive = async (fileId: string, fileName: string) => {
-    if (!confirm(language === 'ar'
-      ? `تحذير: استعادة النسخة "${fileName}" ستقوم بتحديث البيانات الحالية. هل تريد المتابعة؟`
-      : `Warning: Restoring "${fileName}" will update current data. Continue?`
-    )) return;
+  const restoreFromGoogleDrive = (fileId: string, fileName: string) => {
+    setConfirmModal({
+      message: language === 'ar'
+        ? `تحذير: استعادة النسخة "${fileName}" ستقوم بتحديث البيانات الحالية. هل تريد المتابعة؟`
+        : `Warning: Restoring "${fileName}" will update current data. Continue?`,
+      onConfirm: () => executeGoogleDriveRestore(fileId),
+    });
+  };
 
+  const executeGoogleDriveRestore = async (fileId: string) => {
+    setConfirmModal(null);
     setRestoreLoading(true);
     setError('');
     setSuccessMessage('');
@@ -878,6 +896,34 @@ export default function Backup() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      {confirmModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3 mb-6">
+              <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-gray-900 font-medium leading-relaxed">{confirmModal.message}</p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setConfirmModal(null);
+                  setPendingFile(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className="px-5 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition font-medium"
+              >
+                {language === 'ar' ? 'متابعة' : 'Continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
