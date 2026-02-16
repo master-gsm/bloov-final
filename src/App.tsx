@@ -115,7 +115,7 @@ function AppContent() {
   }
 
   if (!hasUsers) {
-    return <AdminSetup onAdminCreated={() => setHasUsers(true)} />;
+    return <AdminSetup onAdminCreated={() => checkForUsers()} />;
   }
 
   if (!user) {

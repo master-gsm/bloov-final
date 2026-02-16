@@ -152,6 +152,16 @@ export function AdminSetup({ onAdminCreated }: AdminSetupProps) {
             <Shield className="w-5 h-5" />
             {loading ? 'Creating...' : 'Create Admin Account'}
           </button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={onAdminCreated}
+              className="text-sm text-teal-600 hover:text-teal-700 font-medium transition"
+            >
+              Already have an account? Login | لديك حساب؟ تسجيل الدخول
+            </button>
+          </div>
         </form>
       </div>
     </div>
