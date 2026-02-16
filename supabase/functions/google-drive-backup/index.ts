@@ -45,7 +45,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
       console.error("[Backup] Authentication failed:", authError);
       return new Response(
         JSON.stringify({ success: false, error: "Unauthorized", details: authError?.message }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
       console.error("User not authorized:", user.id);
       return new Response(
         JSON.stringify({ success: false, error: "Insufficient permissions - Admin role required" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
