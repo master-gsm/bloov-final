@@ -153,49 +153,29 @@ export async function afterDelete(tableName: string, recordId: string): Promise<
  */
 export async function triggerFullBackup(): Promise<{ success: boolean; message: string }> {
   try {
-    // الحصول على token المستخدم الحالي
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session) {
-      throw new Error('يجب تسجيل الدخول لإجراء النسخ الاحتياطي');
-    }
-
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-backup`;
-
     console.log('[Backup] Starting full backup...');
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    // استخدام functions.invoke بدلاً من fetch المباشر لأنه يتعامل مع الـ auth تلقائياً
+    const { data, error } = await supabase.functions.invoke('google-drive-backup', {
+      body: {
         backupType: 'full',
-      }),
+      },
     });
 
-    console.log('[Backup] Response status:', response.status);
-    const responseText = await response.text();
-    console.log('[Backup] Response text:', responseText);
+    console.log('[Backup] Response data:', data);
+    console.log('[Backup] Response error:', error);
 
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch (e) {
-      result = { error: responseText };
+    if (error) {
+      throw new Error(error.message || 'فشل في إنشاء النسخة الاحتياطية');
     }
 
-    console.log('[Backup] Response parsed:', result);
-
-    if (response.ok && result.success !== false) {
+    if (data && data.success !== false) {
       return {
         success: true,
         message: 'تم إنشاء النسخة الاحتياطية بنجاح',
       };
     } else {
-      throw new Error(result.error || result.message || 'فشل في إنشاء النسخة الاحتياطية');
+      throw new Error(data?.error || 'فشل في إنشاء النسخة الاحتياطية');
     }
   } catch (error: any) {
     console.error('[Backup] Error:', error);
