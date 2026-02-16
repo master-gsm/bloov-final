@@ -219,6 +219,146 @@ export default function Backup() {
     }
   };
 
+  const uploadToGoogleDrive = async () => {
+    if (!googleDrive.connected) {
+      alert(language === 'ar' ? 'يجب ربط حساب Google Drive أولاً' : 'Please connect Google Drive first');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess(false);
+    setBackupResult(null);
+
+    try {
+      const TABLES_TO_BACKUP = [
+        'users', 'branches', 'products', 'inventory', 'customers',
+        'suppliers', 'sales', 'sale_items', 'purchases', 'purchase_items',
+        'partners', 'partner_contributions', 'employees', 'setup_expenses',
+        'operating_expenses', 'cash_shifts', 'cash_transactions',
+        'expenses', 'settings', 'permissions', 'salla_orders',
+        'salla_order_items', 'loyalty_transactions', 'customer_tags',
+        'audit_logs'
+      ];
+
+      const backupData: any = {
+        metadata: {
+          created_at: new Date().toISOString(),
+          version: '1.0',
+          total_records: 0,
+          tables_count: 0,
+        },
+        data: {},
+      };
+
+      let totalRecords = 0;
+      let successfulTables = 0;
+
+      for (const table of TABLES_TO_BACKUP) {
+        try {
+          const { data, error } = await supabase.from(table).select('*');
+
+          if (error) {
+            console.warn(`Error loading ${table}:`, error);
+            continue;
+          }
+
+          if (data && data.length > 0) {
+            backupData.data[table] = data;
+            totalRecords += data.length;
+            successfulTables++;
+          }
+        } catch (err) {
+          console.warn(`Error loading ${table}:`, err);
+        }
+      }
+
+      backupData.metadata.total_records = totalRecords;
+      backupData.metadata.tables_count = successfulTables;
+
+      const backupJson = JSON.stringify(backupData, null, 2);
+      const backupSize = new Blob([backupJson]).size;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `backup_${timestamp}.json`;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Not authenticated');
+      }
+
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('google_drive_credentials, google_drive_folder_id')
+        .single();
+
+      if (!settings || !settings.google_drive_credentials) {
+        throw new Error(language === 'ar' ? 'بيانات Google Drive غير متوفرة' : 'Google Drive credentials not found');
+      }
+
+      const credentials = settings.google_drive_credentials;
+      const folderId = settings.google_drive_folder_id || '';
+
+      const metadata = {
+        name: filename,
+        parents: folderId ? [folderId] : [],
+        mimeType: 'application/json',
+      };
+
+      const boundary = '-------314159265358979323846';
+      const delimiter = `\r\n--${boundary}\r\n`;
+      const closeDelimiter = `\r\n--${boundary}--`;
+
+      const multipartRequestBody =
+        delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify(metadata) +
+        delimiter +
+        'Content-Type: application/json\r\n\r\n' +
+        backupJson +
+        closeDelimiter;
+
+      const uploadResponse = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${credentials.access_token}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`,
+          },
+          body: multipartRequestBody,
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        throw new Error(language === 'ar' ? 'فشل رفع النسخة إلى Google Drive' : 'Failed to upload to Google Drive');
+      }
+
+      const uploadResult = await uploadResponse.json();
+
+      setSuccess(true);
+      setBackupResult({
+        filename,
+        size: backupSize,
+        size_mb: (backupSize / (1024 * 1024)).toFixed(2),
+        total_records: totalRecords,
+        tables_count: successfulTables,
+        execution_time: '< 1s',
+        created_at: new Date().toISOString(),
+        download_url: '',
+        backup_data: backupData,
+        google_drive_upload: {
+          success: true,
+          fileId: uploadResult.id,
+        },
+      });
+    } catch (err) {
+      console.error('Google Drive upload error:', err);
+      setError(err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء رفع النسخة إلى Google Drive' : 'Error uploading to Google Drive'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const createLocalBackup = async () => {
     setLoading(true);
     setError('');
@@ -501,6 +641,37 @@ export default function Backup() {
                   : 'You can get the folder ID from the URL of the folder in Google Drive'}
               </p>
             </div>
+
+            {googleDrive.connected && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm text-gray-700 mb-3">
+                  {language === 'ar'
+                    ? 'لتجربة رفع نسخة احتياطية إلى Google Drive الآن:'
+                    : 'To test uploading a backup to Google Drive now:'}
+                </p>
+                <button
+                  onClick={uploadToGoogleDrive}
+                  disabled={loading}
+                  className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition ${
+                    loading
+                      ? 'bg-gray-300 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {loading ? (
+                    <>
+                      <Loader className="w-5 h-5 animate-spin" />
+                      {language === 'ar' ? 'جاري الرفع...' : 'Uploading...'}
+                    </>
+                  ) : (
+                    <>
+                      <Cloud className="w-5 h-5" />
+                      {language === 'ar' ? 'رفع نسخة احتياطية إلى Google Drive' : 'Upload Backup to Google Drive'}
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
 
             <button
               onClick={saveGoogleDriveSettings}
