@@ -155,18 +155,39 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
   try {
     console.log('[Backup] Starting full backup...');
 
-    // استخدام functions.invoke بدلاً من fetch المباشر لأنه يتعامل مع الـ auth تلقائياً
-    const { data, error } = await supabase.functions.invoke('google-drive-backup', {
-      body: {
-        backupType: 'full',
+    // الحصول على session للـ JWT token
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      throw new Error('يجب تسجيل الدخول لإجراء النسخ الاحتياطي');
+    }
+
+    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-backup`;
+
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        backupType: 'full',
+      }),
     });
 
-    console.log('[Backup] Response data:', data);
-    console.log('[Backup] Response error:', error);
+    const body = await res.text();
+    console.log('[Backup] status', res.status, res.statusText, body);
 
-    if (error) {
-      throw new Error(error.message || 'فشل في إنشاء النسخة الاحتياطية');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${body}`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch (e) {
+      throw new Error(`Invalid JSON response: ${body}`);
     }
 
     if (data && data.success !== false) {
