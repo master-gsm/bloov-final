@@ -34,7 +34,9 @@ interface GoogleDriveSettings {
 
 export default function Backup() {
   const { t, language } = useLanguage();
-  const [loading, setLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [serverLoading, setServerLoading] = useState(false);
+  const [googleDriveLoading, setGoogleDriveLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
   const [backupResult, setBackupResult] = useState<BackupResult | null>(null);
@@ -225,7 +227,7 @@ export default function Backup() {
       return;
     }
 
-    setLoading(true);
+    setGoogleDriveLoading(true);
     setError('');
     setSuccess(false);
     setBackupResult(null);
@@ -398,12 +400,12 @@ export default function Backup() {
       setError(errorMessage);
       alert(errorMessage);
     } finally {
-      setLoading(false);
+      setGoogleDriveLoading(false);
     }
   };
 
   const createLocalBackup = async () => {
-    setLoading(true);
+    setLocalLoading(true);
     setError('');
     setSuccess(false);
     setBackupResult(null);
@@ -477,12 +479,12 @@ export default function Backup() {
       console.error('Backup error:', err);
       setError(err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup'));
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
   const createServerBackup = async () => {
-    setLoading(true);
+    setServerLoading(true);
     setError('');
     setSuccess(false);
     setBackupResult(null);
@@ -523,7 +525,7 @@ export default function Backup() {
       console.error('Backup error:', err);
       setError(err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup'));
     } finally {
-      setLoading(false);
+      setServerLoading(false);
     }
   };
 
@@ -636,6 +638,12 @@ export default function Backup() {
                   <>
                     <CheckCircle className="w-6 h-6 text-green-600" />
                     <button
+                      onClick={connectGoogleDrive}
+                      className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition text-sm"
+                    >
+                      {language === 'ar' ? 'إعادة الربط' : 'Reconnect'}
+                    </button>
+                    <button
                       onClick={disconnectGoogleDrive}
                       className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition text-sm"
                     >
@@ -645,6 +653,17 @@ export default function Backup() {
                 )}
               </div>
             </div>
+
+            {googleDrive.connected && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-gray-700">
+                  <strong>{language === 'ar' ? 'ملاحظة:' : 'Note:'}</strong>{' '}
+                  {language === 'ar'
+                    ? 'إذا ظهر خطأ "رمز التوصيل غير موجود"، اضغط على زر "إعادة الربط" لتجديد الاتصال بحساب Google Drive'
+                    : 'If you see "Access token missing" error, click "Reconnect" to refresh the connection to Google Drive'}
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="flex items-center gap-2 mb-2">
@@ -694,14 +713,14 @@ export default function Backup() {
                 </p>
                 <button
                   onClick={uploadToGoogleDrive}
-                  disabled={loading}
+                  disabled={googleDriveLoading}
                   className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition ${
-                    loading
+                    googleDriveLoading
                       ? 'bg-gray-300 cursor-not-allowed'
                       : 'bg-blue-600 text-white hover:bg-blue-700'
                   }`}
                 >
-                  {loading ? (
+                  {googleDriveLoading ? (
                     <>
                       <Loader className="w-5 h-5 animate-spin" />
                       {language === 'ar' ? 'جاري الرفع...' : 'Uploading...'}
@@ -757,14 +776,14 @@ export default function Backup() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <button
             onClick={createLocalBackup}
-            disabled={loading}
+            disabled={localLoading}
             className={`flex items-center justify-center gap-2 py-4 px-6 rounded-lg font-medium transition ${
-              loading
+              localLoading
                 ? 'bg-gray-300 cursor-not-allowed'
                 : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
             }`}
           >
-            {loading ? (
+            {localLoading ? (
               <>
                 <Loader className="w-5 h-5 animate-spin" />
                 {language === 'ar' ? 'جاري الحفظ...' : 'Saving...'}
@@ -779,14 +798,14 @@ export default function Backup() {
 
           <button
             onClick={createServerBackup}
-            disabled={loading}
+            disabled={serverLoading}
             className={`flex items-center justify-center gap-2 py-4 px-6 rounded-lg font-medium transition ${
-              loading
+              serverLoading
                 ? 'bg-gray-300 cursor-not-allowed'
                 : 'bg-gradient-to-r from-teal-600 to-teal-700 text-white hover:from-teal-700 hover:to-teal-800'
             }`}
           >
-            {loading ? (
+            {serverLoading ? (
               <>
                 <Loader className="w-5 h-5 animate-spin" />
                 {language === 'ar' ? 'جاري الحفظ...' : 'Saving...'}
