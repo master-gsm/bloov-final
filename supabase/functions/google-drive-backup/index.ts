@@ -30,7 +30,7 @@ Deno.serve(async (req: Request) => {
     // إنشاء Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     // التحقق من الـ authentication
     const authHeader = req.headers.get("Authorization");
@@ -38,9 +38,16 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing authorization header");
     }
 
-    // التحقق من صلاحيات المستخدم
+    // إنشاء client مع user token للتحقق من الـ auth
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: authHeader }
+      }
+    });
+
+    // التحقق من صلاحيات المستخدم
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
 
     if (authError || !user) {
       console.error("Authentication failed:", authError);
@@ -49,6 +56,9 @@ Deno.serve(async (req: Request) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // الآن نستخدم service role client للعمليات
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // التحقق من أن المستخدم admin أو super_admin
     const { data: userData } = await supabase
