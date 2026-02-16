@@ -11,6 +11,7 @@ import { ConnectionStatusBar } from './components/ConnectionStatusBar';
 import { Dashboard } from './components/Dashboard';
 import { Products } from './components/Products';
 import { Partners } from './components/Partners';
+import { Employees } from './components/Employees';
 import { UserManagement } from './components/UserManagement';
 import { Sales } from './components/Sales';
 import { Purchases } from './components/Purchases';
@@ -37,6 +38,7 @@ const SECTION_PERMISSIONS: Record<string, string[]> = {
   customers: ['admin', 'accountant', 'viewer', 'super_admin'],
   suppliers: ['admin', 'accountant', 'viewer', 'super_admin'],
   partners: ['admin', 'viewer', 'super_admin'],
+  employees: ['admin', 'super_admin'],
   branches: ['admin', 'super_admin'],
   salla: ['admin', 'accountant', 'super_admin'],
   cashregister: ['admin', 'accountant', 'viewer', 'super_admin'],
@@ -145,6 +147,7 @@ function AppContent() {
       case 'dashboard': return <Dashboard />;
       case 'products': return <Products />;
       case 'partners': return <Partners />;
+      case 'employees': return <Employees />;
       case 'sales': return <Sales />;
       case 'purchases': return <Purchases />;
       case 'expenses': return <Expenses />;
