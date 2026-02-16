@@ -4,7 +4,6 @@ import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { OfflineProvider } from './contexts/OfflineContext';
 import { TestModeProvider } from './contexts/TestModeContext';
 import { LoginForm } from './components/LoginForm';
-import { AdminSetup } from './components/AdminSetup';
 import { ResetPassword } from './components/ResetPassword';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
@@ -54,12 +53,9 @@ function AppContent() {
   const { user, loading, hasPermission, isAdmin, profile } = useAuth();
   const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState('dashboard');
-  const [hasUsers, setHasUsers] = useState<boolean | null>(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
-    checkForUsers();
-
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const type = hashParams.get('type');
     if (type === 'recovery') {
@@ -79,31 +75,11 @@ function AppContent() {
     }
   }, [profile, isAdmin]);
 
-  const checkForUsers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id')
-        .limit(1);
-
-      if (error) {
-        console.error('Error checking users:', error);
-        setHasUsers(true);
-        return;
-      }
-
-      setHasUsers(data && data.length > 0);
-    } catch (err) {
-      console.error('Error:', err);
-      setHasUsers(true);
-    }
-  };
-
   if (isPasswordRecovery) {
     return <ResetPassword />;
   }
 
-  if (loading || hasUsers === null) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -112,10 +88,6 @@ function AppContent() {
         </div>
       </div>
     );
-  }
-
-  if (!hasUsers) {
-    return <AdminSetup onAdminCreated={() => checkForUsers()} />;
   }
 
   if (!user) {
