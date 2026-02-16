@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!userProfile || userProfile.role !== 'admin') {
+    if (!userProfile || !['admin', 'super_admin'].includes(userProfile.role)) {
       await supabase.from("audit_logs").insert({
         user_id: user.id,
         action: "reset_database_attempt_denied",
