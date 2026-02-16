@@ -24,6 +24,8 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  let logEntryId: string | null = null;
+
   try {
     // إنشاء Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -43,13 +45,14 @@ Deno.serve(async (req: Request) => {
       .from("backup_logs")
       .insert({
         backup_type: backupType,
-        status: "processing",
+        status: "in_progress",
         started_at: new Date().toISOString(),
       })
       .select()
       .single();
 
     if (logError) throw logError;
+    logEntryId = logEntry.id;
 
     // جلب إعدادات Google Drive
     const { data: settings, error: settingsError } = await supabase
@@ -141,30 +144,29 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // تحديث سجل النسخ الاحتياطي
+    // تحديث سجل النسخ الاحتياطي بنجاح
+    const fileName = `bloov_backup_${backupType}_${Date.now()}.json`;
     await supabase
       .from("backup_logs")
       .update({
         status: googleDriveFileId ? "success" : "failed",
-        backup_size: backupSize,
-        records_count: totalRecords,
-        google_drive_file_id: googleDriveFileId,
-        google_drive_url: googleDriveUrl,
+        finished_at: new Date().toISOString(),
+        file_name: fileName,
+        file_id: googleDriveFileId,
+        file_size: backupSize,
+        record_count: totalRecords,
         error_message: googleDriveFileId ? null : "Failed to upload to Google Drive",
-        completed_at: new Date().toISOString(),
-        metadata: {
-          tables: Object.keys(backupData),
-          tables_count: Object.keys(backupData).length,
-        },
+        http_status: googleDriveFileId ? 200 : 500,
       })
       .eq("id", logEntry.id);
 
     return new Response(
       JSON.stringify({
-        success: true,
+        success: !!googleDriveFileId,
         backup_id: logEntry.id,
-        backup_size: backupSize,
-        records_count: totalRecords,
+        file_name: fileName,
+        file_size: backupSize,
+        record_count: totalRecords,
         google_drive_url: googleDriveUrl,
         tables_backed_up: Object.keys(backupData).length,
       }),
@@ -173,6 +175,28 @@ Deno.serve(async (req: Request) => {
 
   } catch (error) {
     console.error("Backup error:", error);
+
+    // تحديث السجل بالفشل إذا حدث خطأ
+    if (logEntryId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        await supabase
+          .from("backup_logs")
+          .update({
+            status: "failed",
+            finished_at: new Date().toISOString(),
+            error_message: error.message || "Unknown error",
+            http_status: 500,
+          })
+          .eq("id", logEntryId);
+      } catch (updateError) {
+        console.error("Failed to update error status:", updateError);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: false,

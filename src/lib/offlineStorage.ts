@@ -54,7 +54,7 @@ class OfflineStorage {
   async addPendingOperation(operation: Omit<PendingOperation, 'id' | 'timestamp' | 'retries'>): Promise<string> {
     if (!this.db) await this.init();
 
-    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = crypto.randomUUID();
     const pendingOp: PendingOperation = {
       ...operation,
       id,
@@ -62,13 +62,31 @@ class OfflineStorage {
       retries: 0,
     };
 
+    console.log('[OfflineStorage] Adding pending operation:', {
+      id,
+      table: operation.table,
+      operation: operation.operation,
+      keyPath_id: pendingOp.id,
+      hasValidId: !!pendingOp.id && typeof pendingOp.id === 'string',
+      dataPreview: operation.data ? Object.keys(operation.data).join(', ') : 'null'
+    });
+
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([PENDING_OPERATIONS_STORE], 'readwrite');
       const store = transaction.objectStore(PENDING_OPERATIONS_STORE);
       const request = store.add(pendingOp);
 
-      request.onsuccess = () => resolve(id);
-      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        console.log(`[OfflineStorage] Successfully added operation ${id} to IndexedDB`);
+        resolve(id);
+      };
+      request.onerror = () => {
+        console.error(`[OfflineStorage] Failed to add operation to IndexedDB:`, {
+          error: request.error,
+          operation: pendingOp
+        });
+        reject(request.error);
+      };
     });
   }
 

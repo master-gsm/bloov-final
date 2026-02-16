@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
+import { useOffline } from '../contexts/OfflineContext';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getSignedUrl, getFileUrl } from '../lib/fileUpload';
 import { ShoppingBag, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Paperclip, Download, Printer, Camera } from 'lucide-react';
@@ -52,6 +53,7 @@ export function Purchases() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const canEdit = useCanEdit();
+  const { isOnline, addPendingOperation } = useOffline();
   const isRTL = language === 'ar';
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -188,7 +190,7 @@ export function Purchases() {
 
     try {
       let attachmentUrl = null;
-      if (attachmentFile) {
+      if (attachmentFile && isOnline) {
         console.log('Uploading attachment file:', attachmentFile.name);
         attachmentUrl = await uploadFile(attachmentFile, 'purchases');
         if (!attachmentUrl) {
@@ -199,47 +201,82 @@ export function Purchases() {
       }
 
       const purchaseNumber = `PO-${Date.now().toString(36).toUpperCase()}`;
+      const purchaseId = crypto.randomUUID();
+      const timestamp = new Date().toISOString();
 
-      const { data: purchase, error: purchaseError } = await supabase
-        .from('purchases')
-        .insert({
-          purchase_number: purchaseNumber,
-          supplier_id: selectedSupplier && selectedSupplier.trim() !== '' ? selectedSupplier : null,
-          purchase_date: new Date().toISOString(),
-          status: 'confirmed',
-          subtotal,
-          tax: purchaseTax,
-          discount: purchaseDiscount,
-          total,
-          paid_amount: total,
-          payment_status: 'paid',
-          payment_method: paymentMethod,
-          notes: purchaseNotes && purchaseNotes.trim() !== '' ? purchaseNotes : null,
-          attachment_url: attachmentUrl,
-          branch_id: userBranchId,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-
-      if (purchaseError) throw purchaseError;
+      const purchaseData = {
+        id: purchaseId,
+        purchase_number: purchaseNumber,
+        supplier_id: selectedSupplier && selectedSupplier.trim() !== '' ? selectedSupplier : null,
+        purchase_date: timestamp,
+        status: 'confirmed',
+        subtotal,
+        tax: purchaseTax,
+        discount: purchaseDiscount,
+        total,
+        paid_amount: total,
+        payment_status: 'paid',
+        payment_method: paymentMethod,
+        notes: purchaseNotes && purchaseNotes.trim() !== '' ? purchaseNotes : null,
+        attachment_url: attachmentUrl,
+        branch_id: userBranchId,
+        created_by: user?.id,
+        created_at: timestamp,
+        updated_at: timestamp,
+      };
 
       const items = purchaseItems.map((item) => ({
-        purchase_id: purchase.id,
+        id: crypto.randomUUID(),
+        purchase_id: purchaseId,
         product_id: item.product_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
         discount: item.discount,
         total: item.total,
+        created_at: timestamp,
       }));
 
-      const { error: itemsError } = await supabase.from('purchase_items').insert(items);
-      if (itemsError) throw itemsError;
+      console.log('[Purchases] Saving purchase:', {
+        isOnline,
+        purchaseId,
+        itemsCount: items.length
+      });
+
+      if (isOnline) {
+        const { data: purchase, error: purchaseError } = await supabase
+          .from('purchases')
+          .insert(purchaseData)
+          .select()
+          .single();
+
+        if (purchaseError) throw purchaseError;
+
+        const { error: itemsError } = await supabase.from('purchase_items').insert(items);
+        if (itemsError) throw itemsError;
+
+        console.log('[Purchases] Saved to server successfully');
+      } else {
+        await addPendingOperation('purchases', 'insert', purchaseData);
+
+        for (const item of items) {
+          await addPendingOperation('purchase_items', 'insert', item);
+        }
+
+        console.log('[Purchases] Queued for offline sync');
+        setError(isRTL ? 'تم حفظ الفاتورة محلياً وسيتم المزامنة عند الاتصال بالإنترنت' : 'Purchase saved locally and will sync when online');
+      }
 
       setShowForm(false);
+      setPurchaseItems([]);
+      setSelectedSupplier('');
+      setPurchaseNotes('');
+      setPurchaseTax(0);
+      setPurchaseDiscount(0);
+      setAttachmentFile(null);
       loadData();
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      console.error('[Purchases] Error saving purchase:', err);
+      setError(err.message || (isRTL ? 'حدث خطأ أثناء الحفظ' : 'An error occurred while saving'));
     } finally {
       setSubmitting(false);
     }

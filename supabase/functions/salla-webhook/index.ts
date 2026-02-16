@@ -41,6 +41,38 @@ interface SallaWebhookPayload {
   };
 }
 
+// Verify Salla webhook signature
+async function verifySignature(
+  payload: string,
+  signature: string | null,
+  secret: string
+): Promise<boolean> {
+  if (!signature) {
+    return false;
+  }
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signatureBuffer = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(payload)
+  );
+
+  const computedSignature = Array.from(new Uint8Array(signatureBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return computedSignature === signature;
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -50,16 +82,113 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  let requestBody = "";
+
   try {
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Get Salla webhook secret from settings
+    const { data: settings } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "salla_webhook_secret")
+      .maybeSingle();
+
+    const webhookSecret = settings?.value || "";
+
+    // Read and verify signature
+    requestBody = await req.text();
+    const signature = req.headers.get("X-Salla-Signature");
+
+    if (webhookSecret && !await verifySignature(requestBody, signature, webhookSecret)) {
+      console.error("Invalid webhook signature detected", {
+        hasSignature: !!signature,
+        hasSecret: !!webhookSecret,
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Invalid signature",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Parse webhook payload
-    const payload: SallaWebhookPayload = await req.json();
+    const payload: SallaWebhookPayload = JSON.parse(requestBody);
 
     console.log("Received Salla webhook:", payload.event);
+
+    // Handle different event types
+    const orderData = payload.data;
+    const sallaOrderId = `SALLA-${orderData.id}`;
+
+    // Check if order already exists (Idempotency)
+    const { data: existingSale } = await supabase
+      .from("sales")
+      .select("id, status")
+      .eq("salla_order_id", sallaOrderId)
+      .maybeSingle();
+
+    // Handle order cancellation or refund
+    if (["order.cancelled", "order.refunded"].includes(payload.event)) {
+      if (!existingSale) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "Order not found, nothing to cancel"
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      // Update sale status to cancelled/returned
+      await supabase
+        .from("sales")
+        .update({ status: "returned" })
+        .eq("id", existingSale.id);
+
+      // Reverse inventory (add back quantities)
+      const { data: saleItems } = await supabase
+        .from("sale_items")
+        .select("product_id, quantity")
+        .eq("sale_id", existingSale.id);
+
+      if (saleItems) {
+        for (const item of saleItems) {
+          if (item.product_id) {
+            await supabase.rpc("reverse_inventory_on_sale_cancellation", {
+              p_product_id: item.product_id,
+              p_quantity: item.quantity,
+            });
+          }
+        }
+      }
+
+      console.log(`Order ${sallaOrderId} cancelled/refunded and inventory reversed`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "Order cancelled/refunded successfully",
+          sale_id: existingSale.id
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     // Only process order.created and order.updated events
     if (!["order.created", "order.updated"].includes(payload.event)) {
@@ -75,17 +204,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const orderData = payload.data;
-    const sallaOrderId = `SALLA-${orderData.id}`;
-
-    // Check if order already exists
-    const { data: existingSale } = await supabase
-      .from("sales")
-      .select("id")
-      .eq("salla_order_id", sallaOrderId)
-      .maybeSingle();
-
+    // If order already exists, skip processing (Idempotency)
     if (existingSale) {
+      console.log(`Order ${sallaOrderId} already processed (idempotent)`);
       return new Response(
         JSON.stringify({
           success: true,
