@@ -209,41 +209,53 @@ Deno.serve(async (req: Request) => {
   try {
     const startTime = Date.now();
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     console.log("Step 1: Checking authorization");
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       throw new Error("Missing authorization header");
     }
 
-    console.log("Step 2: Getting user from token");
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    console.log("Step 2: Creating user-scoped client");
+    const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
+    });
+
+    console.log("Step 3: Getting authenticated user");
+    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
 
     if (userError || !user) {
       console.error("User error:", userError);
-      throw new Error("Unauthorized");
+      throw new Error("Unauthorized - Please login again");
     }
 
-    console.log("Step 3: Fetching user profile for user:", user.id);
-    const { data: userProfile, error: profileError } = await supabase
+    console.log("Step 4: Fetching user profile for user:", user.id);
+    const { data: userProfile, error: profileError } = await userSupabase
       .from("users")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (profileError) {
       console.error("Error fetching user profile:", profileError);
       throw new Error(`Failed to fetch user profile: ${profileError.message}`);
     }
 
-    console.log("Step 4: User profile:", userProfile);
+    console.log("Step 5: User profile:", userProfile);
     if (!userProfile || userProfile.role !== "admin") {
       throw new Error("Only admins can create backups");
     }
+
+    console.log("Step 6: Creating service client for data access");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const backupData: BackupData = {
       metadata: {
@@ -288,7 +300,8 @@ Deno.serve(async (req: Request) => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `backup_${timestamp}.json`;
 
-    const { error: uploadError } = await supabase.storage
+    console.log("Step 5: Uploading backup to storage bucket");
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('backups')
       .upload(filename, backupJson, {
         contentType: 'application/json',
@@ -296,8 +309,11 @@ Deno.serve(async (req: Request) => {
       });
 
     if (uploadError) {
+      console.error("Upload error:", uploadError);
       throw new Error(`Failed to save backup to server: ${uploadError.message}`);
     }
+
+    console.log("Step 6: Backup uploaded successfully:", uploadData);
 
     const { data: settings } = await supabase
       .from('settings')

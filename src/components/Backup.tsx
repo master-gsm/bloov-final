@@ -219,7 +219,86 @@ export default function Backup() {
     }
   };
 
-  const createBackup = async () => {
+  const createLocalBackup = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess(false);
+    setBackupResult(null);
+
+    try {
+      const TABLES_TO_BACKUP = [
+        'users', 'branches', 'products', 'inventory', 'customers',
+        'suppliers', 'sales', 'sale_items', 'purchases', 'purchase_items',
+        'partners', 'partner_contributions', 'employees', 'setup_expenses',
+        'operating_expenses', 'cash_shifts', 'cash_transactions',
+        'expenses', 'settings', 'permissions', 'salla_orders',
+        'salla_order_items', 'loyalty_transactions', 'customer_tags',
+        'audit_logs'
+      ];
+
+      const backupData: any = {
+        metadata: {
+          created_at: new Date().toISOString(),
+          version: '1.0',
+          total_records: 0,
+          tables_count: 0,
+        },
+        data: {},
+      };
+
+      let totalRecords = 0;
+      let successfulTables = 0;
+
+      for (const table of TABLES_TO_BACKUP) {
+        try {
+          const { data, error } = await supabase.from(table).select('*');
+
+          if (error) {
+            console.warn(`Error loading ${table}:`, error);
+            continue;
+          }
+
+          if (data && data.length > 0) {
+            backupData.data[table] = data;
+            totalRecords += data.length;
+            successfulTables++;
+          }
+        } catch (err) {
+          console.warn(`Error loading ${table}:`, err);
+        }
+      }
+
+      backupData.metadata.total_records = totalRecords;
+      backupData.metadata.tables_count = successfulTables;
+
+      const backupJson = JSON.stringify(backupData, null, 2);
+      const backupSize = new Blob([backupJson]).size;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `backup_${timestamp}.json`;
+
+      downloadBackup(backupData, filename);
+
+      setSuccess(true);
+      setBackupResult({
+        filename,
+        size: backupSize,
+        size_mb: (backupSize / (1024 * 1024)).toFixed(2),
+        total_records: totalRecords,
+        tables_count: successfulTables,
+        execution_time: '< 1s',
+        created_at: new Date().toISOString(),
+        download_url: '',
+        backup_data: backupData,
+      });
+    } catch (err) {
+      console.error('Backup error:', err);
+      setError(err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createServerBackup = async () => {
     setLoading(true);
     setError('');
     setSuccess(false);
@@ -229,8 +308,10 @@ export default function Backup() {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error('Not authenticated');
+        throw new Error(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Not authenticated');
       }
+
+      console.log('Creating server backup with token:', session.access_token.substring(0, 20) + '...');
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-backup`,
@@ -239,15 +320,17 @@ export default function Backup() {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
         }
       );
 
+      console.log('Response status:', response.status);
       const result = await response.json();
-      console.log('Backup response:', { status: response.status, result });
+      console.log('Backup response:', result);
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to create backup');
+        throw new Error(result.error || (language === 'ar' ? 'فشل إنشاء النسخة الاحتياطية' : 'Failed to create backup'));
       }
 
       setSuccess(true);
@@ -255,7 +338,7 @@ export default function Backup() {
       await loadBackupHistory();
     } catch (err) {
       console.error('Backup error:', err);
-      setError(err instanceof Error ? err.message : 'حدث خطأ أثناء إنشاء النسخة الاحتياطية');
+      setError(err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup'));
     } finally {
       setLoading(false);
     }
@@ -453,37 +536,61 @@ export default function Backup() {
                 <li>{language === 'ar' ? 'الفروع والصلاحيات' : 'Branches and permissions'}</li>
                 <li>{language === 'ar' ? 'جميع الإعدادات والبيانات الأخرى' : 'All settings and other data'}</li>
               </ul>
-              {googleDrive.enabled && googleDrive.connected && (
-                <p className="mt-3 font-medium text-green-700 flex items-center gap-2">
-                  <Cloud className="w-4 h-4" />
-                  {language === 'ar' ? 'سيتم رفع نسخة إلى Google Drive تلقائياً' : 'Will be automatically uploaded to Google Drive'}
-                </p>
-              )}
             </div>
           </div>
         </div>
 
-        <button
-          onClick={createBackup}
-          disabled={loading}
-          className={`w-full flex items-center justify-center gap-2 py-4 px-6 rounded-lg font-medium transition ${
-            loading
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-gradient-to-r from-teal-600 to-teal-700 text-white hover:from-teal-700 hover:to-teal-800'
-          }`}
-        >
-          {loading ? (
-            <>
-              <Loader className="w-5 h-5 animate-spin" />
-              {language === 'ar' ? 'جاري إنشاء النسخة الاحتياطية...' : 'Creating backup...'}
-            </>
-          ) : (
-            <>
-              <Database className="w-5 h-5" />
-              {language === 'ar' ? 'إنشاء نسخة احتياطية الآن' : 'Create Backup Now'}
-            </>
-          )}
-        </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={createLocalBackup}
+            disabled={loading}
+            className={`flex items-center justify-center gap-2 py-4 px-6 rounded-lg font-medium transition ${
+              loading
+                ? 'bg-gray-300 cursor-not-allowed'
+                : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+            }`}
+          >
+            {loading ? (
+              <>
+                <Loader className="w-5 h-5 animate-spin" />
+                {language === 'ar' ? 'جاري الحفظ...' : 'Saving...'}
+              </>
+            ) : (
+              <>
+                <Download className="w-5 h-5" />
+                {language === 'ar' ? 'حفظ على الكمبيوتر' : 'Save to Computer'}
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={createServerBackup}
+            disabled={loading}
+            className={`flex items-center justify-center gap-2 py-4 px-6 rounded-lg font-medium transition ${
+              loading
+                ? 'bg-gray-300 cursor-not-allowed'
+                : 'bg-gradient-to-r from-teal-600 to-teal-700 text-white hover:from-teal-700 hover:to-teal-800'
+            }`}
+          >
+            {loading ? (
+              <>
+                <Loader className="w-5 h-5 animate-spin" />
+                {language === 'ar' ? 'جاري الحفظ...' : 'Saving...'}
+              </>
+            ) : (
+              <>
+                <HardDrive className="w-5 h-5" />
+                {language === 'ar' ? 'حفظ على السيرفر' : 'Save to Server'}
+              </>
+            )}
+          </button>
+        </div>
+
+        <p className="text-xs text-center text-gray-500 mt-4">
+          {language === 'ar'
+            ? 'النسخ المحفوظة على السيرفر يمكن الوصول إليها من أي جهاز'
+            : 'Backups saved to server can be accessed from any device'}
+        </p>
       </div>
 
       {error && (
@@ -579,19 +686,17 @@ export default function Backup() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <button
-                  onClick={() => downloadBackup(backupResult.backup_data, backupResult.filename)}
-                  className="w-full flex items-center justify-center gap-2 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition font-medium"
-                >
-                  <Download className="w-5 h-5" />
-                  {language === 'ar' ? 'تحميل النسخة المحلية (JSON)' : 'Download Local Copy (JSON)'}
-                </button>
-
-                <p className="text-xs text-center text-gray-600">
-                  {language === 'ar' ? 'تم حفظ نسخة في السيرفر أيضاً' : 'A copy has also been saved on the server'}
-                </p>
-              </div>
+              {backupResult.backup_data && (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => downloadBackup(backupResult.backup_data, backupResult.filename)}
+                    className="w-full flex items-center justify-center gap-2 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition font-medium"
+                  >
+                    <Download className="w-5 h-5" />
+                    {language === 'ar' ? 'تحميل النسخة (JSON)' : 'Download Backup (JSON)'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
