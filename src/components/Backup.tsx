@@ -231,6 +231,8 @@ export default function Backup() {
     setBackupResult(null);
 
     try {
+      console.log('Starting Google Drive backup...');
+
       const TABLES_TO_BACKUP = [
         'users', 'branches', 'products', 'inventory', 'customers',
         'suppliers', 'sales', 'sale_items', 'purchases', 'purchase_items',
@@ -254,6 +256,7 @@ export default function Backup() {
       let totalRecords = 0;
       let successfulTables = 0;
 
+      console.log('Fetching data from tables...');
       for (const table of TABLES_TO_BACKUP) {
         try {
           const { data, error } = await supabase.from(table).select('*');
@@ -273,6 +276,8 @@ export default function Backup() {
         }
       }
 
+      console.log(`Backup created: ${totalRecords} records from ${successfulTables} tables`);
+
       backupData.metadata.total_records = totalRecords;
       backupData.metadata.tables_count = successfulTables;
 
@@ -281,21 +286,29 @@ export default function Backup() {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `backup_${timestamp}.json`;
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Not authenticated');
-      }
-
-      const { data: settings } = await supabase
+      console.log('Fetching Google Drive credentials...');
+      const { data: settings, error: settingsError } = await supabase
         .from('settings')
         .select('google_drive_credentials, google_drive_folder_id')
         .single();
 
+      if (settingsError) {
+        console.error('Settings error:', settingsError);
+        throw new Error(language === 'ar' ? 'فشل جلب إعدادات Google Drive' : 'Failed to fetch Google Drive settings');
+      }
+
       if (!settings || !settings.google_drive_credentials) {
-        throw new Error(language === 'ar' ? 'بيانات Google Drive غير متوفرة' : 'Google Drive credentials not found');
+        console.error('No credentials found');
+        throw new Error(language === 'ar' ? 'لم يتم العثور على بيانات Google Drive. يرجى ربط الحساب مرة أخرى' : 'Google Drive credentials not found. Please reconnect');
       }
 
       const credentials = settings.google_drive_credentials;
+      console.log('Credentials found, access_token:', credentials.access_token ? 'exists' : 'missing');
+
+      if (!credentials.access_token) {
+        throw new Error(language === 'ar' ? 'رمز الوصول غير موجود. يرجى ربط الحساب مرة أخرى' : 'Access token missing. Please reconnect');
+      }
+
       const folderId = settings.google_drive_folder_id || '';
 
       const metadata = {
@@ -317,6 +330,7 @@ export default function Backup() {
         backupJson +
         closeDelimiter;
 
+      console.log('Uploading to Google Drive...');
       const uploadResponse = await fetch(
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
         {
@@ -329,11 +343,33 @@ export default function Backup() {
         }
       );
 
+      console.log('Upload response status:', uploadResponse.status);
+
       if (!uploadResponse.ok) {
-        throw new Error(language === 'ar' ? 'فشل رفع النسخة إلى Google Drive' : 'Failed to upload to Google Drive');
+        const errorText = await uploadResponse.text();
+        console.error('Upload error response:', errorText);
+
+        let errorMessage = language === 'ar' ? 'فشل رفع النسخة إلى Google Drive' : 'Failed to upload to Google Drive';
+
+        if (uploadResponse.status === 401) {
+          errorMessage = language === 'ar'
+            ? 'انتهت صلاحية الاتصال. يرجى ربط الحساب مرة أخرى'
+            : 'Connection expired. Please reconnect your account';
+        } else if (uploadResponse.status === 403) {
+          errorMessage = language === 'ar'
+            ? 'ليس لديك صلاحية الوصول. تحقق من الأذونات'
+            : 'Access denied. Check permissions';
+        } else if (uploadResponse.status === 404) {
+          errorMessage = language === 'ar'
+            ? 'المجلد غير موجود. تحقق من معرف المجلد'
+            : 'Folder not found. Check folder ID';
+        }
+
+        throw new Error(`${errorMessage} (Status: ${uploadResponse.status})`);
       }
 
       const uploadResult = await uploadResponse.json();
+      console.log('Upload successful! File ID:', uploadResult.id);
 
       setSuccess(true);
       setBackupResult({
@@ -351,9 +387,16 @@ export default function Backup() {
           fileId: uploadResult.id,
         },
       });
+
+      alert(language === 'ar'
+        ? `تم رفع النسخة الاحتياطية بنجاح إلى Google Drive!\n\nاسم الملف: ${filename}\nالحجم: ${(backupSize / 1024).toFixed(2)} KB\nعدد السجلات: ${totalRecords}`
+        : `Backup uploaded successfully to Google Drive!\n\nFilename: ${filename}\nSize: ${(backupSize / 1024).toFixed(2)} KB\nRecords: ${totalRecords}`
+      );
     } catch (err) {
       console.error('Google Drive upload error:', err);
-      setError(err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء رفع النسخة إلى Google Drive' : 'Error uploading to Google Drive'));
+      const errorMessage = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء رفع النسخة إلى Google Drive' : 'Error uploading to Google Drive');
+      setError(errorMessage);
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }
