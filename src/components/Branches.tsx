@@ -78,7 +78,7 @@ export default function Branches() {
         .from('users')
         .select('id, full_name, role')
         .eq('is_active', true)
-        .in('role', ['admin', 'manager', 'super_admin'])
+        .in('role', ['admin', 'manager'])
         .order('full_name');
 
       if (error) throw error;

@@ -97,7 +97,7 @@ export function Purchases() {
       if (error) throw error;
       if (data) {
         setUserBranchId(data.branch_id);
-        setIsSuperAdmin(data.role === 'super_admin');
+        setIsSuperAdmin(data.role === 'admin');
       }
     } catch (err) {
       console.error('Error loading user branch:', err);

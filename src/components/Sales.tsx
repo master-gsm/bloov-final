@@ -138,8 +138,8 @@ export function Sales() {
     if (!user) return;
     try {
       const { data: role } = await supabase.rpc('get_my_role');
-      setIsAdmin(role === 'admin' || role === 'super_admin');
-      setCanManageSales(role === 'admin' || role === 'super_admin' || role === 'accountant');
+      setIsAdmin(role === 'admin');
+      setCanManageSales(role === 'admin' || role === 'accountant');
     } catch (err) {
       console.error('Error checking role:', err);
     }

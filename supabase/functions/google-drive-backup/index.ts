@@ -53,22 +53,22 @@ Deno.serve(async (req: Request) => {
 
     console.log("[Backup] User authenticated:", user.id);
 
-    // التحقق من أن المستخدم admin أو super_admin
+    // التحقق من أن المستخدم admin
     const { data: userData } = await supabase
       .from("users")
       .select("role")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!userData || !["admin", "super_admin"].includes(userData.role)) {
+    if (!userData || userData.role !== "admin") {
       console.error("User not authorized:", user.id);
       return new Response(
-        JSON.stringify({ success: false, error: "Insufficient permissions" }),
+        JSON.stringify({ success: false, error: "Insufficient permissions - Admin role required" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("[Backup] Starting backup by user:", user.id, "role:", userData.role);
+    console.log("[Backup] Starting backup by admin user:", user.id);
 
     const { backupType = 'full', tables } = await req.json() as BackupRequest;
 
