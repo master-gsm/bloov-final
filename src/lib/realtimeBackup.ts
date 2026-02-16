@@ -91,7 +91,6 @@ async function processBackupQueue(): Promise<void> {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -158,9 +157,12 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
     // الحصول على session للـ JWT token
     const { data: { session } } = await supabase.auth.getSession();
 
-    if (!session) {
+    if (!session || !session.access_token) {
       throw new Error('يجب تسجيل الدخول لإجراء النسخ الاحتياطي');
     }
+
+    // طباعة أول 10 أحرف من التوكن للتأكد
+    console.log('[Backup] Token preview:', session.access_token.substring(0, 10) + '...');
 
     const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-backup`;
 
@@ -168,7 +170,6 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
