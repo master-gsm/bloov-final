@@ -155,9 +155,15 @@ Deno.serve(async (req: Request) => {
     // رفع إلى Google Drive
     let googleDriveFileId = null;
     let googleDriveUrl = null;
+    let uploadError: string | null = null;
+
+    console.log("[Backup] Checking Google Drive settings...");
+    console.log("[Backup] Has credentials:", !!settings.google_drive_credentials);
+    console.log("[Backup] Has folder_id:", !!settings.google_drive_folder_id);
 
     if (settings.google_drive_credentials && settings.google_drive_folder_id) {
       try {
+        console.log("[Backup] Starting Google Drive upload...");
         const uploadResult = await uploadToGoogleDrive(
           backupJson,
           `bloov_backup_${backupType}_${Date.now()}.json`,
@@ -167,10 +173,14 @@ Deno.serve(async (req: Request) => {
 
         googleDriveFileId = uploadResult.id;
         googleDriveUrl = uploadResult.webViewLink;
-      } catch (uploadError) {
-        console.error("Google Drive upload failed:", uploadError);
-        // لا نفشل النسخة بالكامل إذا فشل الرفع
+        console.log("[Backup] Google Drive upload successful:", googleDriveFileId);
+      } catch (err: any) {
+        uploadError = err.message || String(err);
+        console.error("[Backup] Google Drive upload failed:", uploadError);
       }
+    } else {
+      uploadError = "Google Drive credentials or folder ID not configured";
+      console.log("[Backup] Skipping Google Drive upload:", uploadError);
     }
 
     // تحديث سجل النسخ الاحتياطي بنجاح
@@ -178,26 +188,30 @@ Deno.serve(async (req: Request) => {
     await supabase
       .from("backup_logs")
       .update({
-        status: googleDriveFileId ? "success" : "failed",
+        status: googleDriveFileId ? "success" : "partial_success",
         finished_at: new Date().toISOString(),
         file_name: fileName,
         file_id: googleDriveFileId,
         file_size: backupSize,
         record_count: totalRecords,
-        error_message: googleDriveFileId ? null : "Failed to upload to Google Drive",
-        http_status: googleDriveFileId ? 200 : 500,
+        error_message: uploadError,
+        http_status: googleDriveFileId ? 200 : 206,
       })
       .eq("id", logEntry.id);
 
+    console.log("[Backup] Backup completed. Success:", !!googleDriveFileId);
+
     return new Response(
       JSON.stringify({
-        success: !!googleDriveFileId,
+        success: true,
         backup_id: logEntry.id,
         file_name: fileName,
         file_size: backupSize,
         record_count: totalRecords,
         google_drive_url: googleDriveUrl,
+        google_drive_uploaded: !!googleDriveFileId,
         tables_backed_up: Object.keys(backupData).length,
+        upload_error: uploadError,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
