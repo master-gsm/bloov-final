@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Database, Download, HardDrive, Clock, FileText, AlertCircle, CheckCircle, Loader, Cloud, Settings as SettingsIcon, Link as LinkIcon } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Database, Download, HardDrive, Clock, FileText, AlertCircle, CheckCircle, Loader, Cloud, Settings as SettingsIcon, Link as LinkIcon, Upload, RotateCcw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -52,6 +52,13 @@ export default function Backup() {
     clientSecret: '',
   });
   const [savingSettings, setSavingSettings] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState('');
+  const [googleDriveFiles, setGoogleDriveFiles] = useState<any[]>([]);
+  const [loadingDriveFiles, setLoadingDriveFiles] = useState(false);
+  const [showRestoreSection, setShowRestoreSection] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadBackupHistory();
@@ -489,15 +496,14 @@ export default function Backup() {
         },
       });
 
-      alert(language === 'ar'
-        ? `تم رفع النسخة الاحتياطية بنجاح إلى Google Drive!\n\nاسم الملف: ${filename}\nالحجم: ${(backupSize / 1024).toFixed(2)} KB\nعدد السجلات: ${totalRecords}`
-        : `Backup uploaded successfully to Google Drive!\n\nFilename: ${filename}\nSize: ${(backupSize / 1024).toFixed(2)} KB\nRecords: ${totalRecords}`
+      setSuccessMessage(language === 'ar'
+        ? `تم رفع النسخة الاحتياطية بنجاح إلى Google Drive! (${filename})`
+        : `Backup uploaded successfully to Google Drive! (${filename})`
       );
     } catch (err) {
       console.error('Google Drive upload error:', err);
       const errorMessage = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء رفع النسخة إلى Google Drive' : 'Error uploading to Google Drive');
       setError(errorMessage);
-      alert(errorMessage);
     } finally {
       setGoogleDriveLoading(false);
     }
@@ -665,6 +671,198 @@ export default function Backup() {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const getAccessToken = async (): Promise<string> => {
+    const { data: settings } = await supabase
+      .from('settings')
+      .select('google_drive_credentials, google_drive_client_id, google_drive_client_secret')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (!settings?.google_drive_credentials) {
+      throw new Error(language === 'ar' ? 'بيانات Google Drive غير موجودة' : 'Google Drive credentials not found');
+    }
+
+    const creds = settings.google_drive_credentials;
+    if (creds.access_token) return creds.access_token;
+
+    if (!creds.refresh_token || !settings.google_drive_client_id || !settings.google_drive_client_secret) {
+      throw new Error(language === 'ar' ? 'يجب إعادة ربط الحساب' : 'Please reconnect your account');
+    }
+
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: settings.google_drive_client_id,
+        client_secret: settings.google_drive_client_secret,
+        refresh_token: creds.refresh_token,
+        grant_type: 'refresh_token',
+      }),
+    });
+
+    if (!tokenResponse.ok) throw new Error(language === 'ar' ? 'فشل تحديث رمز الوصول' : 'Failed to refresh token');
+
+    const tokenData = await tokenResponse.json();
+    await supabase
+      .from('settings')
+      .update({ google_drive_credentials: { ...creds, access_token: tokenData.access_token } })
+      .eq('id', 1);
+
+    return tokenData.access_token;
+  };
+
+  const loadGoogleDriveBackups = async () => {
+    setLoadingDriveFiles(true);
+    try {
+      const accessToken = await getAccessToken();
+      const query = "name contains 'backup_' and mimeType = 'application/json' and trashed = false";
+      const response = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&orderBy=createdTime desc&fields=files(id,name,size,createdTime)&pageSize=20`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (!response.ok) throw new Error('Failed to list files');
+
+      const data = await response.json();
+      setGoogleDriveFiles(data.files || []);
+    } catch (err) {
+      console.error('Error loading Drive files:', err);
+      setError(language === 'ar' ? 'فشل تحميل قائمة النسخ من Google Drive' : 'Failed to load Google Drive backups');
+    } finally {
+      setLoadingDriveFiles(false);
+    }
+  };
+
+  const restoreFromFile = async (file: File) => {
+    if (!confirm(language === 'ar'
+      ? 'تحذير: استعادة النسخة الاحتياطية ستقوم بتحديث البيانات الحالية. هل تريد المتابعة؟'
+      : 'Warning: Restoring a backup will update current data. Continue?'
+    )) return;
+
+    setRestoreLoading(true);
+    setError('');
+    setSuccessMessage('');
+    setRestoreProgress(language === 'ar' ? 'جاري قراءة الملف...' : 'Reading file...');
+
+    try {
+      const text = await file.text();
+      const backupData = JSON.parse(text);
+
+      if (!backupData.data || !backupData.metadata) {
+        throw new Error(language === 'ar' ? 'ملف النسخة الاحتياطية غير صالح' : 'Invalid backup file format');
+      }
+
+      await performRestore(backupData);
+    } catch (err) {
+      console.error('Restore error:', err);
+      if (err instanceof SyntaxError) {
+        setError(language === 'ar' ? 'الملف ليس بتنسيق JSON صحيح' : 'File is not valid JSON');
+      } else {
+        setError(err instanceof Error ? err.message : (language === 'ar' ? 'فشل استعادة النسخة الاحتياطية' : 'Restore failed'));
+      }
+    } finally {
+      setRestoreLoading(false);
+      setRestoreProgress('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const restoreFromGoogleDrive = async (fileId: string, fileName: string) => {
+    if (!confirm(language === 'ar'
+      ? `تحذير: استعادة النسخة "${fileName}" ستقوم بتحديث البيانات الحالية. هل تريد المتابعة؟`
+      : `Warning: Restoring "${fileName}" will update current data. Continue?`
+    )) return;
+
+    setRestoreLoading(true);
+    setError('');
+    setSuccessMessage('');
+    setRestoreProgress(language === 'ar' ? 'جاري تحميل الملف من Google Drive...' : 'Downloading from Google Drive...');
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (!response.ok) throw new Error(language === 'ar' ? 'فشل تحميل الملف' : 'Failed to download file');
+
+      const backupData = await response.json();
+
+      if (!backupData.data || !backupData.metadata) {
+        throw new Error(language === 'ar' ? 'ملف النسخة الاحتياطية غير صالح' : 'Invalid backup file format');
+      }
+
+      await performRestore(backupData);
+    } catch (err) {
+      console.error('Restore from Drive error:', err);
+      setError(err instanceof Error ? err.message : (language === 'ar' ? 'فشل استعادة النسخة' : 'Restore failed'));
+    } finally {
+      setRestoreLoading(false);
+      setRestoreProgress('');
+    }
+  };
+
+  const performRestore = async (backupData: any) => {
+    const RESTORE_ORDER = [
+      'settings', 'branches', 'users', 'permissions', 'employees',
+      'products', 'inventory', 'customers', 'suppliers',
+      'purchases', 'purchase_items', 'sales', 'sale_items',
+      'partners', 'partner_contributions', 'setup_expenses',
+      'operating_expenses', 'expenses',
+      'cash_shifts', 'cash_transactions',
+      'salla_orders', 'salla_order_items',
+      'loyalty_transactions', 'audit_logs'
+    ];
+
+    let restoredTables = 0;
+    let restoredRecords = 0;
+    const errors: string[] = [];
+
+    for (const table of RESTORE_ORDER) {
+      const tableData = backupData.data[table];
+      if (!tableData || !Array.isArray(tableData) || tableData.length === 0) continue;
+
+      setRestoreProgress(language === 'ar'
+        ? `جاري استعادة جدول ${table} (${tableData.length} سجل)...`
+        : `Restoring ${table} (${tableData.length} records)...`
+      );
+
+      try {
+        const { error: upsertError } = await supabase
+          .from(table)
+          .upsert(tableData, { onConflict: 'id', ignoreDuplicates: false });
+
+        if (upsertError) {
+          console.warn(`Error restoring ${table}:`, upsertError);
+          errors.push(`${table}: ${upsertError.message}`);
+          continue;
+        }
+
+        restoredTables++;
+        restoredRecords += tableData.length;
+      } catch (err) {
+        console.warn(`Error restoring ${table}:`, err);
+        errors.push(`${table}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    if (restoredTables === 0) {
+      throw new Error(language === 'ar' ? 'لم يتم استعادة أي بيانات' : 'No data was restored');
+    }
+
+    const msg = language === 'ar'
+      ? `تم استعادة ${restoredRecords} سجل من ${restoredTables} جدول بنجاح!${errors.length > 0 ? `\n\nتحذير: فشل استعادة ${errors.length} جدول` : ''}`
+      : `Successfully restored ${restoredRecords} records from ${restoredTables} tables!${errors.length > 0 ? `\n\nWarning: ${errors.length} tables failed` : ''}`;
+
+    setSuccessMessage(msg);
+    setSuccess(true);
+
+    if (errors.length > 0) {
+      console.warn('Restore errors:', errors);
+    }
   };
 
   const formatDate = (dateString: string): string => {
@@ -977,6 +1175,170 @@ export default function Backup() {
             : 'Backups saved to server can be accessed from any device'}
         </p>
       </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <RotateCcw className="w-6 h-6 text-amber-600" />
+            {language === 'ar' ? 'استعادة نسخة احتياطية' : 'Restore Backup'}
+          </h2>
+          <button
+            onClick={() => setShowRestoreSection(!showRestoreSection)}
+            className="text-sm px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition text-gray-700"
+          >
+            {showRestoreSection
+              ? (language === 'ar' ? 'إخفاء' : 'Hide')
+              : (language === 'ar' ? 'عرض خيارات الاستعادة' : 'Show Restore Options')}
+          </button>
+        </div>
+
+        {showRestoreSection && (
+          <div className="space-y-6">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-amber-900">
+                  {language === 'ar'
+                    ? 'تحذير: استعادة نسخة احتياطية ستقوم بتحديث البيانات الحالية بالبيانات الموجودة في النسخة. تأكد من أنك تريد المتابعة.'
+                    : 'Warning: Restoring a backup will update current data with the backup data. Make sure you want to proceed.'}
+                </p>
+              </div>
+            </div>
+
+            {restoreLoading && restoreProgress && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <Loader className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                  <p className="text-sm text-blue-900 font-medium">{restoreProgress}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="border border-gray-200 rounded-lg p-6">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Upload className="w-5 h-5 text-blue-600" />
+                {language === 'ar' ? 'استعادة من ملف على الكمبيوتر' : 'Restore from Local File'}
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                {language === 'ar'
+                  ? 'اختر ملف نسخة احتياطية (JSON) من جهازك لاستعادة البيانات'
+                  : 'Select a backup file (JSON) from your device to restore data'}
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) restoreFromFile(file);
+                }}
+                disabled={restoreLoading}
+                className="hidden"
+                id="restore-file-input"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={restoreLoading}
+                className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition border-2 border-dashed ${
+                  restoreLoading
+                    ? 'bg-gray-100 border-gray-300 cursor-not-allowed text-gray-400'
+                    : 'bg-white border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400'
+                }`}
+              >
+                {restoreLoading ? (
+                  <>
+                    <Loader className="w-5 h-5 animate-spin" />
+                    {language === 'ar' ? 'جاري الاستعادة...' : 'Restoring...'}
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5" />
+                    {language === 'ar' ? 'اختر ملف النسخة الاحتياطية (.json)' : 'Select Backup File (.json)'}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {googleDrive.connected && (
+              <div className="border border-gray-200 rounded-lg p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Cloud className="w-5 h-5 text-green-600" />
+                    {language === 'ar' ? 'استعادة من Google Drive' : 'Restore from Google Drive'}
+                  </h3>
+                  <button
+                    onClick={loadGoogleDriveBackups}
+                    disabled={loadingDriveFiles || restoreLoading}
+                    className="text-sm px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition disabled:opacity-50"
+                  >
+                    {loadingDriveFiles
+                      ? (language === 'ar' ? 'جاري التحميل...' : 'Loading...')
+                      : (language === 'ar' ? 'تحميل القائمة' : 'Load List')}
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  {language === 'ar'
+                    ? 'اختر نسخة احتياطية من Google Drive لاستعادتها'
+                    : 'Select a backup from Google Drive to restore'}
+                </p>
+
+                {googleDriveFiles.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {googleDriveFiles.map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <FileText className="w-5 h-5 text-green-600 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {file.createdTime ? formatDate(file.createdTime) : ''}
+                              {file.size ? ` - ${formatBytes(parseInt(file.size))}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => restoreFromGoogleDrive(file.id, file.name)}
+                          disabled={restoreLoading}
+                          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition text-sm disabled:opacity-50"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          {language === 'ar' ? 'استعادة' : 'Restore'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    {language === 'ar'
+                      ? 'اضغط "تحميل القائمة" لعرض النسخ الاحتياطية المتوفرة'
+                      : 'Click "Load List" to show available backups'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-green-900 font-medium whitespace-pre-line">{successMessage}</p>
+            </div>
+            <button
+              onClick={() => setSuccessMessage('')}
+              className="text-green-600 hover:text-green-800 text-sm"
+            >
+              {language === 'ar' ? 'إغلاق' : 'Close'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
