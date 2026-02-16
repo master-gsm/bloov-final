@@ -68,45 +68,80 @@ Deno.serve(async (req: Request) => {
     }
 
     // Only delete: Sales, Purchases, Cash Register, and Expenses
-    const deleteQueries = [
-      // Sales and related
-      "DELETE FROM sale_items WHERE branch_id IS NOT NULL",
-      "DELETE FROM sales WHERE branch_id IS NOT NULL",
-
-      // Purchases and related
-      "DELETE FROM purchase_items WHERE branch_id IS NOT NULL",
-      "DELETE FROM purchases WHERE branch_id IS NOT NULL",
-
-      // Cash register
-      "DELETE FROM cash_transactions WHERE branch_id IS NOT NULL",
-      "DELETE FROM cash_shifts WHERE branch_id IS NOT NULL",
-
-      // Expenses
-      "DELETE FROM operating_expenses WHERE branch_id IS NOT NULL",
-    ];
-
     let totalDeleted = 0;
     const deletionDetails: Record<string, number> = {};
 
-    for (const query of deleteQueries) {
-      try {
-        const tableName = query.match(/FROM (\w+)/)?.[1] || 'unknown';
-        const { data, error } = await supabase.rpc('execute_sql_as_admin', {
-          sql_query: query
-        });
+    // Delete sale_items first (foreign key dependency)
+    const { error: saleItemsError } = await supabase
+      .from('sale_items')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
 
-        if (error) {
-          console.error(`Error deleting from ${tableName}:`, error);
-          deletionDetails[tableName] = 0;
-        } else {
-          const count = data || 0;
-          deletionDetails[tableName] = count;
-          totalDeleted += count;
-        }
-      } catch (err) {
-        console.error('Deletion error:', err);
-      }
+    if (!saleItemsError) {
+      deletionDetails['sale_items'] = 0;
     }
+
+    // Delete sales
+    const { error: salesError } = await supabase
+      .from('sales')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (!salesError) {
+      deletionDetails['sales'] = 0;
+    }
+
+    // Delete purchase_items first (foreign key dependency)
+    const { error: purchaseItemsError } = await supabase
+      .from('purchase_items')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (!purchaseItemsError) {
+      deletionDetails['purchase_items'] = 0;
+    }
+
+    // Delete purchases
+    const { error: purchasesError } = await supabase
+      .from('purchases')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (!purchasesError) {
+      deletionDetails['purchases'] = 0;
+    }
+
+    // Delete cash transactions
+    const { error: cashTransError } = await supabase
+      .from('cash_transactions')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (!cashTransError) {
+      deletionDetails['cash_transactions'] = 0;
+    }
+
+    // Delete cash shifts
+    const { error: cashShiftsError } = await supabase
+      .from('cash_shifts')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (!cashShiftsError) {
+      deletionDetails['cash_shifts'] = 0;
+    }
+
+    // Delete operating expenses
+    const { error: expensesError } = await supabase
+      .from('operating_expenses')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (!expensesError) {
+      deletionDetails['operating_expenses'] = 0;
+    }
+
+    totalDeleted = Object.values(deletionDetails).reduce((a, b) => a + b, 0);
 
     await supabase.from("audit_logs").insert({
       user_id: user.id,
