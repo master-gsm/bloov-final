@@ -210,30 +210,34 @@ Deno.serve(async (req: Request) => {
     await supabase
       .from("backup_logs")
       .update({
-        status: googleDriveFileId ? "success" : "failed",
+        status: googleDriveFileId ? "success" : "partial",
         finished_at: new Date().toISOString(),
         file_name: fileName,
         file_id: googleDriveFileId,
         file_size: backupSize,
         record_count: totalRecords,
-        error_message: googleDriveFileId ? null : "Failed to upload to Google Drive",
-        http_status: googleDriveFileId ? 200 : 500,
+        error_message: googleDriveFileId ? null : "Backup created but Google Drive upload failed",
+        http_status: 200,
       })
       .eq("id", logEntry.id);
 
-    console.log("[Backup] Backup completed. Success:", !!googleDriveFileId);
+    console.log("[Backup] Backup completed. Google Drive:", !!googleDriveFileId);
 
+    // نرجع status 200 دائماً إذا تم إنشاء النسخة الاحتياطية بنجاح
+    // حتى لو فشل رفعها إلى Google Drive
     return new Response(
       JSON.stringify({
-        success: !!googleDriveFileId,
+        success: true, // النسخة الاحتياطية تمت بنجاح
         backup_id: logEntry.id,
         file_name: fileName,
         file_size: backupSize,
         record_count: totalRecords,
+        google_drive_uploaded: !!googleDriveFileId,
         google_drive_url: googleDriveUrl,
         tables_backed_up: Object.keys(backupData).length,
+        warning: googleDriveFileId ? null : "Backup created but not uploaded to Google Drive",
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
 
   } catch (error) {

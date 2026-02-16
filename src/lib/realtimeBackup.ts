@@ -163,19 +163,42 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
       },
     });
 
-    console.log('[Backup] Response:', { data, error });
+    console.log('[Backup] Response data:', data);
+    console.log('[Backup] Response error:', error);
 
+    // التعامل مع الأخطاء من FunctionInvokeError
     if (error) {
-      throw new Error(error.message || 'فشل في إنشاء النسخة الاحتياطية');
+      // إذا كان هناك context (response body)، حاول استخراج الرسالة
+      const errorMessage = error.message || 'فشل في إنشاء النسخة الاحتياطية';
+      console.error('[Backup] Function error:', errorMessage);
+
+      // رسائل خطأ واضحة
+      if (errorMessage.includes('Google Drive not enabled') || errorMessage.includes('not configured')) {
+        throw new Error('Google Drive غير مفعّل. الرجاء تفعيله من الإعدادات أولاً');
+      }
+
+      throw new Error(errorMessage);
     }
 
+    // التحقق من نجاح العملية
     if (data && data.success !== false) {
+      const recordCount = data.record_count || 0;
       return {
         success: true,
-        message: 'تم إنشاء النسخة الاحتياطية بنجاح',
+        message: data.google_drive_url
+          ? `تم رفع النسخة الاحتياطية إلى Google Drive بنجاح (${recordCount} سجل)`
+          : `تم إنشاء النسخة الاحتياطية بنجاح (${recordCount} سجل)`,
       };
     } else {
-      throw new Error(data?.error || 'فشل في إنشاء النسخة الاحتياطية');
+      // data موجودة ولكن success = false
+      const errorMsg = data?.error || 'فشل في إنشاء النسخة الاحتياطية';
+      console.error('[Backup] Function returned error:', errorMsg);
+
+      if (errorMsg.includes('Google Drive not enabled') || errorMsg.includes('not configured')) {
+        throw new Error('Google Drive غير مفعّل. الرجاء تفعيله من الإعدادات أولاً');
+      }
+
+      throw new Error(errorMsg);
     }
   } catch (error: any) {
     console.error('[Backup] Error:', error);
