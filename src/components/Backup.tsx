@@ -935,6 +935,7 @@ export default function Backup() {
             </div>
             <div className="flex gap-3 justify-end">
               <button
+                type="button"
                 onClick={() => {
                   setConfirmModal(null);
                   setPendingFile(null);
@@ -945,6 +946,7 @@ export default function Backup() {
                 {language === 'ar' ? 'إلغاء' : 'Cancel'}
               </button>
               <button
+                type="button"
                 onClick={confirmModal.onConfirm}
                 className="px-5 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition font-medium"
               >
@@ -963,6 +965,7 @@ export default function Backup() {
             </h1>
           </div>
           <button
+            type="button"
             onClick={() => setShowSettings(!showSettings)}
             className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition"
           >
@@ -1028,6 +1031,7 @@ export default function Backup() {
             </div>
 
             <button
+              type="button"
               onClick={saveGoogleDriveSettings}
               disabled={savingSettings || !googleDrive.clientId || !googleDrive.clientSecret}
               className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-300"
@@ -1053,6 +1057,7 @@ export default function Backup() {
               <div className="flex items-center gap-2">
                 {!googleDrive.connected && (
                   <button
+                    type="button"
                     onClick={connectGoogleDrive}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                   >
@@ -1064,12 +1069,14 @@ export default function Backup() {
                   <>
                     <CheckCircle className="w-6 h-6 text-green-600" />
                     <button
+                      type="button"
                       onClick={connectGoogleDrive}
                       className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition text-sm"
                     >
                       {language === 'ar' ? 'إعادة الربط' : 'Reconnect'}
                     </button>
                     <button
+                      type="button"
                       onClick={disconnectGoogleDrive}
                       className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition text-sm"
                     >
@@ -1131,6 +1138,7 @@ export default function Backup() {
             </div>
 
             <button
+              type="button"
               onClick={saveBackupSettings}
               disabled={savingSettings || !googleDrive.connected}
               className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition disabled:bg-gray-300"
@@ -1148,6 +1156,7 @@ export default function Backup() {
                     : 'To test uploading a backup to Google Drive now:'}
                 </p>
                 <button
+                  type="button"
                   onClick={uploadToGoogleDrive}
                   disabled={googleDriveLoading}
                   className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition ${
@@ -1201,6 +1210,7 @@ export default function Backup() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <button
+            type="button"
             onClick={createLocalBackup}
             disabled={localLoading}
             className={`flex items-center justify-center gap-2 py-4 px-6 rounded-lg font-medium transition ${
@@ -1223,6 +1233,7 @@ export default function Backup() {
           </button>
 
           <button
+            type="button"
             onClick={createServerBackup}
             disabled={serverLoading}
             className={`flex items-center justify-center gap-2 py-4 px-6 rounded-lg font-medium transition ${
@@ -1259,6 +1270,7 @@ export default function Backup() {
             {language === 'ar' ? 'استعادة نسخة احتياطية' : 'Restore Backup'}
           </h2>
           <button
+            type="button"
             onClick={() => setShowRestoreSection(!showRestoreSection)}
             className="text-sm px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition text-gray-700"
           >
@@ -1313,6 +1325,7 @@ export default function Backup() {
                 id="restore-file-input"
               />
               <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={restoreLoading}
                 className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition border-2 border-dashed ${
@@ -1343,6 +1356,7 @@ export default function Backup() {
                     {language === 'ar' ? 'استعادة من Google Drive' : 'Restore from Google Drive'}
                   </h3>
                   <button
+                    type="button"
                     onClick={loadGoogleDriveBackups}
                     disabled={loadingDriveFiles || restoreLoading}
                     className="text-sm px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition disabled:opacity-50"
@@ -1376,6 +1390,7 @@ export default function Backup() {
                           </div>
                         </div>
                         <button
+                          type="button"
                           onClick={() => restoreFromGoogleDrive(file.id, file.name)}
                           disabled={restoreLoading}
                           className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition text-sm disabled:opacity-50"
@@ -1407,6 +1422,7 @@ export default function Backup() {
               <p className="text-sm text-green-900 font-medium whitespace-pre-line">{successMessage}</p>
             </div>
             <button
+              type="button"
               onClick={() => setSuccessMessage('')}
               className="text-green-600 hover:text-green-800 text-sm"
             >
@@ -1512,6 +1528,7 @@ export default function Backup() {
               {backupResult.backup_data && (
                 <div className="space-y-2">
                   <button
+                    type="button"
                     onClick={() => downloadBackup(backupResult.backup_data, backupResult.filename)}
                     className="w-full flex items-center justify-center gap-2 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition font-medium"
                   >
@@ -1554,6 +1571,7 @@ export default function Backup() {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => downloadFromHistory(backup.name)}
                   className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm"
                 >
