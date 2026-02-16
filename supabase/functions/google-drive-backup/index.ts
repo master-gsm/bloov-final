@@ -38,6 +38,35 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing authorization header");
     }
 
+    // التحقق من صلاحيات المستخدم
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error("Authentication failed:", authError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // التحقق من أن المستخدم admin أو super_admin
+    const { data: userData } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!userData || !["admin", "super_admin"].includes(userData.role)) {
+      console.error("User not authorized:", user.id);
+      return new Response(
+        JSON.stringify({ success: false, error: "Insufficient permissions" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("[Backup] Starting backup by user:", user.id, "role:", userData.role);
+
     const { backupType = 'full', tables } = await req.json() as BackupRequest;
 
     // إنشاء سجل نسخ احتياطي

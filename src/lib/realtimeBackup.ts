@@ -54,6 +54,14 @@ async function addToBackupQueue(item: BackupQueueItem): Promise<void> {
  */
 async function processBackupQueue(): Promise<void> {
   try {
+    // الحصول على token المستخدم الحالي
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      // لا يوجد مستخدم مسجل دخول، نتجاهل
+      return;
+    }
+
     // جلب العناصر غير المعالجة (آخر 100)
     const { data: queue } = await supabase
       .from('backup_queue')
@@ -82,7 +90,7 @@ async function processBackupQueue(): Promise<void> {
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Authorization': `Bearer ${session.access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -144,12 +152,21 @@ export async function afterDelete(tableName: string, recordId: string): Promise<
  */
 export async function triggerFullBackup(): Promise<{ success: boolean; message: string }> {
   try {
+    // الحصول على token المستخدم الحالي
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      throw new Error('يجب تسجيل الدخول لإجراء النسخ الاحتياطي');
+    }
+
     const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-backup`;
+
+    console.log('[Backup] Starting full backup...');
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Authorization': `Bearer ${session.access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -158,8 +175,9 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
     });
 
     const result = await response.json();
+    console.log('[Backup] Response:', result);
 
-    if (response.ok && result.success) {
+    if (response.ok && result.success !== false) {
       return {
         success: true,
         message: 'تم إنشاء النسخة الاحتياطية بنجاح',
@@ -168,6 +186,7 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
       throw new Error(result.error || 'فشل في إنشاء النسخة الاحتياطية');
     }
   } catch (error: any) {
+    console.error('[Backup] Error:', error);
     return {
       success: false,
       message: error.message || 'حدث خطأ أثناء إنشاء النسخة الاحتياطية',
