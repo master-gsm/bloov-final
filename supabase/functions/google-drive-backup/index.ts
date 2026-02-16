@@ -27,10 +27,10 @@ Deno.serve(async (req: Request) => {
   let logEntryId: string | null = null;
 
   try {
-    // إنشاء Supabase client
+    // إنشاء Supabase clients
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // التحقق من الـ authentication
     const authHeader = req.headers.get("Authorization");
@@ -38,10 +38,23 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing authorization header");
     }
 
-    // التحقق من JWT token باستخدام service role
     const token = authHeader.replace("Bearer ", "");
     console.log("[Backup] Verifying token...");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    // Create a client with the user's token to verify the session
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
 
     if (authError || !user) {
       console.error("[Backup] Authentication failed:", authError);
@@ -52,6 +65,14 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log("[Backup] User authenticated:", user.id);
+
+    // Now use service role client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
 
     // التحقق من أن المستخدم admin
     const { data: userData } = await supabase
