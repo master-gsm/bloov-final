@@ -116,14 +116,20 @@ export default function Backup() {
         {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
           },
         }
       );
 
+      console.log('Response status:', response.status);
       const result = await response.json();
+      console.log('Auth URL response:', result);
 
-      if (!result.success) {
-        alert(result.error || (language === 'ar' ? 'فشل في الحصول على رابط المصادقة' : 'Failed to get auth URL'));
+      if (!result.success || !response.ok) {
+        const errorMsg = result.error || (language === 'ar' ? 'فشل في الحصول على رابط المصادقة' : 'Failed to get auth URL');
+        console.error('Failed to get auth URL:', errorMsg);
+        alert(errorMsg);
         return;
       }
 
@@ -187,6 +193,8 @@ export default function Backup() {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
           },
         }
       );
@@ -194,8 +202,9 @@ export default function Backup() {
       const result = await response.json();
 
       if (result.success) {
-        setGoogleDrive({ enabled: false, folderId: '', connected: false });
+        setGoogleDrive(prev => ({ ...prev, enabled: false, connected: false }));
         alert(language === 'ar' ? 'تم فصل الاتصال بنجاح' : 'Disconnected successfully');
+        loadGoogleDriveSettings();
       } else {
         alert(result.error || (language === 'ar' ? 'فشل فصل الاتصال' : 'Failed to disconnect'));
       }
