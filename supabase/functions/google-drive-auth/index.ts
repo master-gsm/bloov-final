@@ -78,14 +78,43 @@ Deno.serve(async (req: Request) => {
         throw new Error("Unauthorized");
       }
 
-      const { data: userProfile } = await supabase
+      const { data: userProfile, error: profileError } = await supabase
         .from("users")
         .select("role")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (!userProfile || userProfile.role !== "admin") {
-        throw new Error("Only admins can connect Google Drive");
+      if (profileError) {
+        console.error("Error fetching user profile:", profileError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "Failed to fetch user profile",
+          }),
+          {
+            status: 500,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
+
+      if (!userProfile || !["admin", "super_admin"].includes(userProfile.role)) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "Only admins can connect Google Drive",
+          }),
+          {
+            status: 403,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          }
+        );
       }
 
       const redirectUri = `${supabaseUrl}/functions/v1/google-drive-auth?action=callback`;

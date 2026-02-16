@@ -60,10 +60,16 @@ export default function Backup() {
 
   const loadGoogleDriveSettings = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('settings')
         .select('google_drive_enabled, google_drive_folder_id, google_drive_credentials, google_drive_client_id, google_drive_client_secret')
-        .single();
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error loading Google Drive settings:', error);
+        return;
+      }
 
       if (data) {
         setGoogleDrive({
