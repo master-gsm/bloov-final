@@ -7,27 +7,67 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+interface CredentialSource {
+  clientId: string;
+  clientSecret: string;
+  source: "env" | "db";
+}
+
+async function resolveGoogleClientCredentials(
+  supabase: any
+): Promise<CredentialSource | null> {
+  const envClientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
+  const envClientSecret = Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET");
+
+  if (envClientId && envClientSecret) {
+    console.log("[create-backup] Using ENV credentials for Google Drive token refresh");
+    return { clientId: envClientId, clientSecret: envClientSecret, source: "env" };
+  }
+
+  console.log("[create-backup] ENV not found, falling back to DB credentials for token refresh");
+
+  const { data, error } = await supabase
+    .from("settings")
+    .select("google_drive_client_id, google_drive_client_secret")
+    .eq("id", 1)
+    .single();
+
+  if (error || !data) {
+    console.error("[create-backup] Failed to load DB credentials:", error?.message);
+    return null;
+  }
+
+  if (data.google_drive_client_id && data.google_drive_client_secret) {
+    console.log("[create-backup] Fallback to DB credentials successful");
+    return {
+      clientId: data.google_drive_client_id,
+      clientSecret: data.google_drive_client_secret,
+      source: "db",
+    };
+  }
+
+  console.error("[create-backup] No Google Drive client credentials found in ENV or DB");
+  return null;
+}
+
 async function refreshGoogleToken(
   refreshToken: string,
   supabase: any
 ): Promise<{ success: boolean; access_token?: string; error?: string }> {
   try {
-    const clientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
-    const clientSecret = Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET");
+    const creds = await resolveGoogleClientCredentials(supabase);
 
-    if (!clientId || !clientSecret) {
-      return { success: false, error: "Google Drive credentials not configured" };
+    if (!creds) {
+      return { success: false, error: "Google Drive client credentials not configured in ENV or DB" };
     }
 
     const response = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         refresh_token: refreshToken,
-        client_id: clientId,
-        client_secret: clientSecret,
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
         grant_type: "refresh_token",
       }),
     });
@@ -50,6 +90,8 @@ async function refreshGoogleToken(
       .from("settings")
       .update({ google_drive_credentials: newCredentials })
       .eq("id", 1);
+
+    console.log(`[create-backup] Token refreshed successfully (credential source: ${creds.source})`);
 
     return { success: true, access_token: tokens.access_token };
   } catch (error) {
@@ -209,7 +251,7 @@ Deno.serve(async (req: Request) => {
   try {
     const startTime = Date.now();
 
-    console.log("Step 1: Checking authorization");
+    console.log("[create-backup] Step 1: Checking authorization");
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       throw new Error("Missing authorization header");
@@ -219,24 +261,22 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    console.log("Step 2: Creating user-scoped client");
+    console.log("[create-backup] Step 2: Creating user-scoped client");
     const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
-        headers: {
-          Authorization: authHeader,
-        },
+        headers: { Authorization: authHeader },
       },
     });
 
-    console.log("Step 3: Getting authenticated user");
+    console.log("[create-backup] Step 3: Getting authenticated user");
     const { data: { user }, error: userError } = await userSupabase.auth.getUser();
 
     if (userError || !user) {
-      console.error("User error:", userError);
+      console.error("[create-backup] User error:", userError);
       throw new Error("Unauthorized - Please login again");
     }
 
-    console.log("Step 4: Fetching user profile for user:", user.id);
+    console.log("[create-backup] Step 4: Fetching user profile for user:", user.id);
     const { data: userProfile, error: profileError } = await userSupabase
       .from("users")
       .select("role")
@@ -244,16 +284,16 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (profileError) {
-      console.error("Error fetching user profile:", profileError);
+      console.error("[create-backup] Error fetching user profile:", profileError);
       throw new Error(`Failed to fetch user profile: ${profileError.message}`);
     }
 
-    console.log("Step 5: User profile:", userProfile);
+    console.log("[create-backup] Step 5: User profile:", userProfile);
     if (!userProfile || userProfile.role !== "admin") {
       throw new Error("Only admins can create backups");
     }
 
-    console.log("Step 6: Creating service client for data access");
+    console.log("[create-backup] Step 6: Creating service client for data access");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -300,7 +340,7 @@ Deno.serve(async (req: Request) => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `backup_${timestamp}.json`;
 
-    console.log("Step 5: Uploading backup to storage bucket");
+    console.log("[create-backup] Step 7: Uploading backup to storage bucket");
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('backups')
       .upload(filename, backupJson, {
@@ -309,11 +349,11 @@ Deno.serve(async (req: Request) => {
       });
 
     if (uploadError) {
-      console.error("Upload error:", uploadError);
+      console.error("[create-backup] Upload error:", uploadError);
       throw new Error(`Failed to save backup to server: ${uploadError.message}`);
     }
 
-    console.log("Step 6: Backup uploaded successfully:", uploadData);
+    console.log("[create-backup] Step 8: Backup uploaded successfully:", uploadData);
 
     const { data: settings } = await supabase
       .from('settings')
@@ -358,14 +398,11 @@ Deno.serve(async (req: Request) => {
         errors: errors.length > 0 ? errors : undefined,
       }),
       {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   } catch (err) {
-    console.error("Backup error:", err);
+    console.error("[create-backup] Error:", err);
     return new Response(
       JSON.stringify({
         success: false,
@@ -373,10 +410,7 @@ Deno.serve(async (req: Request) => {
       }),
       {
         status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   }

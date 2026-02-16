@@ -184,9 +184,19 @@ class SyncManager {
         break;
 
       case 'delete':
-        const { error: deleteError } = await supabase.from(table).delete().eq('id', data.id);
-        if (deleteError && deleteError.code !== 'PGRST116') {
-          throw deleteError;
+        const IMMUTABLE_TABLES = [
+          'sales', 'sale_items', 'purchases', 'purchase_items',
+          'expenses', 'inventory_movements', 'operating_expenses',
+          'cash_transactions', 'cash_shifts', 'partner_contributions',
+          'partner_settlements', 'setup_expenses',
+        ];
+        if (IMMUTABLE_TABLES.includes(table)) {
+          console.warn(`Skipping delete on immutable table ${table}/${data.id} - use void/reversal instead`);
+        } else {
+          const { error: deleteError } = await supabase.from(table).delete().eq('id', data.id);
+          if (deleteError && deleteError.code !== 'PGRST116') {
+            throw deleteError;
+          }
         }
         break;
 

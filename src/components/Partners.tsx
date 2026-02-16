@@ -166,12 +166,16 @@ export function Partners() {
     }
 
     try {
-      const { error } = await supabase.from('setup_expenses').delete().eq('id', id);
+      const { data, error } = await supabase.rpc('void_setup_expense', {
+        p_expense_id: id,
+        p_reason: 'Voided via Partners UI',
+      });
       if (error) throw error;
       setDeleteConfirm(null);
       await loadData();
-    } catch (err) {
-      console.error('Error deleting expense:', err);
+    } catch (err: any) {
+      console.error('Error voiding expense:', err);
+      alert(err.message || (isRTL ? 'حدث خطأ أثناء إلغاء المصروف' : 'Error voiding expense'));
     }
   };
 

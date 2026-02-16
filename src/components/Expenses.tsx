@@ -197,14 +197,16 @@ export default function Expenses() {
       return;
     }
     try {
-      const { error } = await supabase.from('operating_expenses').delete().eq('id', id);
-
+      const { data, error } = await supabase.rpc('void_operating_expense', {
+        p_expense_id: id,
+        p_reason: 'Voided via UI',
+      });
       if (error) throw error;
       loadExpenses();
       setDeleteConfirm(null);
-    } catch (err) {
-      console.error('Error deleting expense:', err);
-      alert(isRTL ? 'حدث خطأ أثناء حذف المصروف' : 'Error deleting expense');
+    } catch (err: any) {
+      console.error('Error voiding expense:', err);
+      alert(err.message || (isRTL ? 'حدث خطأ أثناء إلغاء المصروف' : 'Error voiding expense'));
     }
   };
 

@@ -187,22 +187,21 @@ export default function SetupExpenses() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذا المصروف؟' : 'Are you sure you want to delete this expense?')) {
+    if (!confirm(language === 'ar' ? 'هل أنت متأكد من إلغاء هذا المصروف نهائياً؟' : 'Are you sure you want to void this expense?')) {
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('setup_expenses')
-        .delete()
-        .eq('id', id);
-
+      const { data, error } = await supabase.rpc('void_setup_expense', {
+        p_expense_id: id,
+        p_reason: 'Voided via UI',
+      });
       if (error) throw error;
-      alert(language === 'ar' ? 'تم حذف المصروف بنجاح' : 'Expense deleted successfully');
+      alert(language === 'ar' ? 'تم إلغاء المصروف نهائياً' : 'Expense voided successfully');
       loadExpenses();
     } catch (error: any) {
-      console.error('Error deleting expense:', error);
-      alert(error.message || (language === 'ar' ? 'خطأ في حذف المصروف' : 'Error deleting expense'));
+      console.error('Error voiding expense:', error);
+      alert(error.message || (language === 'ar' ? 'خطأ في إلغاء المصروف' : 'Error voiding expense'));
     }
   };
 

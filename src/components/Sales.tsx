@@ -602,13 +602,17 @@ export function Sales() {
 
   const updateSaleStatus = async (saleId: string, status: string) => {
     try {
-      const { error } = await supabase.from('sales').update({ status }).eq('id', saleId);
+      const { data, error } = await supabase.rpc('update_sale_status', {
+        p_sale_id: saleId,
+        p_new_status: status,
+        p_reason: `Status changed to ${status} via UI`,
+      });
       if (error) throw error;
       await loadData();
       setViewingSale(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating sale status:', error);
-      alert(isRTL ? 'حدث خطأ أثناء تحديث حالة الفاتورة' : 'Error updating sale status');
+      alert(error.message || (isRTL ? 'حدث خطأ أثناء تحديث حالة الفاتورة' : 'Error updating sale status'));
     }
   };
 
@@ -618,39 +622,42 @@ export function Sales() {
       return;
     }
     try {
-      const { error } = await supabase.from('sales').update({ status: newStatus }).eq('id', saleId);
+      const { data, error } = await supabase.rpc('update_sale_status', {
+        p_sale_id: saleId,
+        p_new_status: newStatus,
+        p_reason: 'Reactivated via UI',
+      });
       if (error) throw error;
       await loadData();
       setViewingSale(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error reactivating sale:', error);
-      alert(isRTL ? 'حدث خطأ أثناء استعادة الفاتورة' : 'Error reactivating sale');
+      alert(error.message || (isRTL ? 'حدث خطأ أثناء استعادة الفاتورة' : 'Error reactivating sale'));
     }
   };
 
-  const deleteSale = async (saleId: string) => {
+  const voidSale = async (saleId: string) => {
     if (!canManageSales) {
       alert(isRTL ? 'يتطلب صلاحيات الأدمن أو المحاسب' : 'Admin or Accountant privileges required');
       return;
     }
     const confirmMsg = isRTL
-      ? 'هل أنت متأكد من حذف هذه الفاتورة؟ لا يمكن التراجع عن هذا الإجراء'
-      : 'Are you sure you want to delete this sale? This action cannot be undone';
+      ? 'هل أنت متأكد من إلغاء هذه الفاتورة نهائياً؟ سيتم تجميدها ولن يمكن تعديلها'
+      : 'Are you sure you want to void this sale? It will be permanently frozen';
     if (!window.confirm(confirmMsg)) return;
 
     try {
-      const { error: itemsError } = await supabase.from('sale_items').delete().eq('sale_id', saleId);
-      if (itemsError) throw itemsError;
-
-      const { error: saleError } = await supabase.from('sales').delete().eq('id', saleId);
-      if (saleError) throw saleError;
-
+      const { data, error } = await supabase.rpc('void_sale', {
+        p_sale_id: saleId,
+        p_reason: 'Voided via UI',
+      });
+      if (error) throw error;
       await loadData();
       setViewingSale(null);
-      alert(isRTL ? 'تم حذف الفاتورة بنجاح' : 'Sale deleted successfully');
-    } catch (error) {
-      console.error('Error deleting sale:', error);
-      alert(isRTL ? 'حدث خطأ أثناء حذف الفاتورة' : 'Error deleting sale');
+      alert(isRTL ? 'تم إلغاء الفاتورة نهائياً' : 'Sale voided successfully');
+    } catch (error: any) {
+      console.error('Error voiding sale:', error);
+      alert(error.message || (isRTL ? 'حدث خطأ أثناء إلغاء الفاتورة' : 'Error voiding sale'));
     }
   };
 
@@ -665,14 +672,18 @@ export function Sales() {
     if (!window.confirm(confirmMsg)) return;
 
     try {
-      const { error } = await supabase.from('sales').update({ status: 'returned' }).eq('id', saleId);
+      const { data, error } = await supabase.rpc('update_sale_status', {
+        p_sale_id: saleId,
+        p_new_status: 'returned',
+        p_reason: 'Marked as returned via UI',
+      });
       if (error) throw error;
       await loadData();
       setViewingSale(null);
       alert(isRTL ? 'تم تحويل الفاتورة إلى مرتجع' : 'Sale marked as returned');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error returning sale:', error);
-      alert(isRTL ? 'حدث خطأ أثناء تحويل الفاتورة إلى مرتجع' : 'Error marking sale as returned');
+      alert(error.message || (isRTL ? 'حدث خطأ أثناء تحويل الفاتورة إلى مرتجع' : 'Error marking sale as returned'));
     }
   };
 
@@ -697,6 +708,7 @@ export function Sales() {
     confirmed: 'bg-green-100 text-green-700',
     cancelled: 'bg-red-100 text-red-700',
     returned: 'bg-orange-100 text-orange-700',
+    void: 'bg-gray-200 text-gray-600',
   };
 
   const paymentColors: Record<string, string> = {
@@ -1358,7 +1370,7 @@ export function Sales() {
                   )}
                 </div>
 
-                {canManageSales && (
+                {canManageSales && viewingSale.status !== 'void' && (
                   <div className="flex gap-2">
                     {viewingSale.status === 'confirmed' && (
                       <>
@@ -1380,9 +1392,14 @@ export function Sales() {
                         <Check className="w-4 h-4" /> {isRTL ? 'استعادة' : 'Restore'}
                       </button>
                     )}
-                    <button onClick={() => deleteSale(viewingSale.id)} className="flex-1 flex items-center justify-center gap-2 bg-gray-800 text-white py-2.5 rounded-lg hover:bg-gray-900 transition font-medium text-sm">
-                      <Trash2 className="w-4 h-4" /> {isRTL ? 'حذف' : 'Delete'}
+                    <button onClick={() => voidSale(viewingSale.id)} className="flex-1 flex items-center justify-center gap-2 bg-gray-800 text-white py-2.5 rounded-lg hover:bg-gray-900 transition font-medium text-sm">
+                      <XCircle className="w-4 h-4" /> {isRTL ? 'إلغاء نهائي' : 'Void'}
                     </button>
+                  </div>
+                )}
+                {viewingSale.status === 'void' && (
+                  <div className="bg-gray-100 border border-gray-300 rounded-lg p-3 text-center text-gray-500 text-sm font-medium">
+                    {isRTL ? 'هذه الفاتورة ملغاة نهائياً ولا يمكن تعديلها' : 'This sale is voided and cannot be modified'}
                   </div>
                 )}
               </div>

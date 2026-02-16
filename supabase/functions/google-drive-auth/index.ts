@@ -7,6 +7,49 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+interface CredentialSource {
+  clientId: string;
+  clientSecret: string;
+  source: "env" | "db";
+}
+
+async function resolveGoogleCredentials(
+  supabase: any
+): Promise<CredentialSource | null> {
+  const envClientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
+  const envClientSecret = Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET");
+
+  if (envClientId && envClientSecret) {
+    console.log("[credentials] Using ENV credentials for Google Drive");
+    return { clientId: envClientId, clientSecret: envClientSecret, source: "env" };
+  }
+
+  console.log("[credentials] ENV not found, falling back to DB credentials");
+
+  const { data, error } = await supabase
+    .from("settings")
+    .select("google_drive_client_id, google_drive_client_secret")
+    .eq("id", 1)
+    .single();
+
+  if (error || !data) {
+    console.error("[credentials] Failed to load DB credentials:", error?.message);
+    return null;
+  }
+
+  if (data.google_drive_client_id && data.google_drive_client_secret) {
+    console.log("[credentials] Fallback to DB credentials successful");
+    return {
+      clientId: data.google_drive_client_id,
+      clientSecret: data.google_drive_client_secret,
+      source: "db",
+    };
+  }
+
+  console.error("[credentials] No credentials found in ENV or DB");
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -23,47 +66,22 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get Google Drive credentials from settings table
-    const { data: settingsData, error: settingsError } = await supabase
-      .from("settings")
-      .select("google_drive_client_id, google_drive_client_secret")
-      .eq("id", 1)
-      .single();
+    const creds = await resolveGoogleCredentials(supabase);
 
-    if (settingsError || !settingsData) {
+    if (!creds) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Failed to load settings. Please try again.",
-        }),
-        {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
-    const clientId = settingsData.google_drive_client_id;
-    const clientSecret = settingsData.google_drive_client_secret;
-
-    if (!clientId || !clientSecret) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Google Drive credentials not configured. Please configure Client ID and Client Secret in the settings.",
+          error: "Google Drive credentials not configured. Set GOOGLE_DRIVE_CLIENT_ID and GOOGLE_DRIVE_CLIENT_SECRET as environment variables, or configure them in Settings.",
         }),
         {
           status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
+
+    const { clientId, clientSecret } = creds;
 
     if (action === "get-auth-url") {
       const authHeader = req.headers.get("Authorization");
@@ -87,33 +105,15 @@ Deno.serve(async (req: Request) => {
       if (profileError) {
         console.error("Error fetching user profile:", profileError);
         return new Response(
-          JSON.stringify({
-            success: false,
-            error: "Failed to fetch user profile",
-          }),
-          {
-            status: 500,
-            headers: {
-              ...corsHeaders,
-              "Content-Type": "application/json",
-            },
-          }
+          JSON.stringify({ success: false, error: "Failed to fetch user profile" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       if (!userProfile || !["admin", "super_admin"].includes(userProfile.role)) {
         return new Response(
-          JSON.stringify({
-            success: false,
-            error: "Only admins can connect Google Drive",
-          }),
-          {
-            status: 403,
-            headers: {
-              ...corsHeaders,
-              "Content-Type": "application/json",
-            },
-          }
+          JSON.stringify({ success: false, error: "Only admins can connect Google Drive" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -131,17 +131,11 @@ Deno.serve(async (req: Request) => {
         `prompt=consent&` +
         `state=${state}`;
 
+      console.log(`[google-drive-auth] Auth URL generated (source: ${creds.source})`);
+
       return new Response(
-        JSON.stringify({
-          success: true,
-          auth_url: authUrl,
-        }),
-        {
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ success: true, auth_url: authUrl }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -153,22 +147,14 @@ Deno.serve(async (req: Request) => {
       if (error) {
         return new Response(
           `<html><body><script>window.opener.postMessage({success: false, error: "${error}"}, "*"); window.close();</script></body></html>`,
-          {
-            headers: {
-              "Content-Type": "text/html",
-            },
-          }
+          { headers: { "Content-Type": "text/html" } }
         );
       }
 
       if (!code || !state) {
         return new Response(
           `<html><body><script>window.opener.postMessage({success: false, error: "Missing code or state"}, "*"); window.close();</script></body></html>`,
-          {
-            headers: {
-              "Content-Type": "text/html",
-            },
-          }
+          { headers: { "Content-Type": "text/html" } }
         );
       }
 
@@ -176,9 +162,7 @@ Deno.serve(async (req: Request) => {
 
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           code,
           client_id: clientId,
@@ -192,11 +176,7 @@ Deno.serve(async (req: Request) => {
         const errorText = await tokenResponse.text();
         return new Response(
           `<html><body><script>window.opener.postMessage({success: false, error: "Token exchange failed: ${errorText}"}, "*"); window.close();</script></body></html>`,
-          {
-            headers: {
-              "Content-Type": "text/html",
-            },
-          }
+          { headers: { "Content-Type": "text/html" } }
         );
       }
 
@@ -212,29 +192,21 @@ Deno.serve(async (req: Request) => {
 
       const { error: updateError } = await supabase
         .from("settings")
-        .update({
-          google_drive_credentials: credentials,
-        })
+        .update({ google_drive_credentials: credentials })
         .eq("id", 1);
 
       if (updateError) {
         return new Response(
           `<html><body><script>window.opener.postMessage({success: false, error: "Failed to save credentials"}, "*"); window.close();</script></body></html>`,
-          {
-            headers: {
-              "Content-Type": "text/html",
-            },
-          }
+          { headers: { "Content-Type": "text/html" } }
         );
       }
 
+      console.log(`[google-drive-auth] OAuth callback success (credential source: ${creds.source})`);
+
       return new Response(
         `<html><body><script>window.opener.postMessage({success: true}, "*"); window.close();</script></body></html>`,
-        {
-          headers: {
-            "Content-Type": "text/html",
-          },
-        }
+        { headers: { "Content-Type": "text/html" } }
       );
     }
 
@@ -274,46 +246,23 @@ Deno.serve(async (req: Request) => {
       }
 
       return new Response(
-        JSON.stringify({
-          success: true,
-          message: "Disconnected successfully",
-        }),
-        {
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ success: true, message: "Disconnected successfully" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Invalid action",
-      }),
-      {
-        status: 400,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
+      JSON.stringify({ success: false, error: "Invalid action" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("Google Drive auth error:", err);
+    console.error("[google-drive-auth] Error:", err);
     return new Response(
       JSON.stringify({
         success: false,
         error: err instanceof Error ? err.message : "Unknown error",
       }),
-      {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

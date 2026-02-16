@@ -292,9 +292,19 @@ export function Purchases() {
   };
 
   const updatePurchaseStatus = async (purchaseId: string, status: string) => {
-    await supabase.from('purchases').update({ status }).eq('id', purchaseId);
-    loadData();
-    setViewingPurchase(null);
+    try {
+      const { data, error } = await supabase.rpc('update_purchase_status', {
+        p_purchase_id: purchaseId,
+        p_new_status: status,
+        p_reason: `Status changed to ${status} via UI`,
+      });
+      if (error) throw error;
+      loadData();
+      setViewingPurchase(null);
+    } catch (error: any) {
+      console.error('Error updating purchase status:', error);
+      alert(error.message || 'Error updating purchase status');
+    }
   };
 
   const filtered = purchases.filter((p) => {
