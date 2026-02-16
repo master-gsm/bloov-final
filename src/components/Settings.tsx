@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useOffline } from '../contexts/OfflineContext';
+import { useTestMode } from '../contexts/TestModeContext';
 import { supabase } from '../lib/supabase';
 import {
   Settings as SettingsIcon, Globe, Building2, Shield, Save, Receipt,
   Truck, Heart, Bell, Package, CreditCard, FileText, QrCode, CheckCircle, Loader2,
-  Database, Download, Upload, HardDrive, Clock, Wifi, WifiOff, RefreshCw, FolderOpen, AlertCircle, MessageSquare, Brain, Sparkles
+  Database, Download, Upload, HardDrive, Clock, Wifi, WifiOff, RefreshCw, FolderOpen, AlertCircle, MessageSquare, Brain, Sparkles, TestTube
 } from 'lucide-react';
 import { createBackup, downloadBackupAsJSON, downloadBackupAsExcel, restoreFromBackup, getLastBackupTime } from '../lib/backup';
 import { useAutoBackup } from '../hooks/useAutoBackup';
@@ -23,6 +24,7 @@ export function Settings() {
   const { language, setLanguage } = useLanguage();
   const { user } = useAuth();
   const { isOnline, isSyncing, pendingOperationsCount, lastBackupTime, syncNow } = useOffline();
+  const { isTestMode, setTestMode } = useTestMode();
   const isRTL = language === 'ar';
 
   const [settings, setSettings] = useState<SettingsMap>({});
@@ -1025,15 +1027,66 @@ export function Settings() {
               </div>
             </div>
 
+            <div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl shadow-sm border-2 border-amber-200 p-6 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-100 rounded-lg">
+                  <TestTube className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-amber-900">{isRTL ? 'وضع التجربة (Test Mode)' : 'Test Mode'}</h3>
+                  <p className="text-sm text-amber-700">
+                    {isRTL ? 'للمطورين: إيقاف حفظ البيانات مؤقتاً' : 'For developers: Temporarily disable data saving'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-amber-100 border-2 border-amber-300 rounded-lg p-4">
+                <p className="text-sm font-bold text-amber-900 flex items-center gap-2 mb-2">
+                  <AlertCircle className="w-5 h-5" />
+                  {isRTL ? 'ماذا يفعل وضع التجربة؟' : 'What does Test Mode do?'}
+                </p>
+                <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
+                  <li>{isRTL ? 'لا يتم حفظ أي بيانات في قاعدة البيانات' : 'No data is saved to the database'}</li>
+                  <li>{isRTL ? 'لا يتم تسجيل أي عمليات في سجل الأحداث' : 'No operations are logged in audit logs'}</li>
+                  <li>{isRTL ? 'مثالي لتجربة الميزات دون التأثير على البيانات الحقيقية' : 'Perfect for testing features without affecting real data'}</li>
+                  <li>{isRTL ? 'يظهر تنبيه برتقالي في أعلى الشاشة عند التفعيل' : 'Shows orange alert at top of screen when enabled'}</li>
+                </ul>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg hover:bg-amber-100 transition border-2 border-amber-300">
+                <div>
+                  <p className="text-sm font-medium text-amber-900">{isRTL ? 'تفعيل وضع التجربة' : 'Enable Test Mode'}</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    {isRTL ? 'لن يتم حفظ أي بيانات عند التفعيل' : 'No data will be saved when enabled'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTestMode(!isTestMode)}
+                  className={`relative inline-flex h-7 w-14 items-center rounded-full transition overflow-hidden ${isTestMode ? 'bg-amber-600' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition ${isTestMode ? 'translate-x-8' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {isTestMode && (
+                <div className="bg-amber-100 border-2 border-amber-400 rounded-lg p-4 animate-pulse">
+                  <p className="text-sm font-bold text-amber-900 text-center">
+                    {isRTL ? '⚠️ وضع التجربة مفعّل - لن يتم حفظ أي بيانات!' : '⚠️ Test Mode ACTIVE - No data will be saved!'}
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-xl shadow-sm border-2 border-red-200 p-6 space-y-6">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-red-100 rounded-lg">
                   <AlertCircle className="w-5 h-5 text-red-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-red-900">{isRTL ? 'تنظيف بيانات التجربة (Test Mode فقط)' : 'Reset Test Database (Test Mode Only)'}</h3>
+                  <h3 className="text-lg font-bold text-red-900">{isRTL ? 'تنظيف بيانات التجربة' : 'Reset Test Database'}</h3>
                   <p className="text-sm text-red-700">
-                    {isRTL ? 'حذف جميع البيانات التجريبية - للمسؤولين فقط' : 'Delete all test data - Admins only'}
+                    {isRTL ? 'حذف بيانات التجربة - للمسؤولين فقط' : 'Delete test data - Admins only'}
                   </p>
                 </div>
               </div>
@@ -1044,9 +1097,9 @@ export function Settings() {
                   {isRTL ? '⚠️ تحذير شديد' : '⚠️ Critical Warning'}
                 </p>
                 <ul className="text-xs text-red-800 mt-2 space-y-1 list-disc list-inside">
-                  <li>{isRTL ? 'هذا الإجراء سيحذف جميع البيانات بشكل نهائي' : 'This action will permanently delete all data'}</li>
+                  <li>{isRTL ? 'سيتم حذف: المبيعات، المشتريات، حركات الصندوق، المصروفات' : 'Will delete: Sales, Purchases, Cash Register, Expenses'}</li>
+                  <li>{isRTL ? 'لن يتم حذف: المنتجات، العملاء، الموردين، المخزون' : 'Will NOT delete: Products, Customers, Suppliers, Inventory'}</li>
                   <li>{isRTL ? 'لا يمكن التراجع بعد التنفيذ' : 'Cannot be undone after execution'}</li>
-                  <li>{isRTL ? 'متاح فقط في وضع التجربة (Test Mode)' : 'Available only in Test Mode'}</li>
                   <li>{isRTL ? 'يُسجل تلقائياً في سجل الأحداث' : 'Automatically logged in audit logs'}</li>
                 </ul>
               </div>

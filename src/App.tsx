@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { OfflineProvider } from './contexts/OfflineContext';
+import { TestModeProvider } from './contexts/TestModeContext';
 import { LoginForm } from './components/LoginForm';
 import { AdminSetup } from './components/AdminSetup';
 import { ResetPassword } from './components/ResetPassword';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { ConnectionStatusBar } from './components/ConnectionStatusBar';
+import { TestModeAlert } from './components/TestModeAlert';
 import { Dashboard } from './components/Dashboard';
 import { Products } from './components/Products';
 import { Partners } from './components/Partners';
@@ -168,6 +170,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+      <TestModeAlert />
       <ConnectionStatusBar />
       <div className="flex">
         <Sidebar activeSection={activeSection} setActiveSection={handleSetActiveSection} />
@@ -183,9 +186,11 @@ function App() {
   return (
     <AuthProvider>
       <LanguageProvider>
-        <OfflineProvider>
-          <AppContent />
-        </OfflineProvider>
+        <TestModeProvider>
+          <OfflineProvider>
+            <AppContent />
+          </OfflineProvider>
+        </TestModeProvider>
       </LanguageProvider>
     </AuthProvider>
   );

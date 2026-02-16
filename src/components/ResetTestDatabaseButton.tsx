@@ -112,16 +112,17 @@ export function ResetTestDatabaseButton({ isRTL, setBackupMessage }: ResetTestDa
 
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-sm text-red-900 font-medium mb-2">
-                {isRTL ? 'سيتم حذف البيانات التالية:' : 'The following data will be deleted:'}
+                {isRTL ? 'سيتم حذف البيانات التالية فقط:' : 'Only the following data will be deleted:'}
               </p>
               <ul className="text-xs text-red-800 space-y-1 list-disc list-inside">
                 <li>{isRTL ? 'جميع المبيعات والفواتير' : 'All sales and invoices'}</li>
                 <li>{isRTL ? 'جميع المشتريات' : 'All purchases'}</li>
-                <li>{isRTL ? 'جميع المنتجات والمخزون' : 'All products and inventory'}</li>
-                <li>{isRTL ? 'جميع العملاء والموردين' : 'All customers and suppliers'}</li>
                 <li>{isRTL ? 'جميع حركات الصندوق' : 'All cash register transactions'}</li>
                 <li>{isRTL ? 'جميع المصروفات' : 'All expenses'}</li>
               </ul>
+              <p className="text-xs text-red-700 mt-3 font-medium">
+                {isRTL ? '✅ لن يتم حذف: المنتجات، العملاء، الموردين، المخزون' : '✅ Will NOT delete: Products, Customers, Suppliers, Inventory'}
+              </p>
             </div>
 
             <div>

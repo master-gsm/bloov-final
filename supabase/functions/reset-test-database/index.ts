@@ -10,7 +10,6 @@ const corsHeaders = {
 interface ResetRequest {
   confirmationText: string;
   branchId?: string;
-  mode?: 'test' | 'production';
 }
 
 Deno.serve(async (req: Request) => {
@@ -59,7 +58,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { confirmationText, branchId, mode = 'test' } = await req.json() as ResetRequest;
+    const { confirmationText, branchId } = await req.json() as ResetRequest;
 
     if (confirmationText !== "RESET") {
       return new Response(
@@ -68,42 +67,27 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (mode === 'production') {
-      return new Response(
-        JSON.stringify({ success: false, error: "Reset in production mode is not allowed" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Use direct SQL queries to bypass RLS
+    // Only delete: Sales, Purchases, Cash Register, and Expenses
     const deleteQueries = [
-      "DELETE FROM employee_commissions WHERE branch_id IS NOT NULL",
-      "DELETE FROM salary_payments WHERE branch_id IS NOT NULL",
-      "DELETE FROM loyalty_transactions WHERE branch_id IS NOT NULL",
-      "DELETE FROM customer_loyalty WHERE branch_id IS NOT NULL",
+      // Sales and related
       "DELETE FROM sale_items WHERE branch_id IS NOT NULL",
       "DELETE FROM sales WHERE branch_id IS NOT NULL",
-      "DELETE FROM cash_transactions WHERE branch_id IS NOT NULL",
-      "DELETE FROM cash_shifts WHERE branch_id IS NOT NULL",
-      "DELETE FROM cash_registers WHERE branch_id IS NOT NULL",
+
+      // Purchases and related
       "DELETE FROM purchase_items WHERE branch_id IS NOT NULL",
       "DELETE FROM purchases WHERE branch_id IS NOT NULL",
+
+      // Cash register
+      "DELETE FROM cash_transactions WHERE branch_id IS NOT NULL",
+      "DELETE FROM cash_shifts WHERE branch_id IS NOT NULL",
+
+      // Expenses
       "DELETE FROM operating_expenses WHERE branch_id IS NOT NULL",
-      "DELETE FROM partner_contributions WHERE branch_id IS NOT NULL",
-      "DELETE FROM inventory_movements WHERE branch_id IS NOT NULL",
-      "DELETE FROM inventory WHERE branch_id IS NOT NULL",
-      "DELETE FROM salla_orders WHERE branch_id IS NOT NULL",
-      "DELETE FROM products WHERE branch_id IS NOT NULL",
-      "DELETE FROM categories WHERE branch_id IS NOT NULL",
-      "DELETE FROM customers WHERE branch_id IS NOT NULL",
-      "DELETE FROM suppliers WHERE branch_id IS NOT NULL",
-      "DELETE FROM partners WHERE branch_id IS NOT NULL",
     ];
 
     let totalDeleted = 0;
     const deletionDetails: Record<string, number> = {};
 
-    // Execute deletions in transaction
     for (const query of deleteQueries) {
       try {
         const tableName = query.match(/FROM (\w+)/)?.[1] || 'unknown';
@@ -124,14 +108,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Log the reset action
     await supabase.from("audit_logs").insert({
       user_id: user.id,
       action: "reset_test_database",
       branch_id: branchId || null,
       records_affected: totalDeleted,
       metadata: {
-        mode,
         branch_id: branchId,
         deletion_details: deletionDetails,
         confirmed_by: userProfile.full_name,
