@@ -213,24 +213,34 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    console.log("Step 1: Checking authorization");
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       throw new Error("Missing authorization header");
     }
 
+    console.log("Step 2: Getting user from token");
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
+      console.error("User error:", userError);
       throw new Error("Unauthorized");
     }
 
-    const { data: userProfile } = await supabase
+    console.log("Step 3: Fetching user profile for user:", user.id);
+    const { data: userProfile, error: profileError } = await supabase
       .from("users")
       .select("role")
       .eq("id", user.id)
       .single();
 
+    if (profileError) {
+      console.error("Error fetching user profile:", profileError);
+      throw new Error(`Failed to fetch user profile: ${profileError.message}`);
+    }
+
+    console.log("Step 4: User profile:", userProfile);
     if (!userProfile || userProfile.role !== "admin") {
       throw new Error("Only admins can create backups");
     }

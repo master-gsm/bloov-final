@@ -244,6 +244,7 @@ export default function Backup() {
       );
 
       const result = await response.json();
+      console.log('Backup response:', { status: response.status, result });
 
       if (!response.ok || !result.success) {
         throw new Error(result.error || 'Failed to create backup');
