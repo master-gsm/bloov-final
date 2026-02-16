@@ -21,14 +21,20 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const clientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
-    const clientSecret = Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET");
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!clientId || !clientSecret) {
+    // Get Google Drive credentials from settings table
+    const { data: settingsData, error: settingsError } = await supabase
+      .from("settings")
+      .select("google_drive_client_id, google_drive_client_secret")
+      .eq("id", 1)
+      .single();
+
+    if (settingsError || !settingsData) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Google Drive credentials not configured. Please add GOOGLE_DRIVE_CLIENT_ID and GOOGLE_DRIVE_CLIENT_SECRET to environment variables.",
+          error: "Failed to load settings. Please try again.",
         }),
         {
           status: 500,
@@ -40,7 +46,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const clientId = settingsData.google_drive_client_id;
+    const clientSecret = settingsData.google_drive_client_secret;
+
+    if (!clientId || !clientSecret) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Google Drive credentials not configured. Please configure Client ID and Client Secret in the settings.",
+        }),
+        {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
 
     if (action === "get-auth-url") {
       const authHeader = req.headers.get("Authorization");

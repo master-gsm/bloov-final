@@ -30,6 +30,8 @@ interface GoogleDriveSettings {
   enabled: boolean;
   folderId: string;
   connected: boolean;
+  clientId: string;
+  clientSecret: string;
 }
 
 export default function Backup() {
@@ -46,6 +48,8 @@ export default function Backup() {
     enabled: false,
     folderId: '',
     connected: false,
+    clientId: '',
+    clientSecret: '',
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -58,7 +62,7 @@ export default function Backup() {
     try {
       const { data } = await supabase
         .from('settings')
-        .select('google_drive_enabled, google_drive_folder_id, google_drive_credentials')
+        .select('google_drive_enabled, google_drive_folder_id, google_drive_credentials, google_drive_client_id, google_drive_client_secret')
         .single();
 
       if (data) {
@@ -66,6 +70,8 @@ export default function Backup() {
           enabled: data.google_drive_enabled || false,
           folderId: data.google_drive_folder_id || '',
           connected: !!data.google_drive_credentials,
+          clientId: data.google_drive_client_id || '',
+          clientSecret: data.google_drive_client_secret || '',
         });
       }
     } catch (err) {
@@ -200,6 +206,33 @@ export default function Backup() {
   };
 
   const saveGoogleDriveSettings = async () => {
+    if (!googleDrive.clientId || !googleDrive.clientSecret) {
+      alert(language === 'ar' ? 'يرجى إدخال Client ID و Client Secret' : 'Please enter Client ID and Client Secret');
+      return;
+    }
+
+    setSavingSettings(true);
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .update({
+          google_drive_client_id: googleDrive.clientId,
+          google_drive_client_secret: googleDrive.clientSecret,
+        })
+        .eq('id', 1);
+
+      if (error) throw error;
+
+      alert(language === 'ar' ? 'تم حفظ معلومات OAuth بنجاح. يمكنك الآن ربط حسابك' : 'OAuth credentials saved successfully. You can now connect your account');
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      alert(language === 'ar' ? 'فشل حفظ الإعدادات' : 'Failed to save settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const saveBackupSettings = async () => {
     setSavingSettings(true);
     try {
       const { error } = await supabase
@@ -212,9 +245,9 @@ export default function Backup() {
 
       if (error) throw error;
 
-      alert(language === 'ar' ? 'تم حفظ الإعدادات بنجاح' : 'Settings saved successfully');
+      alert(language === 'ar' ? 'تم حفظ إعدادات النسخ الاحتياطي' : 'Backup settings saved');
     } catch (err) {
-      console.error('Error saving settings:', err);
+      console.error('Error saving backup settings:', err);
       alert(language === 'ar' ? 'فشل حفظ الإعدادات' : 'Failed to save settings');
     } finally {
       setSavingSettings(false);
@@ -612,7 +645,61 @@ export default function Backup() {
             {language === 'ar' ? 'إعدادات Google Drive' : 'Google Drive Settings'}
           </h2>
 
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-900 mb-2">
+              <strong>{language === 'ar' ? 'خطوات الإعداد:' : 'Setup Steps:'}</strong>
+            </p>
+            <ol className="text-sm text-blue-800 space-y-1" style={{ listStylePosition: 'inside' }}>
+              <li>{language === 'ar' ? '1. اذهب إلى' : '1. Go to'} <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">Google Cloud Console</a></li>
+              <li>{language === 'ar' ? '2. أنشئ مشروع جديد أو اختر مشروع موجود' : '2. Create a new project or select existing one'}</li>
+              <li>{language === 'ar' ? '3. فعّل Google Drive API' : '3. Enable Google Drive API'}</li>
+              <li>{language === 'ar' ? '4. أنشئ OAuth 2.0 Client credentials' : '4. Create OAuth 2.0 Client credentials'}</li>
+              <li>{language === 'ar' ? '5. أضف Authorized redirect URI:' : '5. Add Authorized redirect URI:'} <code className="bg-white px-2 py-0.5 rounded text-xs">{import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-auth?action=callback</code></li>
+              <li>{language === 'ar' ? '6. انسخ Client ID و Client Secret وأدخلهما أدناه' : '6. Copy Client ID and Client Secret and enter them below'}</li>
+            </ol>
+          </div>
+
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {language === 'ar' ? 'Google Client ID' : 'Google Client ID'}
+                <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={googleDrive.clientId}
+                onChange={(e) => setGoogleDrive({ ...googleDrive, clientId: e.target.value })}
+                placeholder="123456789.apps.googleusercontent.com"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {language === 'ar' ? 'Google Client Secret' : 'Google Client Secret'}
+                <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={googleDrive.clientSecret}
+                onChange={(e) => setGoogleDrive({ ...googleDrive, clientSecret: e.target.value })}
+                placeholder="GOCSPX-xxxxxxxxxxxxxxxxxxxxx"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={saveGoogleDriveSettings}
+              disabled={savingSettings || !googleDrive.clientId || !googleDrive.clientSecret}
+              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-300"
+            >
+              {savingSettings
+                ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...')
+                : (language === 'ar' ? 'حفظ معلومات OAuth' : 'Save OAuth Credentials')}
+            </button>
+
+            <div className="border-t border-gray-200 my-4"></div>
+
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
               <div>
                 <p className="font-medium text-gray-900">
@@ -704,6 +791,16 @@ export default function Backup() {
               </p>
             </div>
 
+            <button
+              onClick={saveBackupSettings}
+              disabled={savingSettings || !googleDrive.connected}
+              className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition disabled:bg-gray-300"
+            >
+              {savingSettings
+                ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...')
+                : (language === 'ar' ? 'حفظ إعدادات النسخ الاحتياطي' : 'Save Backup Settings')}
+            </button>
+
             {googleDrive.connected && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <p className="text-sm text-gray-700 mb-3">
@@ -734,16 +831,6 @@ export default function Backup() {
                 </button>
               </div>
             )}
-
-            <button
-              onClick={saveGoogleDriveSettings}
-              disabled={savingSettings || !googleDrive.connected}
-              className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition disabled:bg-gray-300"
-            >
-              {savingSettings
-                ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...')
-                : (language === 'ar' ? 'حفظ الإعدادات' : 'Save Settings')}
-            </button>
           </div>
         </div>
       )}
