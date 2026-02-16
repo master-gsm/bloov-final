@@ -176,8 +176,18 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
       }),
     });
 
-    const result = await response.json();
-    console.log('[Backup] Response:', result);
+    console.log('[Backup] Response status:', response.status);
+    const responseText = await response.text();
+    console.log('[Backup] Response text:', responseText);
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (e) {
+      result = { error: responseText };
+    }
+
+    console.log('[Backup] Response parsed:', result);
 
     if (response.ok && result.success !== false) {
       return {
@@ -185,7 +195,7 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
         message: 'تم إنشاء النسخة الاحتياطية بنجاح',
       };
     } else {
-      throw new Error(result.error || 'فشل في إنشاء النسخة الاحتياطية');
+      throw new Error(result.error || result.message || 'فشل في إنشاء النسخة الاحتياطية');
     }
   } catch (error: any) {
     console.error('[Backup] Error:', error);

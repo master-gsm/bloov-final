@@ -40,15 +40,18 @@ Deno.serve(async (req: Request) => {
 
     // التحقق من JWT token باستخدام service role
     const token = authHeader.replace("Bearer ", "");
+    console.log("[Backup] Verifying token...");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      console.error("Authentication failed:", authError);
+      console.error("[Backup] Authentication failed:", authError);
       return new Response(
-        JSON.stringify({ success: false, error: "Unauthorized" }),
+        JSON.stringify({ success: false, error: "Unauthorized", details: authError?.message }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log("[Backup] User authenticated:", user.id);
 
     // التحقق من أن المستخدم admin أو super_admin
     const { data: userData } = await supabase
