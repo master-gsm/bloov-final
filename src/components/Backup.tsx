@@ -289,8 +289,7 @@ export default function Backup() {
         'partners', 'partner_contributions', 'employees', 'setup_expenses',
         'operating_expenses', 'cash_shifts', 'cash_transactions',
         'expenses', 'settings', 'permissions', 'salla_orders',
-        'salla_order_items', 'loyalty_transactions', 'customer_tags',
-        'audit_logs'
+        'salla_order_items', 'loyalty_transactions', 'audit_logs'
       ];
 
       const backupData: any = {
@@ -339,8 +338,9 @@ export default function Backup() {
       console.log('Fetching Google Drive credentials...');
       const { data: settings, error: settingsError } = await supabase
         .from('settings')
-        .select('google_drive_credentials, google_drive_folder_id')
-        .single();
+        .select('google_drive_credentials, google_drive_folder_id, google_drive_client_id, google_drive_client_secret')
+        .eq('id', 1)
+        .maybeSingle();
 
       if (settingsError) {
         console.error('Settings error:', settingsError);
@@ -353,9 +353,60 @@ export default function Backup() {
       }
 
       const credentials = settings.google_drive_credentials;
-      console.log('Credentials found, access_token:', credentials.access_token ? 'exists' : 'missing');
+      console.log('Credentials found:', {
+        hasAccessToken: !!credentials.access_token,
+        hasRefreshToken: !!credentials.refresh_token,
+        hasClientId: !!settings.google_drive_client_id,
+        hasClientSecret: !!settings.google_drive_client_secret
+      });
 
-      if (!credentials.access_token) {
+      let accessToken = credentials.access_token;
+
+      // If no access token but we have refresh token, get a new access token
+      if (!accessToken && credentials.refresh_token) {
+        console.log('Getting new access token using refresh token...');
+
+        if (!settings.google_drive_client_id || !settings.google_drive_client_secret) {
+          throw new Error(language === 'ar' ? 'معلومات OAuth غير موجودة' : 'OAuth credentials missing');
+        }
+
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            client_id: settings.google_drive_client_id,
+            client_secret: settings.google_drive_client_secret,
+            refresh_token: credentials.refresh_token,
+            grant_type: 'refresh_token',
+          }),
+        });
+
+        if (!tokenResponse.ok) {
+          const errorData = await tokenResponse.text();
+          console.error('Token refresh failed:', errorData);
+          throw new Error(language === 'ar' ? 'فشل تحديث رمز الوصول. يرجى إعادة ربط الحساب' : 'Failed to refresh access token. Please reconnect');
+        }
+
+        const tokenData = await tokenResponse.json();
+        accessToken = tokenData.access_token;
+
+        // Update the access token in database
+        const updatedCredentials = {
+          ...credentials,
+          access_token: accessToken,
+        };
+
+        await supabase
+          .from('settings')
+          .update({ google_drive_credentials: updatedCredentials })
+          .eq('id', 1);
+
+        console.log('Access token refreshed successfully');
+      }
+
+      if (!accessToken) {
         throw new Error(language === 'ar' ? 'رمز الوصول غير موجود. يرجى ربط الحساب مرة أخرى' : 'Access token missing. Please reconnect');
       }
 
@@ -386,7 +437,7 @@ export default function Backup() {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${credentials.access_token}`,
+            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': `multipart/related; boundary=${boundary}`,
           },
           body: multipartRequestBody,
@@ -465,8 +516,7 @@ export default function Backup() {
         'partners', 'partner_contributions', 'employees', 'setup_expenses',
         'operating_expenses', 'cash_shifts', 'cash_transactions',
         'expenses', 'settings', 'permissions', 'salla_orders',
-        'salla_order_items', 'loyalty_transactions', 'customer_tags',
-        'audit_logs'
+        'salla_order_items', 'loyalty_transactions', 'audit_logs'
       ];
 
       const backupData: any = {
