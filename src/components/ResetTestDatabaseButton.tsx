@@ -32,9 +32,14 @@ export function ResetTestDatabaseButton({ isRTL, setBackupMessage }: ResetTestDa
     setBackupMessage('');
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error(isRTL ? 'الجلسة منتهية' : 'Session expired');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        throw new Error(
+          isRTL
+            ? 'الجلسة منتهية. يرجى تسجيل الخروج والدخول مرة أخرى'
+            : 'Session expired. Please logout and login again'
+        );
       }
 
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-test-database`;
@@ -44,6 +49,7 @@ export function ResetTestDatabaseButton({ isRTL, setBackupMessage }: ResetTestDa
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
         },
         body: JSON.stringify({
           confirmationText: 'RESET',
@@ -51,9 +57,26 @@ export function ResetTestDatabaseButton({ isRTL, setBackupMessage }: ResetTestDa
         }),
       });
 
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error(
+            isRTL
+              ? 'غير مصرح. يرجى تسجيل الدخول مرة أخرى'
+              : 'Unauthorized. Please login again'
+          );
+        }
+        if (response.status === 403) {
+          throw new Error(
+            isRTL
+              ? 'صلاحيات غير كافية. يجب أن تكون مسؤول'
+              : 'Insufficient permissions. You must be an admin'
+          );
+        }
+      }
+
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
+      if (!result.success) {
         throw new Error(result.error || 'Failed to reset database');
       }
 

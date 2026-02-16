@@ -54,17 +54,15 @@ export function Settings() {
 
   const loadSettings = async () => {
     try {
-      const { data: keyValueSettings, error: kvError } = await supabase.from('settings').select('key, value');
       const { data: globalSettings, error: gsError } = await supabase
         .from('settings')
-        .select('salla_api_key, business_whatsapp, sms_api_key, sms_sender_id, sms_provider_url, sms_provider_name, sms_enabled, ai_enabled, ai_api_key, ai_model, ai_provider')
+        .select('*')
         .eq('id', 1)
         .maybeSingle();
 
-      if (kvError && kvError.code !== 'PGRST116') throw kvError;
+      if (gsError) throw gsError;
 
       const map: SettingsMap = {};
-      keyValueSettings?.forEach(row => { map[row.key] = row.value; });
 
       if (globalSettings) {
         if (globalSettings.salla_api_key) map['salla_api_key'] = globalSettings.salla_api_key;
@@ -78,6 +76,7 @@ export function Settings() {
         if (globalSettings.ai_model) map['ai_model'] = globalSettings.ai_model;
         if (globalSettings.ai_provider) map['ai_provider'] = globalSettings.ai_provider;
         map['ai_enabled'] = globalSettings.ai_enabled ? 'true' : 'false';
+        if (globalSettings.tax_rate) map['tax_rate'] = globalSettings.tax_rate.toString();
       }
 
       setSettings(map);
@@ -96,38 +95,28 @@ export function Settings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const globalSettingsKeys = ['salla_api_key', 'business_whatsapp', 'sms_api_key', 'sms_sender_id', 'sms_provider_url', 'sms_provider_name', 'sms_enabled', 'ai_enabled', 'ai_api_key', 'ai_model', 'ai_provider'];
+      const globalSettingsKeys = ['salla_api_key', 'business_whatsapp', 'sms_api_key', 'sms_sender_id', 'sms_provider_url', 'sms_provider_name', 'sms_enabled', 'ai_enabled', 'ai_api_key', 'ai_model', 'ai_provider', 'tax_rate'];
       const globalSettingsUpdate: any = {};
-      const keyValueUpdates: any[] = [];
 
       Object.entries(settings).forEach(([key, value]) => {
         if (globalSettingsKeys.includes(key)) {
           if (key === 'sms_enabled' || key === 'ai_enabled') {
             globalSettingsUpdate[key] = value === 'true';
+          } else if (key === 'tax_rate') {
+            globalSettingsUpdate[key] = parseFloat(value) || 0.15;
           } else {
             globalSettingsUpdate[key] = value;
           }
-        } else {
-          keyValueUpdates.push({
-            key,
-            value,
-            updated_by: user?.id,
-            updated_at: new Date().toISOString(),
-          });
         }
       });
 
       if (Object.keys(globalSettingsUpdate).length > 0) {
+        globalSettingsUpdate.updated_at = new Date().toISOString();
+
         await supabase
           .from('settings')
           .update(globalSettingsUpdate)
           .eq('id', 1);
-      }
-
-      for (const update of keyValueUpdates) {
-        await supabase
-          .from('settings')
-          .upsert(update, { onConflict: 'key' });
       }
 
       setSaved(true);
