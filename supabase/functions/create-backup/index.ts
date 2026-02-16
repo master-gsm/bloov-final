@@ -7,6 +7,63 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+async function uploadToGoogleDrive(
+  filename: string,
+  content: string,
+  credentials: any,
+  folderId: string
+): Promise<{ success: boolean; fileId?: string; error?: string }> {
+  try {
+    if (!credentials || !credentials.access_token) {
+      return { success: false, error: "Missing Google Drive credentials" };
+    }
+
+    const metadata = {
+      name: filename,
+      parents: folderId ? [folderId] : [],
+      mimeType: "application/json",
+    };
+
+    const boundary = "-------314159265358979323846";
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
+
+    const multipartRequestBody =
+      delimiter +
+      "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+      JSON.stringify(metadata) +
+      delimiter +
+      "Content-Type: application/json\r\n\r\n" +
+      content +
+      closeDelimiter;
+
+    const response = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${credentials.access_token}`,
+          "Content-Type": `multipart/related; boundary=${boundary}`,
+        },
+        body: multipartRequestBody,
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Google Drive upload failed: ${errorText}` };
+    }
+
+    const result = await response.json();
+    return { success: true, fileId: result.id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
 const TABLES_TO_BACKUP = [
   'branches',
   'users',
@@ -151,8 +208,28 @@ Deno.serve(async (req: Request) => {
       });
 
     if (uploadError) {
-      throw new Error(`Failed to save backup: ${uploadError.message}`);
+      throw new Error(`Failed to save backup to server: ${uploadError.message}`);
     }
+
+    const { data: settings } = await supabase
+      .from('settings')
+      .select('google_drive_enabled, google_drive_credentials, google_drive_folder_id')
+      .single();
+
+    let googleDriveResult = null;
+    if (settings?.google_drive_enabled && settings?.google_drive_credentials) {
+      googleDriveResult = await uploadToGoogleDrive(
+        filename,
+        backupJson,
+        settings.google_drive_credentials,
+        settings.google_drive_folder_id || ''
+      );
+    }
+
+    await supabase
+      .from('settings')
+      .update({ last_backup_date: new Date().toISOString() })
+      .eq('id', settings?.id || 1);
 
     const endTime = Date.now();
     const executionTime = ((endTime - startTime) / 1000).toFixed(2);
@@ -171,6 +248,7 @@ Deno.serve(async (req: Request) => {
           created_at: backupData.metadata.created_at,
           download_url: `${supabaseUrl}/storage/v1/object/public/backups/${filename}`,
           backup_data: backupData,
+          google_drive_upload: googleDriveResult,
         },
         errors: errors.length > 0 ? errors : undefined,
       }),

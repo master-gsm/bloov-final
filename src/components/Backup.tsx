@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Database, Download, HardDrive, Clock, FileText, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { Database, Download, HardDrive, Clock, FileText, AlertCircle, CheckCircle, Loader, Cloud, Settings as SettingsIcon, Link as LinkIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -13,12 +13,23 @@ interface BackupResult {
   created_at: string;
   download_url: string;
   backup_data: any;
+  google_drive_upload?: {
+    success: boolean;
+    fileId?: string;
+    error?: string;
+  };
 }
 
 interface BackupHistory {
   name: string;
   created_at: string;
   size: number;
+}
+
+interface GoogleDriveSettings {
+  enabled: boolean;
+  folderId: string;
+  connected: boolean;
 }
 
 export default function Backup() {
@@ -28,10 +39,37 @@ export default function Backup() {
   const [success, setSuccess] = useState(false);
   const [backupResult, setBackupResult] = useState<BackupResult | null>(null);
   const [backupHistory, setBackupHistory] = useState<BackupHistory[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [googleDrive, setGoogleDrive] = useState<GoogleDriveSettings>({
+    enabled: false,
+    folderId: '',
+    connected: false,
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     loadBackupHistory();
+    loadGoogleDriveSettings();
   }, []);
+
+  const loadGoogleDriveSettings = async () => {
+    try {
+      const { data } = await supabase
+        .from('settings')
+        .select('google_drive_enabled, google_drive_folder_id, google_drive_credentials')
+        .single();
+
+      if (data) {
+        setGoogleDrive({
+          enabled: data.google_drive_enabled || false,
+          folderId: data.google_drive_folder_id || '',
+          connected: !!data.google_drive_credentials,
+        });
+      }
+    } catch (err) {
+      console.error('Error loading Google Drive settings:', err);
+    }
+  };
 
   const loadBackupHistory = async () => {
     try {
@@ -53,6 +91,100 @@ export default function Backup() {
       }
     } catch (err) {
       console.error('Error loading backup history:', err);
+    }
+  };
+
+  const connectGoogleDrive = () => {
+    const clientId = '1076707509740-7n0k3gpo8cbfvfqhgqrqbfb5qh3umv7i.apps.googleusercontent.com';
+    const redirectUri = window.location.origin + '/auth/google-callback';
+    const scope = 'https://www.googleapis.com/auth/drive.file';
+
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${clientId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `response_type=token&` +
+      `scope=${encodeURIComponent(scope)}&` +
+      `access_type=offline`;
+
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+
+    const authWindow = window.open(
+      authUrl,
+      'Google Drive Auth',
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
+
+    const checkAuth = setInterval(() => {
+      try {
+        if (authWindow?.closed) {
+          clearInterval(checkAuth);
+          loadGoogleDriveSettings();
+        }
+
+        if (authWindow?.location.hash) {
+          const hash = authWindow.location.hash.substring(1);
+          const params = new URLSearchParams(hash);
+          const accessToken = params.get('access_token');
+
+          if (accessToken) {
+            saveGoogleDriveCredentials(accessToken);
+            authWindow.close();
+            clearInterval(checkAuth);
+          }
+        }
+      } catch (err) {
+        // Cross-origin error expected
+      }
+    }, 500);
+  };
+
+  const saveGoogleDriveCredentials = async (accessToken: string) => {
+    try {
+      const credentials = {
+        access_token: accessToken,
+        token_type: 'Bearer',
+        created_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('settings')
+        .update({
+          google_drive_credentials: credentials,
+        })
+        .eq('id', 1);
+
+      if (error) throw error;
+
+      setGoogleDrive(prev => ({ ...prev, connected: true }));
+      alert(language === 'ar' ? 'تم الربط بنجاح مع Google Drive' : 'Successfully connected to Google Drive');
+    } catch (err) {
+      console.error('Error saving credentials:', err);
+      alert(language === 'ar' ? 'فشل حفظ بيانات الاعتماد' : 'Failed to save credentials');
+    }
+  };
+
+  const saveGoogleDriveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .update({
+          google_drive_enabled: googleDrive.enabled,
+          google_drive_folder_id: googleDrive.folderId,
+        })
+        .eq('id', 1);
+
+      if (error) throw error;
+
+      alert(language === 'ar' ? 'تم حفظ الإعدادات بنجاح' : 'Settings saved successfully');
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      alert(language === 'ar' ? 'فشل حفظ الإعدادات' : 'Failed to save settings');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -151,11 +283,20 @@ export default function Backup() {
   return (
     <div className="p-6 max-w-7xl mx-auto" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Database className="w-8 h-8 text-teal-600" />
-          <h1 className="text-3xl font-bold text-gray-900">
-            {language === 'ar' ? 'النسخ الاحتياطي' : 'Backup System'}
-          </h1>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <Database className="w-8 h-8 text-teal-600" />
+            <h1 className="text-3xl font-bold text-gray-900">
+              {language === 'ar' ? 'النسخ الاحتياطي' : 'Backup System'}
+            </h1>
+          </div>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition"
+          >
+            <SettingsIcon className="w-5 h-5" />
+            {language === 'ar' ? 'إعدادات Google Drive' : 'Google Drive Settings'}
+          </button>
         </div>
         <p className="text-gray-600">
           {language === 'ar'
@@ -163,6 +304,91 @@ export default function Backup() {
             : 'Create and manage backups for all system data'}
         </p>
       </div>
+
+      {showSettings && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Cloud className="w-6 h-6 text-blue-600" />
+            {language === 'ar' ? 'إعدادات Google Drive' : 'Google Drive Settings'}
+          </h2>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p className="font-medium text-gray-900">
+                  {language === 'ar' ? 'حالة الاتصال' : 'Connection Status'}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {googleDrive.connected
+                    ? (language === 'ar' ? 'متصل' : 'Connected')
+                    : (language === 'ar' ? 'غير متصل' : 'Not connected')}
+                </p>
+              </div>
+              {!googleDrive.connected && (
+                <button
+                  onClick={connectGoogleDrive}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  <LinkIcon className="w-4 h-4" />
+                  {language === 'ar' ? 'ربط الحساب' : 'Connect Account'}
+                </button>
+              )}
+              {googleDrive.connected && (
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              )}
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 mb-2">
+                <input
+                  type="checkbox"
+                  checked={googleDrive.enabled}
+                  onChange={(e) => setGoogleDrive({ ...googleDrive, enabled: e.target.checked })}
+                  className="w-4 h-4"
+                  disabled={!googleDrive.connected}
+                />
+                <span className="font-medium text-gray-900">
+                  {language === 'ar' ? 'تفعيل الرفع التلقائي إلى Google Drive' : 'Enable auto-upload to Google Drive'}
+                </span>
+              </label>
+              <p className="text-sm text-gray-600 mr-6">
+                {language === 'ar'
+                  ? 'عند تفعيل هذا الخيار، سيتم رفع نسخة من كل backup إلى Google Drive تلقائياً'
+                  : 'When enabled, a copy of each backup will be automatically uploaded to Google Drive'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {language === 'ar' ? 'معرّف المجلد (اختياري)' : 'Folder ID (Optional)'}
+              </label>
+              <input
+                type="text"
+                value={googleDrive.folderId}
+                onChange={(e) => setGoogleDrive({ ...googleDrive, folderId: e.target.value })}
+                placeholder={language === 'ar' ? 'اتركه فارغاً للحفظ في الجذر' : 'Leave empty to save in root'}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                disabled={!googleDrive.connected}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {language === 'ar'
+                  ? 'يمكنك الحصول على معرف المجلد من رابط URL للمجلد في Google Drive'
+                  : 'You can get the folder ID from the URL of the folder in Google Drive'}
+              </p>
+            </div>
+
+            <button
+              onClick={saveGoogleDriveSettings}
+              disabled={savingSettings || !googleDrive.connected}
+              className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition disabled:bg-gray-300"
+            >
+              {savingSettings
+                ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...')
+                : (language === 'ar' ? 'حفظ الإعدادات' : 'Save Settings')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">
@@ -185,6 +411,12 @@ export default function Backup() {
                 <li>{language === 'ar' ? 'الفروع والصلاحيات' : 'Branches and permissions'}</li>
                 <li>{language === 'ar' ? 'جميع الإعدادات والبيانات الأخرى' : 'All settings and other data'}</li>
               </ul>
+              {googleDrive.enabled && googleDrive.connected && (
+                <p className="mt-3 font-medium text-green-700 flex items-center gap-2">
+                  <Cloud className="w-4 h-4" />
+                  {language === 'ar' ? 'سيتم رفع نسخة إلى Google Drive تلقائياً' : 'Will be automatically uploaded to Google Drive'}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -284,13 +516,40 @@ export default function Backup() {
                 </div>
               </div>
 
-              <button
-                onClick={() => downloadBackup(backupResult.backup_data, backupResult.filename)}
-                className="w-full flex items-center justify-center gap-2 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition font-medium"
-              >
-                <Download className="w-5 h-5" />
-                {language === 'ar' ? 'تحميل النسخة المحلية (JSON)' : 'Download Local Copy (JSON)'}
-              </button>
+              {backupResult.google_drive_upload && (
+                <div className={`p-4 rounded-lg mb-4 ${
+                  backupResult.google_drive_upload.success
+                    ? 'bg-green-100 border border-green-300'
+                    : 'bg-yellow-100 border border-yellow-300'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <Cloud className={`w-5 h-5 ${
+                      backupResult.google_drive_upload.success ? 'text-green-700' : 'text-yellow-700'
+                    }`} />
+                    <span className={`font-medium ${
+                      backupResult.google_drive_upload.success ? 'text-green-900' : 'text-yellow-900'
+                    }`}>
+                      {backupResult.google_drive_upload.success
+                        ? (language === 'ar' ? 'تم رفع النسخة إلى Google Drive بنجاح' : 'Successfully uploaded to Google Drive')
+                        : (language === 'ar' ? 'فشل الرفع إلى Google Drive: ' : 'Google Drive upload failed: ') + (backupResult.google_drive_upload.error || '')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <button
+                  onClick={() => downloadBackup(backupResult.backup_data, backupResult.filename)}
+                  className="w-full flex items-center justify-center gap-2 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition font-medium"
+                >
+                  <Download className="w-5 h-5" />
+                  {language === 'ar' ? 'تحميل النسخة المحلية (JSON)' : 'Download Local Copy (JSON)'}
+                </button>
+
+                <p className="text-xs text-center text-gray-600">
+                  {language === 'ar' ? 'تم حفظ نسخة في السيرفر أيضاً' : 'A copy has also been saved on the server'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
