@@ -32,29 +32,28 @@ Deno.serve(async (req: Request) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // التحقق من الـ authentication
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("Missing authorization header");
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    console.log("[Backup] Verifying token...");
-
-    // Create a client with the user's token to verify the session
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      },
+    // إنشاء service role client للعمليات
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
       }
     });
 
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    // التحقق من الـ authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Missing authorization header" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    console.log("[Backup] Verifying JWT token...");
+
+    // استخدام service role client للتحقق من JWT
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
       console.error("[Backup] Authentication failed:", authError);
@@ -65,14 +64,6 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log("[Backup] User authenticated:", user.id);
-
-    // Now use service role client for database operations
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    });
 
     // التحقق من أن المستخدم admin
     const { data: userData } = await supabase
