@@ -327,6 +327,7 @@ export function UserManagement() {
             type="button"
             onClick={(e) => { e.preventDefault(); onChange(key); }}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition flex-shrink-0 overflow-hidden ${perms[key] ? 'bg-teal-600' : 'bg-gray-300'}`}
+            dir="ltr"
           >
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${perms[key] ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
