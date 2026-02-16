@@ -17,7 +17,7 @@ import { ResetTestDatabaseButton } from './ResetTestDatabaseButton';
 
 type SettingsMap = Record<string, string>;
 
-const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'ai', 'backup', 'language'] as const;
+const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'ai', 'backup', 'testing', 'language'] as const;
 type Tab = typeof TABS[number];
 
 export function Settings() {
@@ -248,6 +248,7 @@ export function Settings() {
     sms: { icon: MessageSquare, label: 'SMS Gateway', labelAr: 'الرسائل النصية' },
     ai: { icon: Brain, label: 'AI Analysis', labelAr: 'التحليل الذكي' },
     backup: { icon: Database, label: 'Backup & Restore', labelAr: 'النسخ الاحتياطي' },
+    testing: { icon: TestTube, label: 'Test Mode & Reset', labelAr: 'وضع التجربة والتنظيف' },
     language: { icon: Globe, label: 'Language', labelAr: 'اللغة والعرض' },
   };
 
@@ -1016,6 +1017,18 @@ export function Settings() {
               </div>
             </div>
 
+            <BackupSettings />
+          </div>
+        )}
+
+        {activeTab === 'testing' && (
+          <div className="grid grid-cols-1 gap-6">
+            {backupMessage && (
+              <div className={`p-4 rounded-lg ${backupMessage.includes('خطأ') || backupMessage.includes('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                {backupMessage}
+              </div>
+            )}
+
             <div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl shadow-sm border-2 border-amber-200 p-6 space-y-6">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-amber-100 rounded-lg">
@@ -1095,8 +1108,6 @@ export function Settings() {
 
               <ResetTestDatabaseButton isRTL={isRTL} setBackupMessage={setBackupMessage} />
             </div>
-
-            <BackupSettings />
           </div>
         )}
 
