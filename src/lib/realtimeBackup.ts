@@ -84,22 +84,15 @@ async function processBackupQueue(): Promise<void> {
       groupedData[item.table_name].push(item);
     }
 
-    // إرسال إلى Edge Function للنسخ
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-backup`;
-
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    // إرسال إلى Edge Function للنسخ باستخدام supabase.functions.invoke
+    const { data, error } = await supabase.functions.invoke('google-drive-backup', {
+      body: {
         backupType: 'incremental',
         tables: Object.keys(groupedData),
-      }),
+      },
     });
 
-    if (response.ok) {
+    if (!error && data && data.success !== false) {
       // تحديد العناصر كمعالجة
       const queueIds = queue.map(item => item.id);
       await supabase
@@ -161,34 +154,19 @@ export async function triggerFullBackup(): Promise<{ success: boolean; message: 
       throw new Error('يجب تسجيل الدخول لإجراء النسخ الاحتياطي');
     }
 
-    // طباعة أول 10 أحرف من التوكن للتأكد
-    console.log('[Backup] Token preview:', session.access_token.substring(0, 10) + '...');
+    console.log('[Backup] Session exists, invoking edge function...');
 
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-backup`;
-
-    const res = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    // استخدام supabase.functions.invoke لإرسال JWT تلقائياً
+    const { data, error } = await supabase.functions.invoke('google-drive-backup', {
+      body: {
         backupType: 'full',
-      }),
+      },
     });
 
-    const body = await res.text();
-    console.log('[Backup] status', res.status, res.statusText, body);
+    console.log('[Backup] Response:', { data, error });
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${body}`);
-    }
-
-    let data;
-    try {
-      data = JSON.parse(body);
-    } catch (e) {
-      throw new Error(`Invalid JSON response: ${body}`);
+    if (error) {
+      throw new Error(error.message || 'فشل في إنشاء النسخة الاحتياطية');
     }
 
     if (data && data.success !== false) {
