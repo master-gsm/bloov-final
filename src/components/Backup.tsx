@@ -506,10 +506,16 @@ export default function Backup() {
         ? `تم رفع النسخة الاحتياطية بنجاح إلى Google Drive! (${filename})`
         : `Backup uploaded successfully to Google Drive! (${filename})`
       );
+
+      alert(language === 'ar'
+        ? `☁️ تم رفع النسخة الاحتياطية بنجاح إلى Google Drive!\n\n📁 الملف: ${filename}\n📊 عدد السجلات: ${totalRecords.toLocaleString()}\n📦 عدد الجداول: ${successfulTables}\n💾 الحجم: ${(backupSize / (1024 * 1024)).toFixed(2)} MB\n🆔 File ID: ${uploadResult.id.substring(0, 20)}...`
+        : `☁️ Backup uploaded successfully to Google Drive!\n\n📁 File: ${filename}\n📊 Total Records: ${totalRecords.toLocaleString()}\n📦 Tables: ${successfulTables}\n💾 Size: ${(backupSize / (1024 * 1024)).toFixed(2)} MB\n🆔 File ID: ${uploadResult.id.substring(0, 20)}...`
+      );
     } catch (err) {
       console.error('Google Drive upload error:', err);
       const errorMessage = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء رفع النسخة إلى Google Drive' : 'Error uploading to Google Drive');
       setError(errorMessage);
+      alert(language === 'ar' ? `❌ فشل رفع النسخة إلى Google Drive\n\n${errorMessage}` : `❌ Google Drive Upload Failed\n\n${errorMessage}`);
     } finally {
       setGoogleDriveLoading(false);
     }
@@ -585,9 +591,16 @@ export default function Backup() {
         download_url: '',
         backup_data: backupData,
       });
+
+      alert(language === 'ar'
+        ? `تم تنزيل النسخة الاحتياطية بنجاح على جهازك!\n\n📁 الملف: ${filename}\n📊 عدد السجلات: ${totalRecords.toLocaleString()}\n💾 الحجم: ${(backupSize / (1024 * 1024)).toFixed(2)} MB`
+        : `Backup downloaded successfully to your computer!\n\n📁 File: ${filename}\n📊 Total Records: ${totalRecords.toLocaleString()}\n💾 Size: ${(backupSize / (1024 * 1024)).toFixed(2)} MB`
+      );
     } catch (err) {
       console.error('Backup error:', err);
-      setError(err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup'));
+      const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup');
+      setError(errorMsg);
+      alert(language === 'ar' ? `❌ فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `❌ Backup Failed\n\n${errorMsg}`);
     } finally {
       setLocalLoading(false);
     }
@@ -631,9 +644,16 @@ export default function Backup() {
       setSuccess(true);
       setBackupResult(result.data);
       await loadBackupHistory();
+
+      alert(language === 'ar'
+        ? `تم إنشاء النسخة الاحتياطية بنجاح!\n\n📁 الملف: ${result.data.filename}\n📊 عدد السجلات: ${result.data.total_records.toLocaleString()}\n⏱️ وقت التنفيذ: ${result.data.execution_time}${result.data.google_drive_upload?.success ? '\n\n☁️ تم رفع النسخة إلى Google Drive بنجاح' : ''}`
+        : `Backup created successfully!\n\n📁 File: ${result.data.filename}\n📊 Total Records: ${result.data.total_records.toLocaleString()}\n⏱️ Execution Time: ${result.data.execution_time}${result.data.google_drive_upload?.success ? '\n\n☁️ Successfully uploaded to Google Drive' : ''}`
+      );
     } catch (err) {
       console.error('Backup error:', err);
-      setError(err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup'));
+      const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup');
+      setError(errorMsg);
+      alert(language === 'ar' ? `❌ فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `❌ Backup Failed\n\n${errorMsg}`);
     } finally {
       setServerLoading(false);
     }
@@ -770,11 +790,14 @@ export default function Backup() {
       await performRestore(backupData);
     } catch (err) {
       console.error('Restore error:', err);
+      let errorMsg = '';
       if (err instanceof SyntaxError) {
-        setError(language === 'ar' ? 'الملف ليس بتنسيق JSON صحيح' : 'File is not valid JSON');
+        errorMsg = language === 'ar' ? 'الملف ليس بتنسيق JSON صحيح' : 'File is not valid JSON';
       } else {
-        setError(err instanceof Error ? err.message : (language === 'ar' ? 'فشل استعادة النسخة الاحتياطية' : 'Restore failed'));
+        errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'فشل استعادة النسخة الاحتياطية' : 'Restore failed');
       }
+      setError(errorMsg);
+      alert(language === 'ar' ? `❌ فشل استعادة النسخة الاحتياطية\n\n${errorMsg}` : `❌ Restore Failed\n\n${errorMsg}`);
     } finally {
       setRestoreLoading(false);
       setRestoreProgress('');
@@ -816,7 +839,9 @@ export default function Backup() {
       await performRestore(backupData);
     } catch (err) {
       console.error('Restore from Drive error:', err);
-      setError(err instanceof Error ? err.message : (language === 'ar' ? 'فشل استعادة النسخة' : 'Restore failed'));
+      const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'فشل استعادة النسخة' : 'Restore failed');
+      setError(errorMsg);
+      alert(language === 'ar' ? `❌ فشل استعادة النسخة من Google Drive\n\n${errorMsg}` : `❌ Google Drive Restore Failed\n\n${errorMsg}`);
     } finally {
       setRestoreLoading(false);
       setRestoreProgress('');
@@ -877,6 +902,11 @@ export default function Backup() {
 
     setSuccessMessage(msg);
     setSuccess(true);
+
+    alert(language === 'ar'
+      ? `✅ تم استعادة النسخة الاحتياطية بنجاح!\n\n📊 عدد السجلات: ${restoredRecords.toLocaleString()}\n📦 عدد الجداول: ${restoredTables}${errors.length > 0 ? `\n\n⚠️ تحذير: فشل استعادة ${errors.length} جدول` : ''}`
+      : `✅ Backup restored successfully!\n\n📊 Records Restored: ${restoredRecords.toLocaleString()}\n📦 Tables Restored: ${restoredTables}${errors.length > 0 ? `\n\n⚠️ Warning: ${errors.length} tables failed` : ''}`
+    );
 
     if (errors.length > 0) {
       console.warn('Restore errors:', errors);
