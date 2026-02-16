@@ -18,6 +18,7 @@ import {
   Brain,
   Building2,
   DollarSign,
+  Database,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -41,6 +42,7 @@ const MENU_ACCESS: Record<string, string[]> = {
   cashregister: ['admin', 'accountant', 'viewer'],
   reports: ['admin', 'accountant', 'viewer'],
   aianalysis: ['admin', 'accountant', 'viewer'],
+  backup: ['admin'],
   users: ['admin'],
   settings: ['admin'],
 };
@@ -65,6 +67,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
     { id: 'reports', icon: FileText, label: t('nav.reports') },
     { id: 'aianalysis', icon: Brain, label: isRTL ? 'التحليل الذكي' : 'AI Analysis' },
+    { id: 'backup', icon: Database, label: isRTL ? 'النسخ الاحتياطي' : 'Backup' },
     { id: 'users', icon: UserCog, label: t('nav.users') },
     { id: 'settings', icon: Settings, label: t('nav.settings') },
   ];
