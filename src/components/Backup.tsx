@@ -94,75 +94,106 @@ export default function Backup() {
     }
   };
 
-  const connectGoogleDrive = () => {
-    const clientId = '1076707509740-7n0k3gpo8cbfvfqhgqrqbfb5qh3umv7i.apps.googleusercontent.com';
-    const redirectUri = window.location.origin + '/auth/google-callback';
-    const scope = 'https://www.googleapis.com/auth/drive.file';
-
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${clientId}&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `response_type=token&` +
-      `scope=${encodeURIComponent(scope)}&` +
-      `access_type=offline`;
-
-    const width = 600;
-    const height = 700;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-
-    const authWindow = window.open(
-      authUrl,
-      'Google Drive Auth',
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-
-    const checkAuth = setInterval(() => {
-      try {
-        if (authWindow?.closed) {
-          clearInterval(checkAuth);
-          loadGoogleDriveSettings();
-        }
-
-        if (authWindow?.location.hash) {
-          const hash = authWindow.location.hash.substring(1);
-          const params = new URLSearchParams(hash);
-          const accessToken = params.get('access_token');
-
-          if (accessToken) {
-            saveGoogleDriveCredentials(accessToken);
-            authWindow.close();
-            clearInterval(checkAuth);
-          }
-        }
-      } catch (err) {
-        // Cross-origin error expected
-      }
-    }, 500);
-  };
-
-  const saveGoogleDriveCredentials = async (accessToken: string) => {
+  const connectGoogleDrive = async () => {
     try {
-      const credentials = {
-        access_token: accessToken,
-        token_type: 'Bearer',
-        created_at: new Date().toISOString(),
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        alert(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Please login first');
+        return;
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-auth?action=get-auth-url`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert(result.error || (language === 'ar' ? 'فشل في الحصول على رابط المصادقة' : 'Failed to get auth URL'));
+        return;
+      }
+
+      const width = 600;
+      const height = 700;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+
+      const authWindow = window.open(
+        result.auth_url,
+        'Google Drive Auth',
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+
+      const messageHandler = (event: MessageEvent) => {
+        if (event.origin !== import.meta.env.VITE_SUPABASE_URL.replace('//', '//').split('/')[0] + '//' + import.meta.env.VITE_SUPABASE_URL.replace('//', '//').split('/')[2]) {
+          return;
+        }
+
+        if (event.data.success) {
+          setGoogleDrive(prev => ({ ...prev, connected: true }));
+          alert(language === 'ar' ? 'تم الربط بنجاح مع Google Drive' : 'Successfully connected to Google Drive');
+          loadGoogleDriveSettings();
+        } else if (event.data.error) {
+          alert((language === 'ar' ? 'فشل الربط: ' : 'Connection failed: ') + event.data.error);
+        }
+
+        window.removeEventListener('message', messageHandler);
       };
 
-      const { error } = await supabase
-        .from('settings')
-        .update({
-          google_drive_credentials: credentials,
-        })
-        .eq('id', 1);
+      window.addEventListener('message', messageHandler);
 
-      if (error) throw error;
-
-      setGoogleDrive(prev => ({ ...prev, connected: true }));
-      alert(language === 'ar' ? 'تم الربط بنجاح مع Google Drive' : 'Successfully connected to Google Drive');
+      const checkClosed = setInterval(() => {
+        if (authWindow?.closed) {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', messageHandler);
+        }
+      }, 500);
     } catch (err) {
-      console.error('Error saving credentials:', err);
-      alert(language === 'ar' ? 'فشل حفظ بيانات الاعتماد' : 'Failed to save credentials');
+      console.error('Error connecting Google Drive:', err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء الربط' : 'Error during connection');
+    }
+  };
+
+  const disconnectGoogleDrive = async () => {
+    if (!confirm(language === 'ar' ? 'هل تريد فصل الاتصال مع Google Drive؟' : 'Disconnect from Google Drive?')) {
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        alert(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Please login first');
+        return;
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-auth?action=disconnect`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        setGoogleDrive({ enabled: false, folderId: '', connected: false });
+        alert(language === 'ar' ? 'تم فصل الاتصال بنجاح' : 'Disconnected successfully');
+      } else {
+        alert(result.error || (language === 'ar' ? 'فشل فصل الاتصال' : 'Failed to disconnect'));
+      }
+    } catch (err) {
+      console.error('Error disconnecting:', err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء فصل الاتصال' : 'Error during disconnection');
     }
   };
 
@@ -324,18 +355,28 @@ export default function Backup() {
                     : (language === 'ar' ? 'غير متصل' : 'Not connected')}
                 </p>
               </div>
-              {!googleDrive.connected && (
-                <button
-                  onClick={connectGoogleDrive}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  <LinkIcon className="w-4 h-4" />
-                  {language === 'ar' ? 'ربط الحساب' : 'Connect Account'}
-                </button>
-              )}
-              {googleDrive.connected && (
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              )}
+              <div className="flex items-center gap-2">
+                {!googleDrive.connected && (
+                  <button
+                    onClick={connectGoogleDrive}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    <LinkIcon className="w-4 h-4" />
+                    {language === 'ar' ? 'ربط الحساب' : 'Connect Account'}
+                  </button>
+                )}
+                {googleDrive.connected && (
+                  <>
+                    <CheckCircle className="w-6 h-6 text-green-600" />
+                    <button
+                      onClick={disconnectGoogleDrive}
+                      className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition text-sm"
+                    >
+                      {language === 'ar' ? 'فصل الاتصال' : 'Disconnect'}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             <div>

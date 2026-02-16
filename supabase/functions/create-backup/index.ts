@@ -7,16 +7,72 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+async function refreshGoogleToken(
+  refreshToken: string,
+  supabase: any
+): Promise<{ success: boolean; access_token?: string; error?: string }> {
+  try {
+    const clientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
+    const clientSecret = Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET");
+
+    if (!clientId || !clientSecret) {
+      return { success: false, error: "Google Drive credentials not configured" };
+    }
+
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, error: "Failed to refresh token" };
+    }
+
+    const tokens = await response.json();
+
+    const newCredentials = {
+      access_token: tokens.access_token,
+      refresh_token: refreshToken,
+      token_type: tokens.token_type,
+      expires_in: tokens.expires_in,
+      created_at: new Date().toISOString(),
+    };
+
+    await supabase
+      .from("settings")
+      .update({ google_drive_credentials: newCredentials })
+      .eq("id", 1);
+
+    return { success: true, access_token: tokens.access_token };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
 async function uploadToGoogleDrive(
   filename: string,
   content: string,
   credentials: any,
-  folderId: string
+  folderId: string,
+  supabase: any
 ): Promise<{ success: boolean; fileId?: string; error?: string }> {
   try {
     if (!credentials || !credentials.access_token) {
       return { success: false, error: "Missing Google Drive credentials" };
     }
+
+    let accessToken = credentials.access_token;
 
     const metadata = {
       name: filename,
@@ -37,17 +93,39 @@ async function uploadToGoogleDrive(
       content +
       closeDelimiter;
 
-    const response = await fetch(
+    let response = await fetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${credentials.access_token}`,
+          "Authorization": `Bearer ${accessToken}`,
           "Content-Type": `multipart/related; boundary=${boundary}`,
         },
         body: multipartRequestBody,
       }
     );
+
+    if (response.status === 401 && credentials.refresh_token) {
+      const refreshResult = await refreshGoogleToken(credentials.refresh_token, supabase);
+
+      if (refreshResult.success && refreshResult.access_token) {
+        accessToken = refreshResult.access_token;
+
+        response = await fetch(
+          "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": `multipart/related; boundary=${boundary}`,
+            },
+            body: multipartRequestBody,
+          }
+        );
+      } else {
+        return { success: false, error: "Token expired and refresh failed" };
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -222,7 +300,8 @@ Deno.serve(async (req: Request) => {
         filename,
         backupJson,
         settings.google_drive_credentials,
-        settings.google_drive_folder_id || ''
+        settings.google_drive_folder_id || '',
+        supabase
       );
     }
 
