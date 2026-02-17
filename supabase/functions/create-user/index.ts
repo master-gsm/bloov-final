@@ -39,6 +39,8 @@ Deno.serve(async (req: Request) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const authHeader = req.headers.get("Authorization");
+    console.log("DEBUG: Auth Header:", authHeader?.slice(0, 30));
+
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
@@ -64,6 +66,9 @@ Deno.serve(async (req: Request) => {
       data: { user: requestingUser },
       error: authError,
     } = await supabaseAdmin.auth.getUser(token);
+
+    console.log("DEBUG: User Object:", requestingUser ? { id: requestingUser.id, email: requestingUser.email } : null);
+    console.log("DEBUG: Auth Error:", authError?.message);
 
     if (authError || !requestingUser) {
       console.error("Auth error:", authError);
