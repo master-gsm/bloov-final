@@ -525,6 +525,36 @@ export function Employees() {
       )}
 
       {activeTab === 'commissions' && (
+        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border p-5">
+            <p className="text-sm text-gray-500 mb-1">{isRTL ? 'إجمالي العمولات المستحقة' : 'Total Pending Commissions'}</p>
+            <p className="text-2xl font-bold text-amber-600">
+              {commissions
+                .filter(c => (c as any).status === 'pending' || (!(c as any).status && !c.is_paid))
+                .reduce((sum, c) => sum + (c.commission_amount ?? 0), 0)
+                .toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border p-5">
+            <p className="text-sm text-gray-500 mb-1">{isRTL ? 'إجمالي العمولات المعتمدة' : 'Total Approved Commissions'}</p>
+            <p className="text-2xl font-bold text-green-600">
+              {commissions
+                .filter(c => (c as any).status === 'approved' || c.is_paid)
+                .reduce((sum, c) => sum + (c.commission_amount ?? 0), 0)
+                .toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border p-5">
+            <p className="text-sm text-gray-500 mb-1">{isRTL ? 'إجمالي جميع العمولات' : 'Total All Commissions'}</p>
+            <p className="text-2xl font-bold text-teal-600">
+              {commissions
+                .filter(c => (c as any).status !== 'void')
+                .reduce((sum, c) => sum + (c.commission_amount ?? 0), 0)
+                .toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}
+            </p>
+          </div>
+        </div>
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -604,6 +634,7 @@ export function Employees() {
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       )}
 
