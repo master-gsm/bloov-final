@@ -151,25 +151,35 @@ class EnhancedSyncManager {
       await indexedDBManager.updateQueueItemStatus(operation.id, 'syncing');
 
       const { table, operation: op, data } = operation;
+      let serverResponse: any = null;
 
       switch (op) {
         case 'insert':
-          await this.handleInsert(table, data);
+          serverResponse = await this.handleInsert(table, data);
           break;
         case 'update':
-          await this.handleUpdate(table, data);
+          serverResponse = await this.handleUpdate(table, data);
           break;
         case 'delete':
-          await this.handleDelete(table, data);
+          serverResponse = await this.handleDelete(table, data);
           break;
       }
 
       await indexedDBManager.updateQueueItemStatus(operation.id, 'succeeded', {
         syncedAt: Date.now(),
         remoteVersion: Date.now(),
+        serverResponse,
       });
 
-      console.log(`[EnhancedSyncManager] Successfully synced ${table}/${data.id}`);
+      if (serverResponse) {
+        await this.updateLocalRecordWithServerData(table, data.id, serverResponse);
+
+        if (table === 'sales' && op === 'insert' && data.status === 'draft') {
+          await this.confirmSaleAfterSync(data.id, serverResponse);
+        }
+      }
+
+      console.log(`[EnhancedSyncManager] Successfully synced ${table}/${data.id}`, serverResponse);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -197,7 +207,7 @@ class EnhancedSyncManager {
     }
   }
 
-  private async handleInsert(table: string, data: any): Promise<void> {
+  private async handleInsert(table: string, data: any): Promise<any> {
     const IMMUTABLE_TABLES = [
       'sales', 'sale_items', 'purchases', 'purchase_items',
       'expenses', 'inventory_movements', 'operating_expenses',
@@ -206,28 +216,44 @@ class EnhancedSyncManager {
     ];
 
     if (IMMUTABLE_TABLES.includes(table)) {
-      const { error } = await supabase.from(table as any).insert(data);
+      const { data: insertedData, error } = await supabase
+        .from(table as any)
+        .insert([data])
+        .select('*')
+        .maybeSingle();
 
       if (error) {
         if (error.code === '23505') {
           console.warn(`Record already exists in ${table}, attempting update`);
           const { id, ...updateData } = data;
-          const { error: updateError } = await supabase
+          const { data: updatedData, error: updateError } = await supabase
             .from(table as any)
             .update(updateData)
-            .eq('id', id);
+            .eq('id', id)
+            .select('*')
+            .maybeSingle();
+
           if (updateError) throw updateError;
+          return updatedData;
         } else {
           throw error;
         }
       }
+
+      return insertedData;
     } else {
-      const { error } = await supabase.from(table as any).insert(data);
+      const { data: insertedData, error } = await supabase
+        .from(table as any)
+        .insert([data])
+        .select('*')
+        .maybeSingle();
+
       if (error) throw error;
+      return insertedData;
     }
   }
 
-  private async handleUpdate(table: string, data: any): Promise<void> {
+  private async handleUpdate(table: string, data: any): Promise<any> {
     const { id, ...updateData } = data;
 
     const { data: existing, error: fetchError } = await supabase
@@ -240,8 +266,14 @@ class EnhancedSyncManager {
 
     if (!existing) {
       console.warn(`Record not found for update in ${table}, attempting insert`);
-      const { error: insertError } = await supabase.from(table as any).insert(data);
+      const { data: insertedData, error: insertError } = await supabase
+        .from(table as any)
+        .insert([data])
+        .select('*')
+        .maybeSingle();
+
       if (insertError) throw insertError;
+      return insertedData;
     } else {
       const localVersion = data.updated_at ? new Date(data.updated_at).getTime() : 0;
       const remoteVersion = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
@@ -250,12 +282,15 @@ class EnhancedSyncManager {
         console.log(`[EnhancedSyncManager] Remote version newer for ${table}/${id}. Local version wins (offline-first policy)`);
       }
 
-      const { error: updateError } = await supabase
+      const { data: updatedData, error: updateError } = await supabase
         .from(table as any)
         .update(updateData)
-        .eq('id', id);
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
 
       if (updateError) throw updateError;
+      return updatedData;
     }
   }
 
@@ -275,6 +310,58 @@ class EnhancedSyncManager {
     const { error } = await supabase.from(table as any).delete().eq('id', data.id);
     if (error && error.code !== 'PGRST116') {
       throw error;
+    }
+  }
+
+  private async updateLocalRecordWithServerData(table: string, localId: string, serverData: any): Promise<void> {
+    try {
+      if (!serverData) return;
+
+      const mergedData = {
+        ...serverData,
+        _synced: true,
+        _syncedAt: new Date().toISOString(),
+      };
+
+      await indexedDBManager.cacheRecord(table, mergedData, true);
+
+      if (table === 'sales' && serverData.invoice_number && serverData.id !== localId) {
+        console.log(`[EnhancedSyncManager] Updated sale ID from ${localId} to ${serverData.id}, invoice_number: ${serverData.invoice_number}`);
+      }
+
+      console.log(`[EnhancedSyncManager] Updated local record for ${table}/${localId} with server data`);
+    } catch (error) {
+      console.warn(`[EnhancedSyncManager] Failed to update local record for ${table}/${localId}:`, error);
+    }
+  }
+
+  private async confirmSaleAfterSync(saleId: string, serverSale: any): Promise<void> {
+    try {
+      const serverId = serverSale.id || saleId;
+      const invoiceNumber = serverSale.invoice_number;
+
+      const { data: confirmedSale, error } = await supabase
+        .from('sales')
+        .update({
+          status: 'confirmed',
+          invoice_number: invoiceNumber || serverSale.sale_number,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', serverId)
+        .select('*')
+        .maybeSingle();
+
+      if (error) {
+        console.error(`[EnhancedSyncManager] Failed to confirm sale ${serverId}:`, error);
+        return;
+      }
+
+      if (confirmedSale) {
+        await indexedDBManager.cacheRecord('sales', confirmedSale, true);
+        console.log(`[EnhancedSyncManager] Sale ${serverId} confirmed with invoice_number: ${invoiceNumber}`);
+      }
+    } catch (error) {
+      console.error(`[EnhancedSyncManager] Error confirming sale after sync:`, error);
     }
   }
 
