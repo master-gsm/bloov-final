@@ -177,6 +177,21 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const employeeCode = `EMP-${Date.now().toString(36).toUpperCase()}`;
+    const { error: employeeError } = await supabaseAdmin
+      .from("employees")
+      .insert({
+        user_id: newUser.user.id,
+        employee_code: employeeCode,
+        full_name: displayName,
+        position: role,
+        is_active: true,
+      });
+
+    if (employeeError) {
+      console.error("Failed to create employee record:", employeeError.message);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
