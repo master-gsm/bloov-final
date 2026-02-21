@@ -95,26 +95,40 @@ class EnhancedSyncManager {
       const pendingOps = await indexedDBManager.getQueuedOperations('pending');
       result.totalQueued = pendingOps.length;
 
+      console.warn('╔════════════════════════════════════════════════════════════╗');
+      console.warn('[EnhancedSyncManager] SYNC ENGINE STARTED');
+      console.warn(`[EnhancedSyncManager] Processing ${pendingOps.length} pending operations`);
+
+      if (pendingOps.length > 0) {
+        console.log('[EnhancedSyncManager] Queue contents:');
+        pendingOps.forEach((op: any, idx: number) => {
+          console.log(`  [${idx + 1}/${pendingOps.length}] ${op.table}/${op.operation} - ID: ${op.operationId}`);
+        });
+      }
+
       if (pendingOps.length === 0) {
         console.log('[EnhancedSyncManager] No pending operations to sync');
         await indexedDBManager.updateSyncState({
           lastSuccessfulSync: Date.now(),
           totalSynced: result.totalSynced,
         });
+        console.warn('╚════════════════════════════════════════════════════════════╝');
         return result;
       }
 
-      console.log('[EnhancedSyncManager] Starting sync of', pendingOps.length, 'operations');
-
       for (const operation of pendingOps) {
         try {
+          console.log(`[EnhancedSyncManager] ⏳ Syncing: ${operation.table}/${operation.operation} (${operation.operationId})`);
           await this.syncOperation(operation, options);
+          console.log(`[EnhancedSyncManager] ✅ Success: ${operation.table}/${operation.operation}`);
           result.totalSynced++;
         } catch (error) {
           result.totalFailed++;
+          const errMsg = error instanceof Error ? error.message : String(error);
+          console.error(`[EnhancedSyncManager] ❌ Failed: ${operation.table}/${operation.operation} - ${errMsg}`);
           result.errors.push({
             operationId: operation.operationId,
-            error: error instanceof Error ? error.message : String(error),
+            error: errMsg,
           });
 
           if (options.shouldStopOnFirstError) {
@@ -130,15 +144,17 @@ class EnhancedSyncManager {
         isSyncing: false,
       });
 
-      console.log('[EnhancedSyncManager] Sync complete:', result);
+      console.warn(`[EnhancedSyncManager] SYNC RESULTS: ${result.totalSynced}✅ / ${result.totalFailed}❌ / Duration: ${result.duration}ms`);
+      console.log('[EnhancedSyncManager] Full result:', result);
     } catch (error) {
       this.notifyError(error instanceof Error ? error.message : 'Unknown sync error');
-      console.error('[EnhancedSyncManager] Sync failed:', error);
+      console.error('[EnhancedSyncManager] ❌ SYNC ENGINE FAILED:', error);
     } finally {
       result.endTime = Date.now();
       result.duration = result.endTime - startTime;
       this.isSyncing = false;
       this.notifySyncingStateChange(false);
+      console.warn('╚════════════════════════════════════════════════════════════╝');
     }
 
     return result;
@@ -148,23 +164,32 @@ class EnhancedSyncManager {
     const maxRetries = options.maxRetries ?? 3;
 
     try {
+      console.log(`    [Operation] Setting status to 'syncing'...`);
       await indexedDBManager.updateQueueItemStatus(operation.id, 'syncing');
 
       const { table, operation: op, data } = operation;
       let serverResponse: any = null;
 
+      console.log(`    [Operation] Executing ${op} on ${table}...`);
       switch (op) {
         case 'insert':
+          console.log(`      [Insert] Inserting into ${table} with ID: ${data.id}`);
           serverResponse = await this.handleInsert(table, data);
+          console.log(`      [Insert] Server returned:`, { id: serverResponse?.id, has_invoice: !!serverResponse?.invoice_number });
           break;
         case 'update':
+          console.log(`      [Update] Updating ${table} ID: ${data.id}`);
           serverResponse = await this.handleUpdate(table, data);
+          console.log(`      [Update] Server returned:`, { id: serverResponse?.id });
           break;
         case 'delete':
+          console.log(`      [Delete] Deleting from ${table} ID: ${data.id}`);
           serverResponse = await this.handleDelete(table, data);
+          console.log(`      [Delete] Completed`);
           break;
       }
 
+      console.log(`    [Operation] Marking operation as succeeded...`);
       await indexedDBManager.updateQueueItemStatus(operation.id, 'succeeded', {
         syncedAt: Date.now(),
         remoteVersion: Date.now(),
@@ -172,23 +197,25 @@ class EnhancedSyncManager {
       });
 
       if (serverResponse) {
+        console.log(`    [Operation] Updating local cache...`);
         await this.updateLocalRecordWithServerData(table, data.id, serverResponse);
 
         if (table === 'sales' && op === 'insert') {
-          console.log(`[EnhancedSyncManager] Sale synced: id=${data.id}, status=${data.status}, has_invoice_number=${!!serverResponse?.invoice_number}`);
+          console.log(`    [Sale] Synced: id=${data.id}, status=${data.status}, invoice_number=${serverResponse?.invoice_number}`);
           if (data.status === 'draft' || !serverResponse?.status || serverResponse?.status === 'draft') {
-            console.log(`[EnhancedSyncManager] Confirming sale ${data.id}...`);
+            console.log(`    [Sale] Need to confirm sale ${data.id}...`);
             await this.confirmSaleAfterSync(data.id, serverResponse);
           }
         }
       }
 
-      console.log(`[EnhancedSyncManager] Successfully synced ${table}/${data.id}`, serverResponse);
+      console.log(`    [Operation] ✅ Sync completed for ${table}/${data.id}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`    [Operation] ❌ Error during sync:`, errorMessage);
 
       if (operation.retries >= (options.maxRetries ?? 3)) {
-        console.error(`[EnhancedSyncManager] Operation ${operation.id} failed after ${operation.retries} retries`);
+        console.error(`    [Operation] ❌ Max retries (${operation.retries}) reached. Marking as failed.`);
 
         await indexedDBManager.updateQueueItemStatus(operation.id, 'failed', {
           error: errorMessage,
@@ -197,6 +224,7 @@ class EnhancedSyncManager {
 
         throw new Error(`Failed after ${operation.retries} retries: ${errorMessage}`);
       } else {
+        console.warn(`    [Operation] ⚠️ Retry ${operation.retries + 1}/${maxRetries}. Keeping pending.`);
         await indexedDBManager.updateQueueItemStatus(operation.id, 'pending', {
           error: errorMessage,
           retries: operation.retries + 1,

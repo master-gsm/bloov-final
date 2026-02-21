@@ -35,41 +35,55 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       setIsOnline(online);
 
       if (online && !previouslyOnline) {
-        console.log('[OfflineContext] Online detected! Processing queue immediately...');
+        console.warn('============================================================');
+        console.warn('[OfflineContext] ONLINE EVENT DETECTED!');
+        console.warn('============================================================');
         setWasOffline(false);
         setSyncError(null);
 
         const queueSize = await indexedDBManager.getQueueSize();
-        console.log(`[OfflineContext] Queue size: ${queueSize} operations pending`);
+        console.log(`[OfflineContext] Queue size before sync: ${queueSize} operations`);
 
         if (queueSize > 0) {
-          console.log('[OfflineContext] Starting sync now...');
+          console.warn('[OfflineContext] Queue is NOT empty! Starting immediate sync...');
+
+          const queueOps = await indexedDBManager.getQueuedOperations('pending');
+          console.log(`[OfflineContext] Queue contents:`, queueOps.map((op: any) => ({ id: op.operationId, table: op.table, operation: op.operation })));
+
           try {
+            console.log('[OfflineContext] Calling syncAll() with await...');
             const result = await enhancedSyncManager.syncAll({
               maxRetries: 3,
               shouldStopOnFirstError: false,
             });
 
-            console.log(`[OfflineContext] Sync complete: ${result.totalSynced}/${result.totalQueued} synced`);
-            console.log(`[OfflineContext] Synced: ${result.totalSynced}, Failed: ${result.totalFailed}, Duration: ${result.duration}ms`);
+            console.warn('✅ [OfflineContext] SYNC COMPLETE!');
+            console.log(`[OfflineContext] Results: ${result.totalSynced}/${result.totalQueued} synced`);
+            console.log(`[OfflineContext] Details - Synced: ${result.totalSynced}, Failed: ${result.totalFailed}, Duration: ${result.duration}ms`);
 
             if (result.totalFailed > 0) {
-              console.error(`[OfflineContext] Sync errors:`, result.errors);
+              console.error(`[OfflineContext] ❌ Sync errors:`, result.errors);
               setSyncError(`${result.totalFailed} operations failed to sync`);
+            } else {
+              console.log('[OfflineContext] ✅ All operations synced successfully');
             }
 
             const newQueueSize = await indexedDBManager.getQueueSize();
+            console.log(`[OfflineContext] Queue size after sync: ${newQueueSize} operations`);
             setPendingOperationsCount(newQueueSize);
+            console.warn('============================================================');
           } catch (error) {
-            console.error('[OfflineContext] Sync failed:', error);
+            console.error('[OfflineContext] ❌ SYNC FAILED:', error);
             setSyncError((error as Error).message);
+            console.warn('============================================================');
           }
         } else {
-          console.log('[OfflineContext] Queue is empty, nothing to sync');
+          console.warn('[OfflineContext] Queue is EMPTY, nothing to sync');
           setPendingOperationsCount(0);
+          console.warn('============================================================');
         }
       } else if (!online) {
-        console.log('[OfflineContext] Offline detected');
+        console.warn('[OfflineContext] OFFLINE DETECTED');
         setWasOffline(true);
         setSyncError('No internet connection');
       }
@@ -174,9 +188,15 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     setPendingOperationsCount(count);
 
     if (navigator.onLine && count > 0) {
-      console.log('[OfflineContext] Online detected, triggering sync in 500ms');
-      setTimeout(() => {
-        enhancedSyncManager.syncAll({ maxRetries: 3 }).catch(console.error);
+      console.warn('[OfflineContext] ⚡ Online detected! Triggering sync in 500ms...');
+      setTimeout(async () => {
+        console.log('[OfflineContext] Executing queued sync with await...');
+        try {
+          const result = await enhancedSyncManager.syncAll({ maxRetries: 3 });
+          console.log(`[OfflineContext] ✅ Queued sync completed: ${result.totalSynced}/${result.totalQueued} synced`);
+        } catch (error) {
+          console.error('[OfflineContext] ❌ Queued sync failed:', error);
+        }
       }, 500);
     }
 
