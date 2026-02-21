@@ -651,6 +651,32 @@ export function Sales() {
     }
   };
 
+  const deleteDraftSale = async (saleId: string, saleStatus: string) => {
+    if (saleStatus !== 'draft') {
+      alert(isRTL
+        ? 'لا يمكن حذف الفواتير المؤكدة. استخدم زر الإلغاء بدلاً من ذلك.'
+        : 'Confirmed sales cannot be deleted. Use the Cancel button instead.');
+      return;
+    }
+    if (!canManageSales) {
+      alert(isRTL ? 'يتطلب صلاحيات الأدمن أو المحاسب' : 'Admin or Accountant privileges required');
+      return;
+    }
+    if (!window.confirm(isRTL ? 'هل تريد حذف هذه المسودة نهائياً؟' : 'Delete this draft sale permanently?')) return;
+
+    try {
+      await supabase.from('employee_commissions').delete().eq('sale_id', saleId);
+      await supabase.from('sale_items').delete().eq('sale_id', saleId);
+      const { error } = await supabase.from('sales').delete().eq('id', saleId).eq('status', 'draft');
+      if (error) throw error;
+      await loadData();
+      setViewingSale(null);
+    } catch (error: any) {
+      console.error('Error deleting draft sale:', error);
+      alert(error.message || (isRTL ? 'حدث خطأ أثناء حذف المسودة' : 'Error deleting draft sale'));
+    }
+  };
+
   const filtered = sales.filter((s) => {
     if (statusFilter !== 'all' && s.status !== statusFilter) return false;
     const term = searchTerm.toLowerCase();
@@ -1288,6 +1314,11 @@ export function Sales() {
                             <MessageCircle className="w-4 h-4" />
                           </button>
                         )}
+                        {canManageSales && sale.status === 'draft' && (
+                          <button onClick={() => deleteDraftSale(sale.id, sale.status)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition" title={isRTL ? 'حذف المسودة' : 'Delete Draft'}>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1365,6 +1396,11 @@ export function Sales() {
 
                 {canManageSales && viewingSale.status !== 'void' && (
                   <div className="flex gap-2">
+                    {viewingSale.status === 'draft' && (
+                      <button onClick={() => deleteDraftSale(viewingSale.id, viewingSale.status)} className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 transition font-medium text-sm">
+                        <Trash2 className="w-4 h-4" /> {isRTL ? 'حذف المسودة' : 'Delete Draft'}
+                      </button>
+                    )}
                     {viewingSale.status === 'confirmed' && (
                       <>
                         <button onClick={() => returnSale(viewingSale.id)} className="flex-1 flex items-center justify-center gap-2 bg-orange-600 text-white py-2.5 rounded-lg hover:bg-orange-700 transition font-medium text-sm">
@@ -1385,9 +1421,11 @@ export function Sales() {
                         <Check className="w-4 h-4" /> {isRTL ? 'استعادة' : 'Restore'}
                       </button>
                     )}
-                    <button onClick={() => voidSale(viewingSale.id)} className="flex-1 flex items-center justify-center gap-2 bg-gray-800 text-white py-2.5 rounded-lg hover:bg-gray-900 transition font-medium text-sm">
-                      <XCircle className="w-4 h-4" /> {isRTL ? 'إلغاء نهائي' : 'Void'}
-                    </button>
+                    {viewingSale.status !== 'draft' && (
+                      <button onClick={() => voidSale(viewingSale.id)} className="flex-1 flex items-center justify-center gap-2 bg-gray-800 text-white py-2.5 rounded-lg hover:bg-gray-900 transition font-medium text-sm">
+                        <XCircle className="w-4 h-4" /> {isRTL ? 'إلغاء نهائي' : 'Void'}
+                      </button>
+                    )}
                   </div>
                 )}
                 {viewingSale.status === 'void' && (
