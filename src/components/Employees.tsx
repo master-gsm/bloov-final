@@ -555,6 +555,53 @@ export function Employees() {
             </p>
           </div>
         </div>
+
+        {commissions.length > 0 && (() => {
+          const byEmployee: Record<string, { name: string; pending: number; approved: number; void: number; total: number; count: number }> = {};
+          commissions.forEach(c => {
+            const empId = c.employee_id;
+            const name = c.employees?.full_name || empId;
+            if (!byEmployee[empId]) byEmployee[empId] = { name, pending: 0, approved: 0, void: 0, total: 0, count: 0 };
+            const status = (c as any).status;
+            const amt = c.commission_amount ?? 0;
+            if (status === 'void') { byEmployee[empId].void += amt; }
+            else if (status === 'approved' || c.is_paid) { byEmployee[empId].approved += amt; }
+            else { byEmployee[empId].pending += amt; }
+            if (status !== 'void') byEmployee[empId].total += amt;
+            byEmployee[empId].count += 1;
+          });
+          const entries = Object.values(byEmployee);
+          return (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">{isRTL ? 'تفصيل العمولات لكل موظف' : 'Commission Breakdown by Employee'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {entries.map((emp, i) => (
+                  <div key={i} className="bg-white rounded-xl border shadow-sm p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-900 text-sm">{emp.name}</span>
+                      <span className="text-xs text-gray-400">{emp.count} {isRTL ? 'عملية' : 'transactions'}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-amber-600 font-medium">{isRTL ? 'مستحقة' : 'Pending'}</span>
+                        <span className="font-bold text-amber-600">{emp.pending.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-green-600 font-medium">{isRTL ? 'معتمدة' : 'Approved'}</span>
+                        <span className="font-bold text-green-600">{emp.approved.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}</span>
+                      </div>
+                      <div className="border-t pt-1.5 flex justify-between text-xs">
+                        <span className="text-teal-700 font-semibold">{isRTL ? 'الإجمالي' : 'Total'}</span>
+                        <span className="font-bold text-teal-700">{emp.total.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
