@@ -390,7 +390,7 @@ export function Employees() {
                         <td className="px-4 py-3 text-sm text-gray-600">{emp.department}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{emp.branches?.name}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                          {emp.basic_salary.toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                          {(emp.basic_salary ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">{emp.commission_rate}%</td>
                         <td className="px-4 py-3">
@@ -483,19 +483,19 @@ export function Employees() {
                         {new Date(salary.period_start).toLocaleDateString()} - {new Date(salary.period_end).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        {salary.basic_amount.toLocaleString()}
+                        {(salary.basic_amount ?? 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-sm text-green-600">
-                        +{salary.commission_amount.toLocaleString()}
+                        +{(salary.commission_amount ?? 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-sm text-green-600">
-                        +{salary.bonus.toLocaleString()}
+                        +{(salary.bonus ?? 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-sm text-red-600">
-                        -{salary.deductions.toLocaleString()}
+                        -{(salary.deductions ?? 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-sm font-bold text-gray-900">
-                        {salary.total_amount.toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                        {(salary.total_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {new Date(salary.payment_date).toLocaleDateString()}
@@ -555,13 +555,13 @@ export function Employees() {
                         {comm.employees?.full_name}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        {comm.sale_amount.toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                        {(comm.sale_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {comm.commission_rate}%
                       </td>
                       <td className="px-4 py-3 text-sm font-bold text-green-600">
-                        {comm.commission_amount.toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                        {(comm.commission_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
@@ -963,10 +963,10 @@ export function Employees() {
                   </span>
                   <span className="text-2xl font-bold text-teal-600">
                     {(
-                      salaryForm.basic_amount +
-                      salaryForm.commission_amount +
-                      salaryForm.bonus -
-                      salaryForm.deductions
+                      (salaryForm.basic_amount || 0) +
+                      (salaryForm.commission_amount || 0) +
+                      (salaryForm.bonus || 0) -
+                      (salaryForm.deductions || 0)
                     ).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
                   </span>
                 </div>
