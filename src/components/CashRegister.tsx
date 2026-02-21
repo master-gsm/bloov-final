@@ -3,8 +3,8 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
-  Wallet, Plus, X, Lock, Unlock, Receipt, TrendingUp, TrendingDown, DollarSign,
-  Calendar, CreditCard, Save, Clock, ArrowDownCircle, ArrowUpCircle
+  Wallet, Plus, X, Lock, Unlock, Receipt, DollarSign,
+  Calendar, Save, Clock, ArrowDownCircle, ArrowUpCircle, TrendingUp
 } from 'lucide-react';
 
 interface CashRegisterRecord {
@@ -19,6 +19,15 @@ interface CashRegisterRecord {
   opened_at: string;
   closed_at: string | null;
   notes: string | null;
+}
+
+interface RegisterTransaction {
+  id: string;
+  transaction_type: 'sale' | 'expense' | 'deposit' | 'withdrawal';
+  amount: number;
+  description: string | null;
+  description_ar: string | null;
+  created_at: string;
 }
 
 interface Expense {
@@ -50,9 +59,10 @@ export function CashRegister() {
   const [activeRegister, setActiveRegister] = useState<CashRegisterRecord | null>(null);
   const [registers, setRegisters] = useState<CashRegisterRecord[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [todaySales, setTodaySales] = useState(0);
-  const [todayCashSales, setTodayCashSales] = useState(0);
-  const [todayExpenses, setTodayExpenses] = useState(0);
+  const [movements, setMovements] = useState<RegisterTransaction[]>([]);
+  const [currentBalance, setCurrentBalance] = useState(0);
+  const [cashIn, setCashIn] = useState(0);
+  const [cashOut, setCashOut] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const [showOpenForm, setShowOpenForm] = useState(false);
@@ -67,7 +77,7 @@ export function CashRegister() {
   const [expenseDescription, setExpenseDescription] = useState('');
   const [expensePayment, setExpensePayment] = useState('cash');
   const [submitting, setSubmitting] = useState(false);
-  const [tab, setTab] = useState<'register' | 'expenses' | 'history'>('register');
+  const [tab, setTab] = useState<'register' | 'movements' | 'expenses' | 'history'>('register');
 
   useEffect(() => {
     loadData();
@@ -77,25 +87,40 @@ export function CashRegister() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      const [regRes, expRes, salesRes, historyRes] = await Promise.all([
+      const [regRes, expRes, historyRes] = await Promise.all([
         supabase.from('cash_registers').select('*').eq('status', 'open').order('opened_at', { ascending: false }).limit(1),
         supabase.from('expenses').select('*').gte('expense_date', today).order('created_at', { ascending: false }),
-        supabase.from('sales').select('total, payment_method').eq('status', 'confirmed').gte('sale_date', `${today}T00:00:00`),
         supabase.from('cash_registers').select('*').order('opened_at', { ascending: false }).limit(30),
       ]);
 
-      if (regRes.data && regRes.data.length > 0) {
-        setActiveRegister(regRes.data[0] as any);
-      }
-      if (expRes.data) {
-        setExpenses(expRes.data as any[]);
-        setTodayExpenses(expRes.data.filter(e => e.payment_method === 'cash').reduce((s, e) => s + e.amount, 0));
-      }
-      if (salesRes.data) {
-        setTodaySales(salesRes.data.reduce((s, sale) => s + sale.total, 0));
-        setTodayCashSales(salesRes.data.filter(s => s.payment_method === 'cash').reduce((s, sale) => s + sale.total, 0));
-      }
+      if (expRes.data) setExpenses(expRes.data as any[]);
       if (historyRes.data) setRegisters(historyRes.data as any[]);
+
+      if (regRes.data && regRes.data.length > 0) {
+        const reg = regRes.data[0] as CashRegisterRecord;
+        setActiveRegister(reg);
+
+        const { data: txData } = await supabase
+          .from('register_transactions')
+          .select('*')
+          .eq('register_id', reg.id)
+          .order('created_at', { ascending: false });
+
+        if (txData) {
+          setMovements(txData as RegisterTransaction[]);
+          const totalIn = txData.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+          const totalOut = Math.abs(txData.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0));
+          setCashIn(totalIn);
+          setCashOut(totalOut);
+          setCurrentBalance(reg.opening_balance + totalIn - totalOut);
+        }
+      } else {
+        setActiveRegister(null);
+        setMovements([]);
+        setCashIn(0);
+        setCashOut(0);
+        setCurrentBalance(0);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -122,11 +147,9 @@ export function CashRegister() {
     if (!activeRegister) return;
     setSubmitting(true);
 
-    const expected = activeRegister.opening_balance + todayCashSales - todayExpenses;
-
     const { error } = await supabase.from('cash_registers').update({
       closing_balance: closingBalance,
-      expected_balance: expected,
+      expected_balance: currentBalance,
       status: 'closed',
       closed_by: user?.id,
       closed_at: new Date().toISOString(),
@@ -177,9 +200,10 @@ export function CashRegister() {
     return cat ? (isRTL ? cat.ar : cat.en) : val;
   };
 
-  const expectedBalance = activeRegister
-    ? activeRegister.opening_balance + todayCashSales - todayExpenses
-    : 0;
+  const getMovementLabel = (tx: RegisterTransaction) => {
+    if (tx.description_ar && isRTL) return tx.description_ar;
+    return tx.description || (tx.transaction_type === 'sale' ? (isRTL ? 'بيع نقدي' : 'Cash Sale') : (isRTL ? 'مصروف' : 'Expense'));
+  };
 
   if (loading) {
     return (
@@ -206,7 +230,7 @@ export function CashRegister() {
               <button onClick={() => setShowExpenseForm(true)} className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 transition font-medium">
                 <Plus className="w-5 h-5" /> {isRTL ? 'إضافة مصروف' : 'Add Expense'}
               </button>
-              <button onClick={() => { setClosingBalance(expectedBalance); setShowCloseForm(true); }} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 transition font-medium">
+              <button onClick={() => { setClosingBalance(currentBalance); setShowCloseForm(true); }} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 transition font-medium">
                 <Lock className="w-5 h-5" /> {isRTL ? 'إغلاق الصندوق' : 'Close Register'}
               </button>
             </>
@@ -214,10 +238,13 @@ export function CashRegister() {
         </div>
       </div>
 
-      <div className="flex gap-2 border-b">
-        {(['register', 'expenses', 'history'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${tab === t ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-            {t === 'register' ? (isRTL ? 'الصندوق' : 'Register') : t === 'expenses' ? (isRTL ? 'المصروفات' : 'Expenses') : (isRTL ? 'السجل' : 'History')}
+      <div className="flex gap-2 border-b overflow-x-auto">
+        {(['register', 'movements', 'expenses', 'history'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap ${tab === t ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+            {t === 'register' ? (isRTL ? 'الصندوق' : 'Register')
+              : t === 'movements' ? (isRTL ? 'الحركات' : 'Movements')
+              : t === 'expenses' ? (isRTL ? 'المصروفات' : 'Expenses')
+              : (isRTL ? 'السجل' : 'History')}
           </button>
         ))}
       </div>
@@ -237,62 +264,79 @@ export function CashRegister() {
                 <div className="bg-white rounded-xl shadow-sm border p-5">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="p-2 bg-green-100 rounded-lg"><ArrowUpCircle className="w-5 h-5 text-green-600" /></div>
-                    <span className="text-sm text-gray-500">{isRTL ? 'مبيعات نقدية' : 'Cash Sales'}</span>
+                    <span className="text-sm text-gray-500">{isRTL ? 'مبيعات نقدية' : 'Cash In'}</span>
                   </div>
-                  <p className="text-2xl font-bold text-green-600">+{formatCurrency(todayCashSales)}</p>
+                  <p className="text-2xl font-bold text-green-600">+{formatCurrency(cashIn)}</p>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm border p-5">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="p-2 bg-red-100 rounded-lg"><ArrowDownCircle className="w-5 h-5 text-red-600" /></div>
-                    <span className="text-sm text-gray-500">{isRTL ? 'مصروفات نقدية' : 'Cash Expenses'}</span>
+                    <span className="text-sm text-gray-500">{isRTL ? 'مصروفات نقدية' : 'Cash Out'}</span>
                   </div>
-                  <p className="text-2xl font-bold text-red-600">-{formatCurrency(todayExpenses)}</p>
+                  <p className="text-2xl font-bold text-red-600">-{formatCurrency(cashOut)}</p>
                 </div>
-                <div className="bg-white rounded-xl shadow-sm border p-5">
+                <div className="bg-white rounded-xl shadow-sm border p-5 bg-teal-50 border-teal-200">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="p-2 bg-teal-100 rounded-lg"><DollarSign className="w-5 h-5 text-teal-600" /></div>
-                    <span className="text-sm text-gray-500">{isRTL ? 'الرصيد المتوقع' : 'Expected'}</span>
+                    <span className="text-sm text-teal-700 font-medium">{isRTL ? 'الرصيد الحالي' : 'Current Balance'}</span>
                   </div>
-                  <p className="text-2xl font-bold text-teal-600">{formatCurrency(expectedBalance)}</p>
+                  <p className="text-2xl font-bold text-teal-700">{formatCurrency(currentBalance)}</p>
+                  <p className="text-xs text-teal-500 mt-1">{isRTL ? 'محسوب من الحركات الفعلية' : 'Calculated from movements'}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-xl shadow-sm border p-6">
-                  <h3 className="font-bold text-gray-900 mb-4">{isRTL ? 'ملخص اليوم' : 'Today Summary'}</h3>
+                  <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-teal-600" />
+                    {isRTL ? 'ملخص الوردية' : 'Shift Summary'}
+                  </h3>
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between py-2 border-b border-gray-100">
-                      <span className="text-gray-500">{isRTL ? 'إجمالي المبيعات' : 'Total Sales'}</span>
-                      <span className="font-bold text-gray-900">{formatCurrency(todaySales)} {isRTL ? 'ر.س' : 'SAR'}</span>
+                      <span className="text-gray-500">{isRTL ? 'رصيد الفتح' : 'Opening Balance'}</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(activeRegister.opening_balance)} {isRTL ? 'ر.س' : 'SAR'}</span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-gray-100">
-                      <span className="text-gray-500">{isRTL ? 'مبيعات نقدية' : 'Cash Sales'}</span>
-                      <span className="font-medium text-green-600">{formatCurrency(todayCashSales)} {isRTL ? 'ر.س' : 'SAR'}</span>
+                      <span className="text-gray-500">{isRTL ? 'إجمالي المبيعات النقدية' : 'Total Cash Sales'}</span>
+                      <span className="font-medium text-green-600">+{formatCurrency(cashIn)} {isRTL ? 'ر.س' : 'SAR'}</span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-gray-100">
-                      <span className="text-gray-500">{isRTL ? 'مصروفات نقدية' : 'Cash Expenses'}</span>
-                      <span className="font-medium text-red-600">{formatCurrency(todayExpenses)} {isRTL ? 'ر.س' : 'SAR'}</span>
+                      <span className="text-gray-500">{isRTL ? 'إجمالي المصروفات النقدية' : 'Total Cash Expenses'}</span>
+                      <span className="font-medium text-red-600">-{formatCurrency(cashOut)} {isRTL ? 'ر.س' : 'SAR'}</span>
                     </div>
                     <div className="flex justify-between py-2 pt-3 border-t-2 border-gray-200">
-                      <span className="font-bold text-gray-900">{isRTL ? 'صافي الصندوق' : 'Net Cash'}</span>
-                      <span className="font-bold text-teal-600">{formatCurrency(expectedBalance)} {isRTL ? 'ر.س' : 'SAR'}</span>
+                      <span className="font-bold text-gray-900">{isRTL ? 'الرصيد المتوقع' : 'Expected Balance'}</span>
+                      <span className="font-bold text-teal-600">{formatCurrency(currentBalance)} {isRTL ? 'ر.س' : 'SAR'}</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-gray-100">
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <Calendar className="w-3.5 h-3.5" />
+                      {isRTL ? 'فُتح في:' : 'Opened at:'} {new Date(activeRegister.opened_at).toLocaleTimeString(isRTL ? 'ar-SA' : 'en-US')}
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border p-6">
-                  <h3 className="font-bold text-gray-900 mb-4">{isRTL ? 'مصروفات اليوم' : 'Today Expenses'}</h3>
-                  {expenses.length === 0 ? (
-                    <p className="text-gray-400 text-center py-6">{isRTL ? 'لا توجد مصروفات اليوم' : 'No expenses today'}</p>
+                  <h3 className="font-bold text-gray-900 mb-4">{isRTL ? 'آخر الحركات' : 'Recent Movements'}</h3>
+                  {movements.length === 0 ? (
+                    <p className="text-gray-400 text-center py-6 text-sm">{isRTL ? 'لا توجد حركات بعد' : 'No movements yet'}</p>
                   ) : (
                     <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {expenses.map(exp => (
-                        <div key={exp.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <span className="text-sm font-medium text-gray-900">{getCategoryLabel(exp.category)}</span>
-                            {exp.description && <p className="text-xs text-gray-500">{exp.description}</p>}
+                      {movements.slice(0, 10).map(tx => (
+                        <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            {tx.amount > 0
+                              ? <ArrowUpCircle className="w-4 h-4 text-green-500 shrink-0" />
+                              : <ArrowDownCircle className="w-4 h-4 text-red-500 shrink-0" />}
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">{getMovementLabel(tx)}</span>
+                              <p className="text-xs text-gray-400">{new Date(tx.created_at).toLocaleTimeString(isRTL ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
                           </div>
-                          <span className="text-sm font-bold text-red-600">-{formatCurrency(exp.amount)}</span>
+                          <span className={`text-sm font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -311,6 +355,68 @@ export function CashRegister() {
             </div>
           )}
         </>
+      )}
+
+      {tab === 'movements' && (
+        <div className="bg-white rounded-xl shadow-sm border">
+          <div className="p-6 border-b">
+            <h3 className="font-bold text-gray-900">{isRTL ? 'سجل حركات الصندوق' : 'Cash Movements'}</h3>
+            {activeRegister && (
+              <p className="text-sm text-gray-500 mt-1">
+                {isRTL ? `الرصيد الحالي: ${formatCurrency(currentBalance)} ر.س` : `Current balance: ${formatCurrency(currentBalance)} SAR`}
+              </p>
+            )}
+          </div>
+          {!activeRegister || movements.length === 0 ? (
+            <div className="p-12 text-center text-gray-400">
+              <Receipt className="w-12 h-12 mx-auto mb-2 opacity-30" />
+              <p>{isRTL ? 'لا توجد حركات' : 'No movements'}</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-gray-50">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500">{isRTL ? 'الوقت' : 'Time'}</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500">{isRTL ? 'النوع' : 'Type'}</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500">{isRTL ? 'الوصف' : 'Description'}</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500">{isRTL ? 'المبلغ' : 'Amount'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movements.map(tx => (
+                  <tr key={tx.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                    <td className="py-3 px-4 text-sm text-gray-500">
+                      {new Date(tx.created_at).toLocaleTimeString(isRTL ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        tx.transaction_type === 'sale' ? 'bg-green-100 text-green-700'
+                        : tx.transaction_type === 'expense' ? 'bg-red-100 text-red-700'
+                        : tx.transaction_type === 'deposit' ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {tx.transaction_type === 'sale' ? (isRTL ? 'بيع' : 'Sale')
+                          : tx.transaction_type === 'expense' ? (isRTL ? 'مصروف' : 'Expense')
+                          : tx.transaction_type === 'deposit' ? (isRTL ? 'إيداع' : 'Deposit')
+                          : (isRTL ? 'سحب' : 'Withdrawal')}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{getMovementLabel(tx)}</td>
+                    <td className={`py-3 px-4 text-sm font-bold text-right ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)} {isRTL ? 'ر.س' : 'SAR'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-50 font-bold">
+                  <td colSpan={3} className="py-3 px-4 text-sm text-gray-700">{isRTL ? 'الرصيد الحالي' : 'Current Balance'}</td>
+                  <td className="py-3 px-4 text-sm text-teal-700 text-right">{formatCurrency(currentBalance)} {isRTL ? 'ر.س' : 'SAR'}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
       )}
 
       {tab === 'expenses' && (
@@ -343,7 +449,11 @@ export function CashRegister() {
                     <td className="py-3 px-4 text-sm font-mono text-gray-500">{exp.expense_number}</td>
                     <td className="py-3 px-4 text-sm">{getCategoryLabel(exp.category)}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">{exp.description || '-'}</td>
-                    <td className="py-3 px-4 text-sm">{exp.payment_method === 'cash' ? (isRTL ? 'نقدي' : 'Cash') : exp.payment_method === 'transfer' ? (isRTL ? 'تحويل' : 'Transfer') : (isRTL ? 'بطاقة' : 'Card')}</td>
+                    <td className="py-3 px-4 text-sm">
+                      {exp.payment_method === 'cash' ? (isRTL ? 'نقدي' : 'Cash')
+                        : exp.payment_method === 'transfer' ? (isRTL ? 'تحويل' : 'Transfer')
+                        : (isRTL ? 'بطاقة' : 'Card')}
+                    </td>
                     <td className="py-3 px-4 text-sm font-bold text-red-600 text-right">{formatCurrency(exp.amount)} {isRTL ? 'ر.س' : 'SAR'}</td>
                   </tr>
                 ))}
@@ -419,6 +529,7 @@ export function CashRegister() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الرصيد الافتتاحي (ر.س)' : 'Opening Balance (SAR)'}</label>
                 <input type="number" min="0" step="0.01" value={openingBalance} onChange={(e) => setOpeningBalance(parseFloat(e.target.value) || 0)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" dir="ltr" />
               </div>
+              <p className="text-xs text-gray-500">{isRTL ? 'سيتم تسجيل جميع المبيعات النقدية والمصروفات تلقائياً في الصندوق.' : 'All cash sales and expenses will be automatically recorded in this register.'}</p>
               <button onClick={openRegister} disabled={submitting} className="w-full bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition font-medium disabled:opacity-50 flex items-center justify-center gap-2">
                 <Unlock className="w-4 h-4" /> {submitting ? (isRTL ? 'جاري الفتح...' : 'Opening...') : (isRTL ? 'فتح' : 'Open')}
               </button>
@@ -436,15 +547,21 @@ export function CashRegister() {
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-gray-50 p-3 rounded-lg space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'الرصيد المتوقع' : 'Expected'}</span><span className="font-bold">{formatCurrency(expectedBalance)}</span></div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">{isRTL ? 'الرصيد المتوقع' : 'Expected Balance'}</span>
+                  <span className="font-bold">{formatCurrency(currentBalance)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>{isRTL ? `فتح: ${formatCurrency(activeRegister?.opening_balance || 0)} + مبيعات: ${formatCurrency(cashIn)} - مصروفات: ${formatCurrency(cashOut)}` : `Opening: ${formatCurrency(activeRegister?.opening_balance || 0)} + Sales: ${formatCurrency(cashIn)} - Expenses: ${formatCurrency(cashOut)}`}</span>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الرصيد الفعلي (ر.س)' : 'Actual Balance (SAR)'}</label>
                 <input type="number" min="0" step="0.01" value={closingBalance} onChange={(e) => setClosingBalance(parseFloat(e.target.value) || 0)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" dir="ltr" />
               </div>
-              {closingBalance !== expectedBalance && (
-                <div className={`text-sm p-2 rounded-lg ${closingBalance > expectedBalance ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}`}>
-                  {isRTL ? 'الفرق:' : 'Difference:'} {formatCurrency(closingBalance - expectedBalance)} {isRTL ? 'ر.س' : 'SAR'}
+              {closingBalance !== currentBalance && (
+                <div className={`text-sm p-2 rounded-lg ${closingBalance > currentBalance ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}`}>
+                  {isRTL ? 'الفرق:' : 'Difference:'} {formatCurrency(closingBalance - currentBalance)} {isRTL ? 'ر.س' : 'SAR'}
                 </div>
               )}
               <div>

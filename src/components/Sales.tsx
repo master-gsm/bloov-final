@@ -126,11 +126,13 @@ export function Sales() {
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [openRegisterId, setOpenRegisterId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
     checkAdmin();
     loadUserBranch();
+    checkOpenRegister();
   }, []);
 
   const loadUserBranch = async () => {
@@ -146,6 +148,21 @@ export function Sales() {
       if (data) setUserBranchId(data.branch_id as string);
     } catch (err) {
       console.error('Error loading user branch:', err);
+    }
+  };
+
+  const checkOpenRegister = async () => {
+    try {
+      const { data } = await supabase
+        .from('cash_registers')
+        .select('id')
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setOpenRegisterId(data?.id || null);
+    } catch (err) {
+      console.error('Error checking cash register:', err);
     }
   };
 
@@ -332,6 +349,10 @@ export function Sales() {
     }
     if (!selectedEmployee || selectedEmployee.trim() === '') {
       setError(isRTL ? 'يجب اختيار الموظف المسؤول' : 'Employee selection is required');
+      return;
+    }
+    if (paymentMethod === 'cash' && !openRegisterId) {
+      setError(isRTL ? 'لا يمكن إتمام البيع النقدي - الصندوق مغلق. يرجى فتح الصندوق أولاً.' : 'Cannot complete cash sale - register is closed. Please open the register first.');
       return;
     }
     setError('');
@@ -1046,6 +1067,9 @@ export function Sales() {
                 </select>
                 {paymentMethod === 'credit' && !selectedCustomer && (
                   <p className="text-xs text-amber-600 mt-1">{isRTL ? 'يجب اختيار عميل مسجل للبيع الآجل' : 'Select a registered customer for credit sales'}</p>
+                )}
+                {paymentMethod === 'cash' && !openRegisterId && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{isRTL ? 'تنبيه: الصندوق مغلق - لا يمكن إتمام البيع النقدي' : 'Warning: Register is closed - cash sales are not allowed'}</p>
                 )}
               </div>
 
