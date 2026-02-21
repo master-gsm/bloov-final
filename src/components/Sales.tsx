@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { useOfflineData } from '../hooks/useOfflineData';
 import { supabase } from '../lib/supabase';
+import { indexedDBManager } from '../lib/offline/indexedDBManager';
 import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, Edit, RotateCcw } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
 import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
@@ -374,7 +375,7 @@ export function Sales() {
       setError(isRTL ? 'يجب اختيار الموظف المسؤول' : 'Employee selection is required');
       return;
     }
-    if (paymentMethod === 'cash' && !openRegisterId) {
+    if (paymentMethod === 'cash' && !openRegisterId && navigator.onLine) {
       setError(isRTL ? 'لا يمكن إتمام البيع النقدي - الصندوق مغلق. يرجى فتح الصندوق أولاً.' : 'Cannot complete cash sale - register is closed. Please open the register first.');
       return;
     }
@@ -383,8 +384,12 @@ export function Sales() {
 
     try {
       const isCredit = paymentMethod === 'credit';
+      const saleId = crypto.randomUUID();
+      const saleNumber = `S${Date.now().toString(36).toUpperCase()}`;
 
-      const payload = {
+      // 1. Create sale record locally in IndexedDB (OFFLINE-FIRST)
+      const salePayload = {
+        id: saleId,
         branch_id: userBranchId,
         customer_id: selectedCustomer && selectedCustomer.trim() !== '' ? selectedCustomer : null,
         customer_name: !selectedCustomer || selectedCustomer.trim() === ''
@@ -393,6 +398,9 @@ export function Sales() {
         customer_phone: !selectedCustomer || selectedCustomer.trim() === ''
           ? (walkinPhone && walkinPhone.trim() !== '' ? walkinPhone : null)
           : null,
+        sale_number: saleNumber,
+        sale_date: new Date().toISOString(),
+        status: 'draft',
         subtotal,
         tax: vatAmount,
         discount: saleDiscount,
@@ -408,96 +416,139 @@ export function Sales() {
         salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
         salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
         salesperson_id: selectedEmployee,
-        items: saleItems.map((item) => ({
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Queue sale insert
+      await indexedDBManager.addOperationToQueue({
+        operationId: crypto.randomUUID(),
+        table: 'sales',
+        operation: 'insert',
+        data: salePayload,
+        localVersion: Date.now(),
+        remoteVersion: null,
+        status: 'pending',
+        retries: 0,
+        maxRetries: 3,
+        error: null,
+        syncedAt: null,
+        serverResponse: null,
+      });
+
+      // 2. Create sale items locally (OFFLINE-FIRST)
+      for (const item of saleItems) {
+        const saleItemPayload = {
+          id: crypto.randomUUID(),
+          sale_id: saleId,
           product_id: item.product_id,
           quantity: item.quantity,
           unit_price: item.unit_price,
           purchase_price: item.purchase_price || 0,
           discount: item.discount,
           total: item.total,
-        })),
-      };
+          created_at: new Date().toISOString(),
+        };
 
-      const { data: result, error: rpcError } = await supabase.rpc('create_sale_atomic', {
-        p_payload: payload,
-      });
-
-      if (rpcError) throw rpcError;
-
-      const saleId = (result as any).sale_id;
-      const saleNumber = (result as any).sale_number;
-
-      if (selectedCustomer) {
-        const loyaltyPoints = Math.floor(total);
-        const { data: existingLoyalty } = await supabase
-          .from('customer_loyalty')
-          .select('id, points, total_earned, total_redeemed')
-          .eq('customer_id', selectedCustomer)
-          .maybeSingle();
-
-        if (existingLoyalty) {
-          await supabase
-            .from('customer_loyalty')
-            .update({
-              points: existingLoyalty.points + loyaltyPoints - pointsToRedeem,
-              total_earned: existingLoyalty.total_earned + loyaltyPoints,
-              total_redeemed: (existingLoyalty.total_redeemed || 0) + pointsToRedeem,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingLoyalty.id);
-        } else {
-          await supabase.from('customer_loyalty').insert({
-            customer_id: selectedCustomer,
-            points: loyaltyPoints - pointsToRedeem,
-            total_earned: loyaltyPoints,
-            total_redeemed: pointsToRedeem,
-          });
-        }
-
-        if (pointsToRedeem > 0) {
-          await supabase.from('loyalty_transactions').insert({
-            customer_id: selectedCustomer,
-            sale_id: saleId,
-            points: pointsToRedeem,
-            type: 'redeemed',
-            description: `${isRTL ? 'استخدام' : 'Redeemed'} ${pointsToRedeem} ${isRTL ? 'نقطة' : 'points'} (${formatCurrency(pointsDiscount)} ${isRTL ? 'خصم' : 'discount'})`,
-          });
-        }
-
-        if (isCredit) {
-          await supabase.from('customers').update({
-            current_balance: (customers.find(c => c.id === selectedCustomer) as any)?.current_balance
-              ? (customers.find(c => c.id === selectedCustomer) as any).current_balance + total
-              : total,
-          }).eq('id', selectedCustomer);
-        }
+        // Queue each sale item
+        await indexedDBManager.addOperationToQueue({
+          operationId: crypto.randomUUID(),
+          table: 'sale_items',
+          operation: 'insert',
+          data: saleItemPayload,
+          localVersion: Date.now(),
+          remoteVersion: null,
+          status: 'pending',
+          retries: 0,
+          maxRetries: 3,
+          error: null,
+          syncedAt: null,
+          serverResponse: null,
+        });
       }
 
-      await supabase.from('activity_log').insert({
-        user_id: user?.id,
-        action: 'create',
-        entity_type: 'sale',
-        entity_id: saleId,
-        details: `Sale ${saleNumber} - ${formatCurrency(total)} SAR`,
-      });
+      // Cache sale and items locally
+      await indexedDBManager.cacheRecord('sales', salePayload, true);
+      for (const item of saleItems) {
+        const saleItemPayload = {
+          id: crypto.randomUUID(),
+          sale_id: saleId,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          purchase_price: item.purchase_price || 0,
+          discount: item.discount,
+          total: item.total,
+          created_at: new Date().toISOString(),
+        };
+        await indexedDBManager.cacheRecord('sale_items', saleItemPayload, true);
+      }
 
-      const { data: saleRecord } = await supabase
-        .from('sales')
-        .select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)')
-        .eq('id', saleId)
-        .maybeSingle();
+      // 3. For loyalty points (if customer selected): queue in operation queue
+      if (selectedCustomer && navigator.onLine) {
+        const loyaltyPoints = Math.floor(total);
 
-      const { data: saleItemsData } = await supabase
-        .from('sale_items')
-        .select('*, products(name, name_ar, sku)')
-        .eq('sale_id', saleId);
+        await indexedDBManager.addOperationToQueue({
+          operationId: crypto.randomUUID(),
+          table: 'customer_loyalty_update',
+          operation: 'custom',
+          data: {
+            customer_id: selectedCustomer,
+            points_earned: loyaltyPoints,
+            points_redeemed: pointsToRedeem,
+            sale_id: saleId,
+          },
+          localVersion: Date.now(),
+          remoteVersion: null,
+          status: 'pending',
+          retries: 0,
+          maxRetries: 3,
+          error: null,
+          syncedAt: null,
+          serverResponse: null,
+        });
+      }
 
-      setPrintingSale(saleRecord as any);
-      setPrintItems(saleItemsData || []);
+      // 4. Show success - sale queued
+      setSales([salePayload as any, ...sales]);
+      const saleItemsData = saleItems.map((item, i) => ({
+        id: `temp-${i}`,
+        sale_id: saleId,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        purchase_price: item.purchase_price || 0,
+        discount: item.discount,
+        total: item.total,
+        products: {
+          name: item.product_name,
+          name_ar: item.product_name,
+          sku: '',
+        },
+      }));
+
+      setPrintingSale(salePayload as any);
+      setPrintItems(saleItemsData);
       setShowForm(false);
-      loadData();
+
+      // Clear form
+      setSaleItems([]);
+      setSelectedCustomer('');
+      setSelectedEmployee('');
+      setWalkinName('');
+      setWalkinPhone('');
+      setSaleDiscount(0);
+      setDeliveryCharge(0);
+      setCardMessage('');
+      setSaleNotes('');
+
+      // Refresh sales list from server if online
+      if (navigator.onLine) {
+        loadSalesAndSettings();
+      }
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      setError(err.message || (isRTL ? 'حدث خطأ' : 'An error occurred'));
+      console.error('Sale creation error:', err);
     } finally {
       setSubmitting(false);
     }
