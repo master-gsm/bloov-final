@@ -86,7 +86,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: userProfile, error: profileError } = await supabaseAdmin
       .from("users")
-      .select("role, is_active")
+      .select("role, is_active, branch_id")
       .eq("id", requestingUser.id)
       .maybeSingle();
 
@@ -186,6 +186,7 @@ Deno.serve(async (req: Request) => {
         full_name: displayName,
         position: role,
         is_active: true,
+        branch_id: userProfile.branch_id,
       });
 
     if (employeeError) {
