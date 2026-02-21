@@ -3,20 +3,52 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useOffline } from '../contexts/OfflineContext';
 import { LogOut, Globe, Wifi, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { ConnectionStatusButton } from './ConnectionStatusButton';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export function Navbar() {
   const { signOut } = useAuth();
   const { language, setLanguage, t, isRTL } = useLanguage();
   const { isOnline, isSyncing, pendingOperationsCount, syncError } = useOffline();
   const [showConnectionMenu, setShowConnectionMenu] = useState(false);
+  const [actualOnline, setActualOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[Navbar] Connection restored detected');
+      setActualOnline(true);
+    };
+
+    const handleOffline = () => {
+      console.log('[Navbar] Connection lost detected');
+      setActualOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const checkConnection = setInterval(() => {
+      const wasOnline = actualOnline;
+      const isNowOnline = navigator.onLine;
+
+      if (wasOnline !== isNowOnline) {
+        console.log(`[Navbar] Connection status changed: ${wasOnline} -> ${isNowOnline}`);
+        setActualOnline(isNowOnline);
+      }
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(checkConnection);
+    };
+  }, [actualOnline]);
 
   const toggleLanguage = () => {
     setLanguage(language === 'en' ? 'ar' : 'en');
   };
 
   const getConnectionState = () => {
-    if (!isOnline) return 'offline';
+    if (!actualOnline) return 'offline';
     if (isSyncing) return 'syncing';
     if (pendingOperationsCount > 0) return 'pending';
     return 'online';
