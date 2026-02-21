@@ -8,9 +8,7 @@ import { LoginForm } from './components/LoginForm';
 import { ResetPassword } from './components/ResetPassword';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
-import { ConnectionStatusBar } from './components/ConnectionStatusBar';
 import { TestModeAlert } from './components/TestModeAlert';
-import { OfflineStatusIndicator } from './components/OfflineStatusIndicator';
 import { Dashboard } from './components/Dashboard';
 import { Products } from './components/Products';
 import { Partners } from './components/Partners';
@@ -148,8 +146,6 @@ function AppContent() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <TestModeAlert />
-      <ConnectionStatusBar />
-      <OfflineStatusIndicator />
       <div className="flex">
         <Sidebar activeSection={activeSection} setActiveSection={handleSetActiveSection} />
         <main className="flex-1 overflow-auto h-[calc(100vh-73px)]">
