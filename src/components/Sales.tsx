@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
+import { useOfflineData } from '../hooks/useOfflineData';
 import { supabase } from '../lib/supabase';
 import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, Edit, RotateCcw } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
@@ -83,6 +84,24 @@ export function Sales() {
   const { user } = useAuth();
   const canEdit = useCanEdit();
   const isRTL = language === 'ar';
+
+  // Offline-First Data Hooks
+  const { data: offlineProducts, loading: productsLoading } = useOfflineData<Product>({
+    table: 'products',
+    fallbackToServer: true,
+  });
+
+  const { data: offlineCustomers, loading: customersLoading } = useOfflineData<Customer>({
+    table: 'customers',
+    fallbackToServer: true,
+  });
+
+  const { data: offlineEmployees, loading: employeesLoading } = useOfflineData<Employee>({
+    table: 'employees',
+    fallbackToServer: true,
+  });
+
+  // Local State
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -128,15 +147,25 @@ export function Sales() {
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [openRegisterId, setOpenRegisterId] = useState<string | null>(null);
 
+  // Sync offline data to local state
   useEffect(() => {
-    loadData();
+    if (!productsLoading && !customersLoading && !employeesLoading) {
+      setProducts(offlineProducts.filter((p: any) => p.is_active !== false));
+      setCustomers(offlineCustomers.filter((c: any) => c.is_active !== false));
+      setEmployees(offlineEmployees.filter((e: any) => e.is_active !== false));
+      setLoading(false);
+    }
+  }, [offlineProducts, offlineCustomers, offlineEmployees, productsLoading, customersLoading, employeesLoading]);
+
+  useEffect(() => {
     checkAdmin();
     loadUserBranch();
     checkOpenRegister();
+    loadSalesAndSettings();
   }, []);
 
   const loadUserBranch = async () => {
-    if (!user) return;
+    if (!user || !navigator.onLine) return;
     try {
       const { data, error } = await supabase
         .from('users')
@@ -152,6 +181,7 @@ export function Sales() {
   };
 
   const checkOpenRegister = async () => {
+    if (!navigator.onLine) return;
     try {
       const { data } = await supabase
         .from('cash_registers')
@@ -167,7 +197,7 @@ export function Sales() {
   };
 
   const checkAdmin = async () => {
-    if (!user) return;
+    if (!user || !navigator.onLine) return;
     try {
       const { data: role } = await supabase.rpc('get_my_role');
       setIsAdmin(role === 'admin');
@@ -177,24 +207,17 @@ export function Sales() {
     }
   };
 
-  const loadData = async () => {
+  const loadSalesAndSettings = async () => {
+    if (!navigator.onLine) return;
     try {
-      const [salesRes, productsRes, customersRes, employeesRes, settingsRes] = await Promise.all([
+      const [salesRes, settingsRes] = await Promise.all([
         supabase.from('sales').select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)').order('created_at', { ascending: false }),
-        supabase.from('products').select('id, name, name_ar, sale_price, purchase_price, sku, type, classification').eq('is_active', true),
-        supabase.from('customers').select('id, name, name_ar, code, phone').eq('is_active', true),
-        supabase.from('employees').select('id, full_name, full_name_ar, employee_code, position, is_active').eq('is_active', true).order('full_name'),
         supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
       ]);
       if (salesRes.data) setSales(salesRes.data as any[]);
-      if (productsRes.data) setProducts(productsRes.data as any[]);
-      if (customersRes.data) setCustomers(customersRes.data as any[]);
-      if (employeesRes.data) setEmployees(employeesRes.data as any[]);
       if (settingsRes.data?.tax_rate) setTaxRate(parseFloat(settingsRes.data.tax_rate.toString()));
     } catch (err) {
-      console.error('Error loading data:', err);
-    } finally {
-      setLoading(false);
+      console.error('Error loading sales and settings:', err);
     }
   };
 
@@ -229,24 +252,24 @@ export function Sales() {
 
     setIsLookingUp(true);
     try {
-      const { data: customer } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('phone', phone)
-        .maybeSingle();
+      // Search locally from cached customers
+      const customer = customers.find((c) => c.phone === phone);
 
       if (customer) {
         setLookedUpCustomer(customer as any);
         setWalkinName(customer.name);
         setSelectedCustomer(customer.id);
 
-        const { data: loyalty } = await supabase
-          .from('customer_loyalty')
-          .select('*')
-          .eq('customer_id', customer.id)
-          .maybeSingle();
+        // Try to fetch loyalty from server if online
+        if (navigator.onLine) {
+          const { data: loyalty } = await supabase
+            .from('customer_loyalty')
+            .select('*')
+            .eq('customer_id', customer.id)
+            .maybeSingle();
 
-        setCustomerLoyalty(loyalty as any);
+          setCustomerLoyalty(loyalty as any);
+        }
       } else {
         setLookedUpCustomer(null);
         setCustomerLoyalty(null);
