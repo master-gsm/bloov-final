@@ -125,6 +125,7 @@ export function Sales() {
   const [showQuickRegister, setShowQuickRegister] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -625,30 +626,30 @@ export function Sales() {
     }
   };
 
-  const returnSale = async (saleId: string) => {
+  const returnSale = (saleId: string) => {
     if (!canManageSales) {
       alert(isRTL ? 'يتطلب صلاحيات الأدمن أو المحاسب' : 'Admin or Accountant privileges required');
       return;
     }
-    const confirmMsg = isRTL
-      ? 'هل تريد تحويل هذه الفاتورة إلى مرتجع؟'
-      : 'Do you want to mark this sale as returned?';
-    if (!window.confirm(confirmMsg)) return;
-
-    try {
-      const { data, error } = await supabase.rpc('update_sale_status', {
-        p_sale_id: saleId,
-        p_new_status: 'returned',
-        p_reason: 'Marked as returned via UI',
-      });
-      if (error) throw error;
-      await loadData();
-      setViewingSale(null);
-      alert(isRTL ? 'تم تحويل الفاتورة إلى مرتجع' : 'Sale marked as returned');
-    } catch (error: any) {
-      console.error('Error returning sale:', error);
-      alert(error.message || (isRTL ? 'حدث خطأ أثناء تحويل الفاتورة إلى مرتجع' : 'Error marking sale as returned'));
-    }
+    setConfirmDialog({
+      message: isRTL ? 'هل تريد تحويل هذه الفاتورة إلى مرتجع؟' : 'Do you want to mark this sale as returned?',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          const { error } = await supabase.rpc('update_sale_status', {
+            p_sale_id: saleId,
+            p_new_status: 'returned',
+            p_reason: 'Marked as returned via UI',
+          });
+          if (error) throw error;
+          await loadData();
+          setViewingSale(null);
+        } catch (error: any) {
+          console.error('Error returning sale:', error);
+          alert(error.message || (isRTL ? 'حدث خطأ أثناء تحويل الفاتورة إلى مرتجع' : 'Error marking sale as returned'));
+        }
+      },
+    });
   };
 
   const deleteDraftSale = async (saleId: string, saleStatus: string) => {
@@ -1421,11 +1422,6 @@ export function Sales() {
                         <Check className="w-4 h-4" /> {isRTL ? 'استعادة' : 'Restore'}
                       </button>
                     )}
-                    {viewingSale.status !== 'draft' && (
-                      <button onClick={() => voidSale(viewingSale.id)} className="flex-1 flex items-center justify-center gap-2 bg-gray-800 text-white py-2.5 rounded-lg hover:bg-gray-900 transition font-medium text-sm">
-                        <XCircle className="w-4 h-4" /> {isRTL ? 'إلغاء نهائي' : 'Void'}
-                      </button>
-                    )}
                   </div>
                 )}
                 {viewingSale.status === 'void' && (
@@ -1434,6 +1430,28 @@ export function Sales() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full space-y-5">
+            <p className="text-gray-800 text-center font-medium leading-relaxed">{confirmDialog.message}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition text-sm"
+              >
+                {isRTL ? 'لا' : 'No'}
+              </button>
+              <button
+                onClick={confirmDialog.onConfirm}
+                className="flex-1 py-2.5 rounded-xl bg-orange-600 text-white font-medium hover:bg-orange-700 transition text-sm"
+              >
+                {isRTL ? 'نعم' : 'Yes'}
+              </button>
             </div>
           </div>
         </div>
