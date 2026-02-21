@@ -39,7 +39,7 @@ Deno.serve(async (req: Request) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const authHeader = req.headers.get("Authorization");
-    console.log("DEBUG: Auth Header:", authHeader?.slice(0, 30));
+    console.log("DEBUG: Authorization Header:", authHeader);
 
     if (!authHeader) {
       return new Response(
@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
       error: authError,
     } = await supabaseAdmin.auth.getUser(token);
 
-    console.log("DEBUG: User Object:", requestingUser ? { id: requestingUser.id, email: requestingUser.email } : null);
+    console.log("DEBUG: User Object:", requestingUser);
     console.log("DEBUG: Auth Error:", authError?.message);
 
     if (authError || !requestingUser) {
