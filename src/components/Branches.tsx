@@ -63,7 +63,7 @@ export default function Branches() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setBranches(data || []);
+      setBranches((data || []) as any[]);
     } catch (error: any) {
       console.error('Error loading branches:', error);
       alert(language === 'ar' ? 'خطأ في تحميل الفروع' : 'Error loading branches');

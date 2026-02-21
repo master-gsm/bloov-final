@@ -527,18 +527,18 @@ export function Settings() {
                 'Enable AI-powered features', 'تفعيل ميزات الذكاء الاصطناعي')}
 
               {renderSelect('ai_provider', 'AI Provider', 'مزود الذكاء الاصطناعي', [
-                { value: 'openai', label: 'OpenAI' },
-                { value: 'gemini', label: 'Google Gemini' },
+                { value: 'openai', label: 'OpenAI', labelAr: 'OpenAI' },
+                { value: 'gemini', label: 'Google Gemini', labelAr: 'Google Gemini' },
               ])}
 
               {settings['ai_provider'] === 'openai' && renderSelect('ai_model', 'OpenAI Model', 'نموذج OpenAI', [
-                { value: 'gpt-4o-mini', label: 'GPT-4o Mini (Recommended)' },
-                { value: 'gpt-4o', label: 'GPT-4o (Most Capable)' },
-                { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-                { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Cheapest)' },
+                { value: 'gpt-4o-mini', label: 'GPT-4o Mini (Recommended)', labelAr: 'GPT-4o Mini (موصى به)' },
+                { value: 'gpt-4o', label: 'GPT-4o (Most Capable)', labelAr: 'GPT-4o (الأقوى)' },
+                { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', labelAr: 'GPT-4 Turbo' },
+                { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Cheapest)', labelAr: 'GPT-3.5 Turbo (الأرخص)' },
               ])}
 
-              {renderInput('ai_api_key', 'API Key', 'مفتاح API', 'password', 'sk-...')}
+              {renderInput('ai_api_key', 'API Key', 'مفتاح API', { type: 'password', placeholder: 'sk-...' })}
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
                 <h4 className="font-semibold text-blue-900 mb-2">

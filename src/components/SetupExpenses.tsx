@@ -101,7 +101,7 @@ export default function SetupExpenses() {
       .order('expense_date', { ascending: false });
 
     if (error) throw error;
-    setExpenses(data || []);
+    setExpenses((data || []) as any[]);
   };
 
   const loadBranches = async () => {

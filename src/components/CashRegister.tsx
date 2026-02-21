@@ -85,17 +85,17 @@ export function CashRegister() {
       ]);
 
       if (regRes.data && regRes.data.length > 0) {
-        setActiveRegister(regRes.data[0]);
+        setActiveRegister(regRes.data[0] as any);
       }
       if (expRes.data) {
-        setExpenses(expRes.data);
+        setExpenses(expRes.data as any[]);
         setTodayExpenses(expRes.data.filter(e => e.payment_method === 'cash').reduce((s, e) => s + e.amount, 0));
       }
       if (salesRes.data) {
         setTodaySales(salesRes.data.reduce((s, sale) => s + sale.total, 0));
         setTodayCashSales(salesRes.data.filter(s => s.payment_method === 'cash').reduce((s, sale) => s + sale.total, 0));
       }
-      if (historyRes.data) setRegisters(historyRes.data);
+      if (historyRes.data) setRegisters(historyRes.data as any[]);
     } catch (err) {
       console.error(err);
     } finally {

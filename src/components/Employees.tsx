@@ -58,7 +58,7 @@ type Tab = 'employees' | 'salaries' | 'commissions';
 
 export function Employees() {
   const { language } = useLanguage();
-  const { userProfile, isAdmin } = useAuth();
+  const { profile: userProfile, isAdmin } = useAuth();
   const isRTL = language === 'ar';
 
   const [activeTab, setActiveTab] = useState<Tab>('employees');
@@ -79,7 +79,7 @@ export function Employees() {
     national_id: '',
     position: '',
     department: '',
-    branch_id: userProfile?.branch_id || '',
+    branch_id: (userProfile as any)?.branch_id || '',
     hire_date: new Date().toISOString().split('T')[0],
     basic_salary: 0,
     commission_rate: 0,
@@ -113,7 +113,7 @@ export function Employees() {
           .from('employees')
           .select('*, branches(name)')
           .order('created_at', { ascending: false });
-        setEmployees(empData || []);
+        setEmployees((empData || []) as any[]);
 
         const { data: branchData } = await supabase
           .from('branches')
@@ -125,13 +125,13 @@ export function Employees() {
           .from('salary_payments')
           .select('*, employees(full_name)')
           .order('payment_date', { ascending: false });
-        setSalaries(salData || []);
+        setSalaries((salData || []) as any[]);
       } else if (activeTab === 'commissions') {
         const { data: commData } = await supabase
           .from('employee_commissions')
           .select('*, employees(full_name)')
           .order('created_at', { ascending: false });
-        setCommissions(commData || []);
+        setCommissions((commData || []) as any[]);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -148,7 +148,7 @@ export function Employees() {
           .update(formData)
           .eq('id', editingEmployee.id);
       } else {
-        await supabase.from('employees').insert([formData]);
+        await supabase.from('employees').insert([formData] as any);
       }
       setShowModal(false);
       setEditingEmployee(null);
@@ -180,8 +180,8 @@ export function Employees() {
       await supabase.from('salary_payments').insert([{
         ...salaryForm,
         total_amount: totalAmount,
-        branch_id: userProfile?.branch_id,
-        created_by: userProfile?.id,
+        branch_id: (userProfile as any)?.branch_id,
+        created_by: (userProfile as any)?.id,
       }]);
 
       setShowSalaryModal(false);
@@ -200,12 +200,12 @@ export function Employees() {
       national_id: '',
       position: '',
       department: '',
-      branch_id: userProfile?.branch_id || '',
+      branch_id: (userProfile as any)?.branch_id || '',
       hire_date: new Date().toISOString().split('T')[0],
       basic_salary: 0,
       commission_rate: 0,
       is_active: true,
-      employment_type: 'full_time',
+      employment_type: 'full_time' as const,
       notes: '',
     });
   };
@@ -239,7 +239,7 @@ export function Employees() {
       basic_salary: employee.basic_salary,
       commission_rate: employee.commission_rate,
       is_active: employee.is_active,
-      employment_type: employee.employment_type,
+      employment_type: (employee.employment_type || 'full_time') as 'full_time',
       notes: employee.notes || '',
     });
     setShowModal(true);

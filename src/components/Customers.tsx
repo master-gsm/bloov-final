@@ -124,7 +124,7 @@ export function Customers() {
         .select('*, branches(name, code)')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      if (data) setCustomers(data);
+      if (data) setCustomers(data as any[]);
     } catch (err) {
       console.error('Error loading customers:', err);
     } finally {

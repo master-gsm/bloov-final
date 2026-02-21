@@ -142,7 +142,7 @@ export function Partners() {
     try {
       const [partnersRes, balancesRes, settlementsRes, expensesRes] = await Promise.all([
         supabase.from('partners').select('*').order('name'),
-        supabase.from('v_partner_balances').select('*').order('name'),
+        supabase.from('v_partner_balances' as any).select('*').order('name'),
         supabase.from('partner_settlements').select(`
           *,
           from_partner:partners!from_partner_id(name, name_ar),
@@ -154,10 +154,10 @@ export function Partners() {
         `).order('expense_date', { ascending: false })
       ]);
 
-      if (partnersRes.data) setPartners(partnersRes.data);
-      if (balancesRes.data) setPartnerBalances(balancesRes.data);
-      if (settlementsRes.data) setSettlements(settlementsRes.data);
-      if (expensesRes.data) setExpenses(expensesRes.data);
+      if (partnersRes.data) setPartners(partnersRes.data as any[]);
+      if (balancesRes.data) setPartnerBalances(balancesRes.data as any[]);
+      if (settlementsRes.data) setSettlements(settlementsRes.data as any[]);
+      if (expensesRes.data) setExpenses(expensesRes.data as any[]);
     } catch (err) {
       console.error('Error loading data:', err);
     } finally {
@@ -222,10 +222,10 @@ export function Partners() {
     }
 
     try {
-      const { data, error } = await supabase.rpc('void_setup_expense', {
+      const { data, error } = await supabase.rpc('void_setup_expense' as any, {
         p_expense_id: id,
         p_reason: 'Voided via Partners UI',
-      });
+      } as any);
       if (error) throw error;
       setDeleteConfirm(null);
       await loadData();
@@ -291,10 +291,10 @@ export function Partners() {
     }
 
     try {
-      const { error } = await supabase.rpc('void_partner_settlement', {
+      const { error } = await supabase.rpc('void_partner_settlement' as any, {
         p_settlement_id: id,
         p_void_reason: 'Voided via Partners UI',
-      });
+      } as any);
       if (error) throw error;
       setVoidConfirm(null);
       await loadData();

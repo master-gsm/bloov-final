@@ -86,8 +86,8 @@ export function Products() {
         supabase.from('products').select('*').order('created_at', { ascending: false }),
         supabase.from('categories').select('*').eq('is_active', true),
       ]);
-      if (productsRes.data) setProducts(productsRes.data);
-      if (categoriesRes.data) setCategories(categoriesRes.data);
+      if (productsRes.data) setProducts(productsRes.data as any[]);
+      if (categoriesRes.data) setCategories(categoriesRes.data as any[]);
     } catch (err) {
       console.error('Error loading data:', err);
     } finally {
@@ -192,7 +192,7 @@ export function Products() {
         .eq('product_id', productId);
 
       if (error) throw error;
-      setRecipes(data || []);
+      setRecipes((data || []) as any[]);
     } catch (err) {
       console.error('Error loading recipes:', err);
     }
@@ -445,16 +445,16 @@ export function Products() {
                       </td>
                       <td className="py-3.5 px-4">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                          product.type === 'natural_flowers' || product.type === 'natural' ? 'bg-green-100 text-green-700' :
-                          product.type === 'artificial_flowers' || product.type === 'artificial' ? 'bg-blue-100 text-blue-700' :
-                          product.type === 'vases' ? 'bg-purple-100 text-purple-700' :
-                          product.type === 'wrapping' ? 'bg-pink-100 text-pink-700' :
-                          product.type === 'ribbons' ? 'bg-rose-100 text-rose-700' :
-                          product.type === 'additions_gifts' ? 'bg-amber-100 text-amber-700' :
-                          product.type === 'services' ? 'bg-teal-100 text-teal-700' :
-                          product.type === 'preserved' ? 'bg-purple-100 text-purple-700' :
-                          product.type === 'greenery' ? 'bg-emerald-100 text-emerald-700' :
-                          product.type === 'indoor_plants' ? 'bg-teal-100 text-teal-700' :
+                          (product.type as string) === 'natural_flowers' || (product.type as string) === 'natural' ? 'bg-green-100 text-green-700' :
+                          (product.type as string) === 'artificial_flowers' || (product.type as string) === 'artificial' ? 'bg-blue-100 text-blue-700' :
+                          (product.type as string) === 'vases' ? 'bg-purple-100 text-purple-700' :
+                          (product.type as string) === 'wrapping' ? 'bg-pink-100 text-pink-700' :
+                          (product.type as string) === 'ribbons' ? 'bg-rose-100 text-rose-700' :
+                          (product.type as string) === 'additions_gifts' ? 'bg-amber-100 text-amber-700' :
+                          (product.type as string) === 'services' ? 'bg-teal-100 text-teal-700' :
+                          (product.type as string) === 'preserved' ? 'bg-purple-100 text-purple-700' :
+                          (product.type as string) === 'greenery' ? 'bg-emerald-100 text-emerald-700' :
+                          (product.type as string) === 'indoor_plants' ? 'bg-teal-100 text-teal-700' :
                           'bg-gray-100 text-gray-700'
                         }`}>
                           {getTypeLabel(product.type)}

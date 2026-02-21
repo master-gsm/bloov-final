@@ -87,8 +87,8 @@ export function Inventory() {
           .order('created_at', { ascending: false })
           .limit(50),
       ]);
-      if (inventoryRes.data) setInventory(inventoryRes.data);
-      if (movementsRes.data) setMovements(movementsRes.data);
+      if (inventoryRes.data) setInventory(inventoryRes.data as any[]);
+      if (movementsRes.data) setMovements(movementsRes.data as any[]);
     } catch (err) {
       console.error('Error loading inventory:', err);
     } finally {

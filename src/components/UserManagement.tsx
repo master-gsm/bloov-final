@@ -86,7 +86,7 @@ export function UserManagement() {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setUsers(data || []);
+      setUsers((data || []) as any[]);
     } catch (err) {
       console.error('Error loading users:', err);
     } finally {

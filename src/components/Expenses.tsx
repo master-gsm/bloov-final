@@ -106,7 +106,7 @@ export default function Expenses() {
       const { data, error } = await query;
 
       if (error) throw error;
-      if (data) setExpenses(data);
+      if (data) setExpenses(data as any[]);
     } catch (err) {
       console.error('Error loading expenses:', err);
     } finally {
@@ -541,7 +541,7 @@ export default function Expenses() {
                       {exp.partner_contribution_id && (
                         <Users
                           className="w-4 h-4 text-teal-600"
-                          title={isRTL ? 'من دفعات الشركاء' : 'From partner contributions'}
+                          {...{ title: isRTL ? 'من دفعات الشركاء' : 'From partner contributions' } as any}
                         />
                       )}
                       <span>{isRTL ? exp.description_ar || exp.description : exp.description}</span>

@@ -225,7 +225,7 @@ export const mergeLegacyDefaults = <T extends Record<string, any>>(
 
   Object.keys(data).forEach((key) => {
     if (data[key] !== null && data[key] !== undefined) {
-      merged[key] = data[key];
+      (merged as any)[key] = data[key];
     }
   });
 
@@ -369,7 +369,7 @@ export const transformLegacyData = <TOld, TNew>(
 ): TNew => {
   try {
     const transformed = transformer(oldData);
-    return mergeLegacyDefaults(transformed, defaults);
+    return mergeLegacyDefaults(transformed as any, defaults as any) as TNew;
   } catch (error) {
     console.error('[Legacy Data Transform Error]:', error);
     return defaults;

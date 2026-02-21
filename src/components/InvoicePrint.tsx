@@ -46,19 +46,18 @@ export function InvoicePrint({ sale, items, onClose, onWhatsApp }: InvoicePrintP
 
   useEffect(() => {
     const loadSettings = async () => {
-      const { data } = await supabase.from('settings').select('key, value');
+      const { data } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle();
       if (data) {
-        const map: Record<string, string> = {};
-        data.forEach(r => { map[r.key] = r.value; });
-        if (map.business_name) setCompanyName(map.business_name);
-        if (map.business_name_ar) setCompanyNameAr(map.business_name_ar);
-        if (map.business_type) setBusinessType(map.business_type);
-        if (map.business_type_ar) setBusinessTypeAr(map.business_type_ar);
-        if (map.tax_number) setTaxNumber(map.tax_number);
-        if (map.receipt_footer) setReceiptFooter(map.receipt_footer);
-        if (map.receipt_footer_ar) setReceiptFooterAr(map.receipt_footer_ar);
-        if (map.loyalty_enabled) setLoyaltyEnabled(map.loyalty_enabled === 'true');
-        if (map.loyalty_points_per_sar) setLoyaltyRate(map.loyalty_points_per_sar);
+        const s = data as any;
+        if (s.business_name) setCompanyName(s.business_name);
+        if (s.business_name_ar) setCompanyNameAr(s.business_name_ar);
+        if (s.business_type) setBusinessType(s.business_type);
+        if (s.business_type_ar) setBusinessTypeAr(s.business_type_ar);
+        if (s.tax_number) setTaxNumber(s.tax_number);
+        if (s.receipt_footer) setReceiptFooter(s.receipt_footer);
+        if (s.receipt_footer_ar) setReceiptFooterAr(s.receipt_footer_ar);
+        if (s.loyalty_enabled) setLoyaltyEnabled(String(s.loyalty_enabled) === 'true');
+        if (s.loyalty_points_per_sar) setLoyaltyRate(String(s.loyalty_points_per_sar));
       }
     };
     loadSettings();

@@ -35,8 +35,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (data) {
       setProfile({
-        role: data.role,
-        permissions: data.permissions || {},
+        role: data.role as UserProfile['role'],
+        permissions: (data.permissions || {}) as unknown as Record<string, boolean>,
       });
     }
   };

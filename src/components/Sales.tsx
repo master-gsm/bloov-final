@@ -43,6 +43,7 @@ interface SaleItem {
   product_name: string;
   quantity: number;
   unit_price: number;
+  purchase_price?: number;
   discount: number;
   total: number;
 }
@@ -53,7 +54,7 @@ interface Employee {
   full_name_ar: string | null;
   employee_code: string;
   position: string | null;
-  is_active: boolean;
+  is_active: boolean | null;
 }
 
 interface Sale {
@@ -141,7 +142,7 @@ export function Sales() {
         .maybeSingle();
 
       if (error) throw error;
-      if (data) setUserBranchId(data.branch_id);
+      if (data) setUserBranchId(data.branch_id as string);
     } catch (err) {
       console.error('Error loading user branch:', err);
     }
@@ -167,10 +168,10 @@ export function Sales() {
         supabase.from('employees').select('id, full_name, full_name_ar, employee_code, position, is_active').eq('is_active', true).order('full_name'),
         supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
       ]);
-      if (salesRes.data) setSales(salesRes.data);
-      if (productsRes.data) setProducts(productsRes.data);
-      if (customersRes.data) setCustomers(customersRes.data);
-      if (employeesRes.data) setEmployees(employeesRes.data);
+      if (salesRes.data) setSales(salesRes.data as any[]);
+      if (productsRes.data) setProducts(productsRes.data as any[]);
+      if (customersRes.data) setCustomers(customersRes.data as any[]);
+      if (employeesRes.data) setEmployees(employeesRes.data as any[]);
       if (settingsRes.data?.tax_rate) setTaxRate(parseFloat(settingsRes.data.tax_rate.toString()));
     } catch (err) {
       console.error('Error loading data:', err);
@@ -217,7 +218,7 @@ export function Sales() {
         .maybeSingle();
 
       if (customer) {
-        setLookedUpCustomer(customer);
+        setLookedUpCustomer(customer as any);
         setWalkinName(customer.name);
         setSelectedCustomer(customer.id);
 
@@ -227,7 +228,7 @@ export function Sales() {
           .eq('customer_id', customer.id)
           .maybeSingle();
 
-        setCustomerLoyalty(loyalty);
+        setCustomerLoyalty(loyalty as any);
       } else {
         setLookedUpCustomer(null);
         setCustomerLoyalty(null);
@@ -271,7 +272,7 @@ export function Sales() {
       });
 
       setSelectedCustomer(newCustomer.id);
-      setLookedUpCustomer(newCustomer);
+      setLookedUpCustomer(newCustomer as any);
       setCustomerLoyalty({ id: '', customer_id: newCustomer.id, points: 0, total_earned: 0, total_redeemed: 0 });
       setShowQuickRegister(false);
       await loadData();
@@ -372,7 +373,7 @@ export function Sales() {
       if (saleError) throw saleError;
 
       const items = saleItems.map((item) => ({
-        sale_id: sale.id,
+        sale_id: (sale as any).id,
         product_id: item.product_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
@@ -411,7 +412,7 @@ export function Sales() {
           .from('inventory')
           .select('id, quantity')
           .eq('product_id', item.product_id)
-          .eq('branch_id', userBranchId)
+          .eq('branch_id', userBranchId as string)
           .maybeSingle();
 
         if (inv) {
@@ -423,7 +424,7 @@ export function Sales() {
             })
             .eq('id', inv.id)
             .eq('product_id', item.product_id)
-            .eq('branch_id', userBranchId);
+            .eq('branch_id', userBranchId as string);
         }
 
         await supabase.from('inventory_movements').insert({
@@ -495,16 +496,16 @@ export function Sales() {
         user_id: user?.id,
         action: 'create',
         entity_type: 'sale',
-        entity_id: sale.id,
+        entity_id: (sale as any).id,
         details: `Sale ${saleNumber} - ${formatCurrency(total)} SAR`,
       });
 
       const { data: saleItemsData } = await supabase
         .from('sale_items')
         .select('*, products(name, name_ar, sku)')
-        .eq('sale_id', sale.id);
+        .eq('sale_id', (sale as any).id);
 
-      setPrintingSale(sale);
+      setPrintingSale(sale as any);
       setPrintItems(saleItemsData || []);
       setShowForm(false);
       loadData();
@@ -568,7 +569,7 @@ export function Sales() {
     try {
       console.log('[Sales] Starting WhatsApp ONE-CLICK share for sale:', sale.id);
 
-      await shareInvoiceViaWhatsApp(sale, formattedItems, phone);
+      await shareInvoiceViaWhatsApp(sale, formattedItems as any, phone);
       console.log('[Sales] WhatsApp share completed successfully');
 
     } catch (error: any) {
@@ -614,7 +615,7 @@ export function Sales() {
     }));
 
     try {
-      await downloadInvoicePDF(sale, formattedItems);
+      await downloadInvoicePDF(sale, formattedItems as any);
     } catch (error) {
       console.error('Error downloading invoice:', error);
       alert(isRTL ? 'حدث خطأ أثناء تنزيل الفاتورة' : 'Error downloading invoice');

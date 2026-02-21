@@ -74,7 +74,7 @@ export function Suppliers() {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      if (data) setSuppliers(data);
+      if (data) setSuppliers(data as any[]);
     } catch (err) {
       console.error('Error loading suppliers:', err);
     } finally {

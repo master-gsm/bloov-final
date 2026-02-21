@@ -321,7 +321,7 @@ export default function Backup() {
       console.log('Fetching data from tables...');
       for (const table of TABLES_TO_BACKUP) {
         try {
-          const { data, error } = await supabase.from(table).select('*');
+          const { data, error } = await supabase.from(table as any).select('*');
 
           if (error) {
             console.warn(`Error loading ${table}:`, error);
@@ -365,7 +365,7 @@ export default function Backup() {
         throw new Error(language === 'ar' ? 'لم يتم العثور على بيانات Google Drive. يرجى ربط الحساب مرة أخرى' : 'Google Drive credentials not found. Please reconnect');
       }
 
-      const credentials = settings.google_drive_credentials;
+      const credentials = settings.google_drive_credentials as any;
       console.log('Credentials found:', {
         hasAccessToken: !!credentials.access_token,
         hasRefreshToken: !!credentials.refresh_token,
@@ -407,7 +407,7 @@ export default function Backup() {
 
         // Update the access token in database
         const updatedCredentials = {
-          ...credentials,
+          ...(credentials as Record<string, unknown>),
           access_token: accessToken,
         };
 
@@ -552,7 +552,7 @@ export default function Backup() {
 
       for (const table of TABLES_TO_BACKUP) {
         try {
-          const { data, error } = await supabase.from(table).select('*');
+          const { data, error } = await supabase.from(table as any).select('*');
 
           if (error) {
             console.warn(`Error loading ${table}:`, error);
@@ -710,7 +710,7 @@ export default function Backup() {
       throw new Error(language === 'ar' ? 'بيانات Google Drive غير موجودة' : 'Google Drive credentials not found');
     }
 
-    const creds = settings.google_drive_credentials;
+    const creds = settings.google_drive_credentials as any;
     if (creds.access_token) return creds.access_token;
 
     if (!creds.refresh_token || !settings.google_drive_client_id || !settings.google_drive_client_secret) {
@@ -733,7 +733,7 @@ export default function Backup() {
     const tokenData = await tokenResponse.json();
     await supabase
       .from('settings')
-      .update({ google_drive_credentials: { ...creds, access_token: tokenData.access_token } })
+      .update({ google_drive_credentials: { ...(creds as Record<string, unknown>), access_token: tokenData.access_token } })
       .eq('id', 1);
 
     return tokenData.access_token;
@@ -875,8 +875,8 @@ export default function Backup() {
 
       try {
         const { error: upsertError } = await supabase
-          .from(table)
-          .upsert(tableData, { onConflict: 'id', ignoreDuplicates: false });
+          .from(table as any)
+          .upsert(tableData as any, { onConflict: 'id', ignoreDuplicates: false });
 
         if (upsertError) {
           console.warn(`Error restoring ${table}:`, upsertError);

@@ -103,7 +103,7 @@ export function AIAnalysis() {
 
       if (error) throw error;
 
-      setAiEnabled(data?.ai_enabled && data?.ai_api_key?.length > 0);
+      setAiEnabled(!!data?.ai_enabled && (data?.ai_api_key?.length ?? 0) > 0);
     } catch (err) {
       console.error('Error checking AI settings:', err);
       setAiEnabled(false);

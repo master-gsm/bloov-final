@@ -142,12 +142,12 @@ class SyncManager {
 
     switch (op) {
       case 'insert':
-        const { error: insertError } = await supabase.from(table).insert(data);
+        const { error: insertError } = await supabase.from(table as any).insert(data);
         if (insertError) {
           if (insertError.code === '23505') {
             console.warn(`Record already exists, attempting update instead for table ${table}`);
             const { id, ...updateData } = data;
-            const { error: updateError } = await supabase.from(table).update(updateData).eq('id', id);
+            const { error: updateError } = await supabase.from(table as any).update(updateData).eq('id', id);
             if (updateError) throw updateError;
           } else {
             throw insertError;
@@ -159,7 +159,7 @@ class SyncManager {
         const { id, ...updateData } = data;
 
         const { data: existingRecord, error: fetchError } = await supabase
-          .from(table)
+          .from(table as any)
           .select('updated_at')
           .eq('id', id)
           .maybeSingle();
@@ -168,17 +168,17 @@ class SyncManager {
 
         if (!existingRecord) {
           console.warn(`Record not found for update in table ${table}, attempting insert instead`);
-          const { error: insertError } = await supabase.from(table).insert(data);
+          const { error: insertError } = await supabase.from(table as any).insert(data);
           if (insertError) throw insertError;
         } else {
           const localVersion = data.updated_at ? new Date(data.updated_at).getTime() : 0;
-          const remoteVersion = existingRecord.updated_at ? new Date(existingRecord.updated_at).getTime() : 0;
+          const remoteVersion = (existingRecord as any).updated_at ? new Date((existingRecord as any).updated_at).getTime() : 0;
 
           if (remoteVersion > localVersion) {
             console.warn(`Conflict detected: Remote version is newer for ${table}/${id}. Applying local changes anyway.`);
           }
 
-          const { error: updateError } = await supabase.from(table).update(updateData).eq('id', id);
+          const { error: updateError } = await supabase.from(table as any).update(updateData).eq('id', id);
           if (updateError) throw updateError;
         }
         break;
@@ -193,7 +193,7 @@ class SyncManager {
         if (IMMUTABLE_TABLES.includes(table)) {
           console.warn(`Skipping delete on immutable table ${table}/${data.id} - use void/reversal instead`);
         } else {
-          const { error: deleteError } = await supabase.from(table).delete().eq('id', data.id);
+          const { error: deleteError } = await supabase.from(table as any).delete().eq('id', data.id);
           if (deleteError && deleteError.code !== 'PGRST116') {
             throw deleteError;
           }
@@ -211,7 +211,7 @@ class SyncManager {
     }
 
     try {
-      const { data, error } = await supabase.from(table).select('*');
+      const { data, error } = await supabase.from(table as any).select('*');
       if (error) throw error;
 
       if (data) {

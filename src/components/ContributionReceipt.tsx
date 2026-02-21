@@ -32,13 +32,12 @@ export function ContributionReceipt({ contribution, partner, onClose }: Contribu
 
   useEffect(() => {
     const loadSettings = async () => {
-      const { data } = await supabase.from('settings').select('key, value');
+      const { data } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle();
       if (data) {
-        data.forEach((setting) => {
-          if (setting.key === 'company_name') setCompanyName(setting.value);
-          if (setting.key === 'company_name_ar') setCompanyNameAr(setting.value);
-          if (setting.key === 'tax_number') setTaxNumber(setting.value);
-        });
+        const s = data as any;
+        if (s.company_name) setCompanyName(s.company_name);
+        if (s.company_name_ar) setCompanyNameAr(s.company_name_ar);
+        if (s.tax_number) setTaxNumber(s.tax_number);
       }
     };
     loadSettings();

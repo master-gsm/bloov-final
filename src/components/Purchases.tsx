@@ -132,7 +132,7 @@ export function Purchases() {
         supabase.from('products').select('id, name, name_ar, purchase_price, sku').eq('is_active', true),
         supabase.from('suppliers').select('id, name, name_ar, code').eq('is_active', true),
       ]);
-      if (purchasesRes.data) setPurchases(purchasesRes.data);
+      if (purchasesRes.data) setPurchases(purchasesRes.data as any[]);
       if (productsRes.data) setProducts(productsRes.data);
       if (suppliersRes.data) setSuppliers(suppliersRes.data);
     } catch (err) {

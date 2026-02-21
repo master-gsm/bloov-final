@@ -89,7 +89,7 @@ export function SallaOrders() {
         .order('order_date', { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      setOrders((data || []) as any[]);
     } catch (error) {
       console.error('Error loading orders:', error);
     } finally {
@@ -139,7 +139,7 @@ export function SallaOrders() {
         .eq('salla_order_id', order.id);
 
       if (error) throw error;
-      setOrderItems(data || []);
+      setOrderItems((data || []) as any[]);
       setSelectedOrder(order);
       setShowOrderDetails(true);
     } catch (error) {
