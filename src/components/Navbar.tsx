@@ -1,10 +1,11 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { LogOut, Globe } from 'lucide-react';
+import { ConnectionStatusButton } from './ConnectionStatusButton';
 
 export function Navbar() {
   const { signOut } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage, t, isRTL } = useLanguage();
 
   const toggleLanguage = () => {
     setLanguage(language === 'en' ? 'ar' : 'en');
@@ -26,7 +27,9 @@ export function Navbar() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <ConnectionStatusButton />
+
             <button
               onClick={toggleLanguage}
               className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
