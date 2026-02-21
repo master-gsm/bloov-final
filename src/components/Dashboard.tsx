@@ -38,14 +38,13 @@ export function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [partnersRes, salesRes, purchasesRes, inventoryRes, recentSalesRes, operatingExpensesRes, employeesRes] = await Promise.all([
+      const [partnersRes, salesRes, purchasesRes, inventoryRes, recentSalesRes, financialRes] = await Promise.all([
         supabase.from('partners').select('*').eq('is_active', true).order('share_percentage', { ascending: false }),
-        supabase.from('sales').select('total, total_cost, gross_profit, source').eq('status', 'confirmed'),
+        supabase.from('sales').select('total, source').eq('status', 'confirmed'),
         supabase.from('purchases').select('total').in('status', ['confirmed', 'received']),
         supabase.from('inventory').select('quantity, products(purchase_price)'),
         supabase.from('sales').select('id, sale_number, total, sale_date, customers(name, name_ar)').eq('status', 'confirmed').order('sale_date', { ascending: false }).limit(5),
-        supabase.from('operating_expenses').select('amount'),
-        supabase.from('employees').select('id, basic_salary, commission_rate'),
+        supabase.rpc('get_financial_summary', { p_date_from: null, p_date_to: null, p_branch_id: null }),
       ]);
 
       if (partnersRes.data) setPartners(partnersRes.data);
@@ -59,20 +58,8 @@ export function Dashboard() {
         return sum + (item.quantity * (item.products?.purchase_price || 0));
       }, 0) || 0;
 
-      const totalCOGS = salesRes.data?.reduce((sum, s) => sum + (s.total_cost || 0), 0) || 0;
-      const totalGrossProfit = salesRes.data?.reduce((sum, s) => sum + (s.gross_profit || 0), 0) || 0;
-
-      // Calculate all expenses
-      const totalOperatingExpenses = operatingExpensesRes.data?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
-
-      // Calculate employee salaries and commissions
-      const totalEmployeeExpenses = employeesRes.data?.reduce((sum, emp) => sum + (emp.basic_salary || 0), 0) || 0;
-
-      // Calculate total expenses (operating + employee salaries)
-      const totalExpenses = totalOperatingExpenses + totalEmployeeExpenses;
-
-      // Calculate net profit: Gross Profit - All Expenses
-      const netProfit = totalGrossProfit - totalExpenses;
+      // Get all financial metrics from database - NO calculations in React
+      const netProfit = financialRes.data?.[0]?.net_profit || 0;
 
       setStats({
         totalSales,

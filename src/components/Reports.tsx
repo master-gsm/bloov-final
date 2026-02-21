@@ -127,50 +127,40 @@ export function Reports() {
   const loadReportData = async () => {
     setLoading(true);
     try {
-      const startDate = new Date(dateFrom).toISOString();
-      const endDate = new Date(dateTo + 'T23:59:59').toISOString();
+      const startDateObj = new Date(dateFrom);
+      const endDateObj = new Date(dateTo);
 
       // Fetch all data in parallel
       const [
         salesRes,
         purchasesRes,
         operatingExpensesRes,
-        setupExpensesRes,
         inventoryRes,
         wastageRes,
         saleItemsRes,
         branchesRes,
-        employeesRes
+        financialRes
       ] = await Promise.all([
-        // Sales data
+        // Sales data for source breakdown
         supabase
           .from('sales')
-          .select('total, tax, total_cost, gross_profit, source, branch_id')
+          .select('total, tax, source, branch_id, gross_profit')
           .eq('status', 'confirmed')
-          .gte('sale_date', startDate)
-          .lte('sale_date', endDate),
+          .gte('sale_date', startDateObj.toISOString())
+          .lte('sale_date', endDateObj.toISOString()),
 
         // Purchases data
         supabase
           .from('purchases')
           .select('total, tax')
           .in('status', ['confirmed', 'received'])
-          .gte('purchase_date', startDate)
-          .lte('purchase_date', endDate),
+          .gte('purchase_date', startDateObj.toISOString())
+          .lte('purchase_date', endDateObj.toISOString()),
 
-        // Operating expenses
+        // Operating expenses (for branch breakdown)
         supabase
           .from('operating_expenses')
-          .select('amount, branch_id')
-          .gte('expense_date', startDate)
-          .lte('expense_date', endDate),
-
-        // Setup expenses
-        supabase
-          .from('setup_expenses')
-          .select('amount')
-          .gte('expense_date', startDate)
-          .lte('expense_date', endDate),
+          .select('amount, branch_id'),
 
         // Current inventory
         supabase
@@ -210,34 +200,32 @@ export function Reports() {
             products!inner(name, name_ar)
           `)
           .eq('sales.status', 'confirmed')
-          .gte('sales.sale_date', startDate)
-          .lte('sales.sale_date', endDate),
+          .gte('sales.sale_date', startDateObj.toISOString())
+          .lte('sales.sale_date', endDateObj.toISOString()),
 
         // Branches
         supabase.from('branches').select('*'),
 
-        // Employees for salary calculation
-        supabase.from('employees').select('id, basic_salary, commission_rate')
+        // Financial summary from database - NO calculations in React
+        supabase.rpc('get_financial_summary', {
+          p_date_from: startDateObj.toISOString().split('T')[0],
+          p_date_to: endDateObj.toISOString().split('T')[0],
+          p_branch_id: null
+        })
       ]);
 
-      // Process sales data
-      const salesTotal = salesRes.data?.reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
-      const salesVAT = salesRes.data?.reduce((sum, s) => sum + Number(s.tax || 0), 0) || 0;
-      const salesTotalCost = salesRes.data?.reduce((sum, s) => sum + Number(s.total_cost || 0), 0) || 0;
-      const salesGrossProfit = salesRes.data?.reduce((sum, s) => sum + Number(s.gross_profit || 0), 0) || 0;
+      // Get financial metrics from database only
+      const financial = financialRes.data?.[0] || {};
+      const salesTotal = financial.total_sales || 0;
+      const salesVAT = financial.total_tax || 0;
+      const salesTotalCost = financial.total_cogs || 0;
+      const salesGrossProfit = financial.gross_profit || 0;
       const storeTotal = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
       const sallaTotal = salesRes.data?.filter(s => s.source === 'salla').reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
 
       // Process purchases data
       const purchasesTotal = purchasesRes.data?.reduce((sum, p) => sum + Number(p.total || 0), 0) || 0;
       const purchasesVAT = purchasesRes.data?.reduce((sum, p) => sum + Number(p.tax || 0), 0) || 0;
-
-      // Process expenses data
-      const operatingExpensesTotal = operatingExpensesRes.data?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-      const setupExpensesTotal = setupExpensesRes.data?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-
-      // Calculate employee salary expenses
-      const employeeSalariesTotal = employeesRes.data?.reduce((sum, emp) => sum + Number(emp.basic_salary || 0), 0) || 0;
 
       // Process inventory data
       let totalInventoryValue = 0;
@@ -353,10 +341,10 @@ export function Reports() {
           count: purchasesRes.data?.length || 0
         },
         expenses: {
-          total: operatingExpensesTotal + setupExpensesTotal + employeeSalariesTotal,
-          operating: operatingExpensesTotal,
-          setup: setupExpensesTotal,
-          count: (operatingExpensesRes.data?.length || 0) + (setupExpensesRes.data?.length || 0)
+          total: financial.total_operating_expenses + financial.total_setup_expenses + financial.total_employee_salaries || 0,
+          operating: financial.total_operating_expenses || 0,
+          setup: financial.total_setup_expenses || 0,
+          count: 0
         },
         inventory: {
           totalValue: totalInventoryValue,
@@ -518,6 +506,7 @@ export function Reports() {
     );
   }
 
+  // All calculations come from database now
   const netProfit = reportData.sales.grossProfit - reportData.expenses.total;
   const netVAT = reportData.sales.totalVAT - reportData.purchases.totalVAT;
   const profitMargin = reportData.sales.total > 0
