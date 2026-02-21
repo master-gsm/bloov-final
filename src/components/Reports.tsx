@@ -139,7 +139,8 @@ export function Reports() {
         inventoryRes,
         wastageRes,
         saleItemsRes,
-        branchesRes
+        branchesRes,
+        employeesRes
       ] = await Promise.all([
         // Sales data
         supabase
@@ -213,7 +214,10 @@ export function Reports() {
           .lte('sales.sale_date', endDate),
 
         // Branches
-        supabase.from('branches').select('*')
+        supabase.from('branches').select('*'),
+
+        // Employees for salary calculation
+        supabase.from('employees').select('id, basic_salary, commission_rate')
       ]);
 
       // Process sales data
@@ -231,6 +235,9 @@ export function Reports() {
       // Process expenses data
       const operatingExpensesTotal = operatingExpensesRes.data?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
       const setupExpensesTotal = setupExpensesRes.data?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
+
+      // Calculate employee salary expenses
+      const employeeSalariesTotal = employeesRes.data?.reduce((sum, emp) => sum + Number(emp.basic_salary || 0), 0) || 0;
 
       // Process inventory data
       let totalInventoryValue = 0;
@@ -315,15 +322,15 @@ export function Reports() {
       // Process branch data
       const branchData: any[] = [];
       branchesRes.data?.forEach((branch: any) => {
-        const branchSales = salesRes.data?.filter(s => s.branch_id === branch.id).reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
+        const branchGrossProfit = salesRes.data?.filter(s => s.branch_id === branch.id).reduce((sum, s) => sum + Number(s.gross_profit || 0), 0) || 0;
         const branchExpenses = operatingExpensesRes.data?.filter(e => e.branch_id === branch.id).reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-        const branchProfit = branchSales - branchExpenses;
+        const branchProfit = branchGrossProfit - branchExpenses;
 
         branchData.push({
           branch_id: branch.id,
           branch_name: branch.name,
           branch_name_ar: branch.name_ar,
-          sales: branchSales,
+          sales: branchGrossProfit,
           expenses: branchExpenses,
           profit: branchProfit
         });
@@ -346,7 +353,7 @@ export function Reports() {
           count: purchasesRes.data?.length || 0
         },
         expenses: {
-          total: operatingExpensesTotal + setupExpensesTotal,
+          total: operatingExpensesTotal + setupExpensesTotal + employeeSalariesTotal,
           operating: operatingExpensesTotal,
           setup: setupExpensesTotal,
           count: (operatingExpensesRes.data?.length || 0) + (setupExpensesRes.data?.length || 0)
@@ -420,9 +427,10 @@ export function Reports() {
       [],
       [isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses', formatCurrency(reportData.expenses.operating)],
       [isRTL ? 'مصاريف التأسيس' : 'Setup Expenses', formatCurrency(reportData.expenses.setup)],
+      [isRTL ? 'رواتب الموظفين' : 'Employee Salaries', '(included in total)'],
       [isRTL ? 'إجمالي المصاريف' : 'Total Expenses', formatCurrency(reportData.expenses.total)],
       [],
-      [isRTL ? 'صافي الربح' : 'Net Profit', formatCurrency(reportData.sales.grossProfit - reportData.expenses.operating)],
+      [isRTL ? 'صافي الربح' : 'Net Profit', formatCurrency(reportData.sales.grossProfit - reportData.expenses.total)],
       [isRTL ? 'صافي الضريبة المستحقة' : 'Net VAT Payable', formatCurrency(reportData.sales.totalVAT - reportData.purchases.totalVAT)],
     ];
 
@@ -510,7 +518,7 @@ export function Reports() {
     );
   }
 
-  const netProfit = reportData.sales.grossProfit - reportData.expenses.operating;
+  const netProfit = reportData.sales.grossProfit - reportData.expenses.total;
   const netVAT = reportData.sales.totalVAT - reportData.purchases.totalVAT;
   const profitMargin = reportData.sales.total > 0
     ? ((netProfit / reportData.sales.total) * 100)
