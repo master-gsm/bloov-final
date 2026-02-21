@@ -174,8 +174,12 @@ class EnhancedSyncManager {
       if (serverResponse) {
         await this.updateLocalRecordWithServerData(table, data.id, serverResponse);
 
-        if (table === 'sales' && op === 'insert' && data.status === 'draft') {
-          await this.confirmSaleAfterSync(data.id, serverResponse);
+        if (table === 'sales' && op === 'insert') {
+          console.log(`[EnhancedSyncManager] Sale synced: id=${data.id}, status=${data.status}, has_invoice_number=${!!serverResponse?.invoice_number}`);
+          if (data.status === 'draft' || !serverResponse?.status || serverResponse?.status === 'draft') {
+            console.log(`[EnhancedSyncManager] Confirming sale ${data.id}...`);
+            await this.confirmSaleAfterSync(data.id, serverResponse);
+          }
         }
       }
 

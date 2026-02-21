@@ -3,8 +3,10 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { useOfflineData } from '../hooks/useOfflineData';
+import { useOffline } from '../contexts/OfflineContext';
 import { supabase } from '../lib/supabase';
 import { indexedDBManager } from '../lib/offline/indexedDBManager';
+import { enhancedSyncManager } from '../lib/offline/enhancedSyncManager';
 import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, Edit, RotateCcw } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
 import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
@@ -84,6 +86,7 @@ export function Sales() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const canEdit = useCanEdit();
+  const { isSyncing, pendingOperationsCount } = useOffline();
   const isRTL = language === 'ar';
 
   // Offline-First Data Hooks
@@ -163,6 +166,21 @@ export function Sales() {
     loadUserBranch();
     checkOpenRegister();
     loadSalesAndSettings();
+
+    const unsubscribeSyncing = enhancedSyncManager.onSyncingStateChange((isSyncing) => {
+      console.log('[Sales] Sync state changed:', isSyncing);
+
+      if (!isSyncing && navigator.onLine) {
+        console.log('[Sales] Sync completed, reloading sales data...');
+        setTimeout(() => {
+          loadSalesAndSettings();
+        }, 500);
+      }
+    });
+
+    return () => {
+      unsubscribeSyncing();
+    };
   }, []);
 
   const loadUserBranch = async () => {
@@ -209,16 +227,34 @@ export function Sales() {
   };
 
   const loadSalesAndSettings = async () => {
-    if (!navigator.onLine) return;
     try {
-      const [salesRes, settingsRes] = await Promise.all([
-        supabase.from('sales').select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)').order('created_at', { ascending: false }),
-        supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
-      ]);
-      if (salesRes.data) setSales(salesRes.data as any[]);
-      if (settingsRes.data?.tax_rate) setTaxRate(parseFloat(settingsRes.data.tax_rate.toString()));
+      if (navigator.onLine) {
+        console.log('[Sales] Loading sales from server...');
+        const [salesRes, settingsRes] = await Promise.all([
+          supabase.from('sales').select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)').order('created_at', { ascending: false }),
+          supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
+        ]);
+        if (salesRes.data) {
+          console.log('[Sales] Loaded', salesRes.data.length, 'sales from server');
+          setSales(salesRes.data as any[]);
+        }
+        if (settingsRes.data?.tax_rate) setTaxRate(parseFloat(settingsRes.data.tax_rate.toString()));
+      } else {
+        console.log('[Sales] Offline: Loading sales from cache...');
+        const cachedSales = await indexedDBManager.getCachedRecords('sales');
+        if (cachedSales && cachedSales.length > 0) {
+          console.log('[Sales] Loaded', cachedSales.length, 'sales from cache');
+          setSales(cachedSales as any[]);
+        }
+      }
     } catch (err) {
-      console.error('Error loading sales and settings:', err);
+      console.error('[Sales] Error loading sales and settings:', err);
+      if (!navigator.onLine) {
+        const cachedSales = await indexedDBManager.getCachedRecords('sales');
+        if (cachedSales && cachedSales.length > 0) {
+          setSales(cachedSales as any[]);
+        }
+      }
     }
   };
 
@@ -509,7 +545,8 @@ export function Sales() {
         });
       }
 
-      // 4. Show success - sale queued
+      // 4. Show success - sale queued (add to state with draft status)
+      console.log('[Sales] Sale created locally:', saleId, 'number:', saleNumber, 'status: draft');
       setSales([salePayload as any, ...sales]);
       const saleItemsData = saleItems.map((item, i) => ({
         id: `temp-${i}`,
@@ -542,10 +579,9 @@ export function Sales() {
       setCardMessage('');
       setSaleNotes('');
 
-      // Refresh sales list from server if online
-      if (navigator.onLine) {
-        loadSalesAndSettings();
-      }
+      // Don't reload immediately - let sync engine handle it
+      // loadSalesAndSettings() will be called by sync completion listener
+      console.log('[Sales] Sale queued for sync. Will reload when sync completes.');
     } catch (err: any) {
       setError(err.message || (isRTL ? 'حدث خطأ' : 'An error occurred'));
       console.error('Sale creation error:', err);
