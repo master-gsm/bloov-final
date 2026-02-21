@@ -337,106 +337,50 @@ export function Sales() {
     setSubmitting(true);
 
     try {
-      const saleNumber = `BLV-${Date.now().toString(36).toUpperCase()}`;
       const isCredit = paymentMethod === 'credit';
 
-      const { data: sale, error: saleError } = await supabase
-        .from('sales')
-        .insert({
-          sale_number: saleNumber,
-          customer_id: selectedCustomer && selectedCustomer.trim() !== '' ? selectedCustomer : null,
-          customer_name: !selectedCustomer || selectedCustomer.trim() === '' ? (walkinName && walkinName.trim() !== '' ? walkinName : null) : null,
-          customer_phone: !selectedCustomer || selectedCustomer.trim() === '' ? (walkinPhone && walkinPhone.trim() !== '' ? walkinPhone : null) : null,
-          sale_date: new Date().toISOString(),
-          status: 'confirmed',
-          subtotal,
-          tax: vatAmount,
-          discount: saleDiscount,
-          delivery_charge: deliveryCharge,
-          delivery_address: deliveryAddress && deliveryAddress.trim() !== '' ? deliveryAddress : null,
-          card_message: cardMessage && cardMessage.trim() !== '' ? cardMessage : null,
-          total,
-          paid_amount: isCredit ? 0 : total,
-          payment_status: isCredit ? 'unpaid' : 'paid',
-          payment_method: paymentMethod,
-          notes: saleNotes && saleNotes.trim() !== '' ? saleNotes : null,
-          source: saleSource,
-          salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
-          salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
-          salesperson_id: selectedEmployee,
-          branch_id: userBranchId,
-          created_by: user?.id,
-        })
-        .select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)')
-        .single();
-
-      if (saleError) throw saleError;
-
-      const items = saleItems.map((item) => ({
-        sale_id: (sale as any).id,
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        purchase_price: item.purchase_price || 0,
-        discount: item.discount,
-        total: item.total,
-      }));
-
-      const { error: itemsError } = await supabase.from('sale_items').insert(items);
-      if (itemsError) throw itemsError;
-
-      for (const item of saleItems) {
-        if (!item.product_id) continue;
-
-        if (userBranchId) {
-          const { data: branchStock } = await supabase
-            .from('branch_stock')
-            .select('id, quantity')
-            .eq('product_id', item.product_id)
-            .eq('branch_id', userBranchId)
-            .maybeSingle();
-
-          if (branchStock) {
-            await supabase
-              .from('branch_stock')
-              .update({
-                quantity: branchStock.quantity - item.quantity,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', branchStock.id)
-              .eq('branch_id', userBranchId);
-          }
-        }
-
-        const { data: inv } = await supabase
-          .from('inventory')
-          .select('id, quantity')
-          .eq('product_id', item.product_id)
-          .eq('branch_id', userBranchId as string)
-          .maybeSingle();
-
-        if (inv) {
-          await supabase
-            .from('inventory')
-            .update({
-              quantity: inv.quantity - item.quantity,
-              last_updated: new Date().toISOString()
-            })
-            .eq('id', inv.id)
-            .eq('product_id', item.product_id)
-            .eq('branch_id', userBranchId as string);
-        }
-
-        await supabase.from('inventory_movements').insert({
+      const payload = {
+        branch_id: userBranchId,
+        customer_id: selectedCustomer && selectedCustomer.trim() !== '' ? selectedCustomer : null,
+        customer_name: !selectedCustomer || selectedCustomer.trim() === ''
+          ? (walkinName && walkinName.trim() !== '' ? walkinName : null)
+          : null,
+        customer_phone: !selectedCustomer || selectedCustomer.trim() === ''
+          ? (walkinPhone && walkinPhone.trim() !== '' ? walkinPhone : null)
+          : null,
+        subtotal,
+        tax: vatAmount,
+        discount: saleDiscount,
+        total,
+        paid_amount: isCredit ? 0 : total,
+        payment_status: isCredit ? 'unpaid' : 'paid',
+        payment_method: paymentMethod,
+        delivery_charge: deliveryCharge,
+        delivery_address: deliveryAddress && deliveryAddress.trim() !== '' ? deliveryAddress : null,
+        card_message: cardMessage && cardMessage.trim() !== '' ? cardMessage : null,
+        notes: saleNotes && saleNotes.trim() !== '' ? saleNotes : null,
+        source: saleSource,
+        salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
+        salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
+        salesperson_id: selectedEmployee,
+        items: saleItems.map((item) => ({
           product_id: item.product_id,
-          movement_type: 'out',
           quantity: item.quantity,
-          reference_type: 'sale',
-          reference_id: sale.id,
-          notes: `Sale ${saleNumber}`,
-          created_by: user?.id,
-        });
-      }
+          unit_price: item.unit_price,
+          purchase_price: item.purchase_price || 0,
+          discount: item.discount,
+          total: item.total,
+        })),
+      };
+
+      const { data: result, error: rpcError } = await supabase.rpc('create_sale_atomic', {
+        p_payload: payload,
+      });
+
+      if (rpcError) throw rpcError;
+
+      const saleId = (result as any).sale_id;
+      const saleNumber = (result as any).sale_number;
 
       if (selectedCustomer) {
         const loyaltyPoints = Math.floor(total);
@@ -465,18 +409,10 @@ export function Sales() {
           });
         }
 
-        await supabase.from('loyalty_transactions').insert({
-          customer_id: selectedCustomer,
-          sale_id: sale.id,
-          points: loyaltyPoints,
-          type: 'earned',
-          description: `Sale ${saleNumber}`,
-        });
-
         if (pointsToRedeem > 0) {
           await supabase.from('loyalty_transactions').insert({
             customer_id: selectedCustomer,
-            sale_id: sale.id,
+            sale_id: saleId,
             points: pointsToRedeem,
             type: 'redeemed',
             description: `${isRTL ? 'استخدام' : 'Redeemed'} ${pointsToRedeem} ${isRTL ? 'نقطة' : 'points'} (${formatCurrency(pointsDiscount)} ${isRTL ? 'خصم' : 'discount'})`,
@@ -496,16 +432,22 @@ export function Sales() {
         user_id: user?.id,
         action: 'create',
         entity_type: 'sale',
-        entity_id: (sale as any).id,
+        entity_id: saleId,
         details: `Sale ${saleNumber} - ${formatCurrency(total)} SAR`,
       });
+
+      const { data: saleRecord } = await supabase
+        .from('sales')
+        .select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)')
+        .eq('id', saleId)
+        .maybeSingle();
 
       const { data: saleItemsData } = await supabase
         .from('sale_items')
         .select('*, products(name, name_ar, sku)')
-        .eq('sale_id', (sale as any).id);
+        .eq('sale_id', saleId);
 
-      setPrintingSale(sale as any);
+      setPrintingSale(saleRecord as any);
       setPrintItems(saleItemsData || []);
       setShowForm(false);
       loadData();
