@@ -422,7 +422,7 @@ export function Reports() {
       [isRTL ? 'مصاريف التأسيس' : 'Setup Expenses', formatCurrency(reportData.expenses.setup)],
       [isRTL ? 'إجمالي المصاريف' : 'Total Expenses', formatCurrency(reportData.expenses.total)],
       [],
-      [isRTL ? 'صافي الربح' : 'Net Profit', formatCurrency(reportData.sales.grossProfit - reportData.expenses.total)],
+      [isRTL ? 'صافي الربح' : 'Net Profit', formatCurrency(reportData.sales.grossProfit - reportData.expenses.operating)],
       [isRTL ? 'صافي الضريبة المستحقة' : 'Net VAT Payable', formatCurrency(reportData.sales.totalVAT - reportData.purchases.totalVAT)],
     ];
 
@@ -510,7 +510,7 @@ export function Reports() {
     );
   }
 
-  const netProfit = reportData.sales.grossProfit - reportData.expenses.total;
+  const netProfit = reportData.sales.grossProfit - reportData.expenses.operating;
   const netVAT = reportData.sales.totalVAT - reportData.purchases.totalVAT;
   const profitMargin = reportData.sales.total > 0
     ? ((netProfit / reportData.sales.total) * 100)
