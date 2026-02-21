@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCanEdit } from '../hooks/useCanEdit';
+import { useOfflineData } from '../hooks/useOfflineData';
 import { supabase } from '../lib/supabase';
 import { Package, Plus, Edit, Trash2, Search, X, Filter, ClipboardList } from 'lucide-react';
 
@@ -58,6 +59,19 @@ export function Products() {
   const { t, language } = useLanguage();
   const canEdit = useCanEdit();
   const isRTL = language === 'ar';
+
+  const { data: offlineProducts, loading: productsLoading, error: productsError } = useOfflineData<Product>({
+    table: 'products',
+    fallbackToServer: true,
+    autoRefresh: true,
+  });
+
+  const { data: offlineCategories, loading: categoriesLoading } = useOfflineData<Category>({
+    table: 'categories',
+    fallbackToServer: true,
+    autoRefresh: true,
+  });
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,11 +91,20 @@ export function Products() {
   const [materialQuantity, setMaterialQuantity] = useState(1);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!productsLoading && !categoriesLoading) {
+      setProducts(offlineProducts);
+      const activeCategories = offlineCategories.filter((c: any) => c.is_active !== false);
+      setCategories(activeCategories);
+      setLoading(false);
+    }
+  }, [offlineProducts, offlineCategories, productsLoading, categoriesLoading]);
 
   const loadData = async () => {
     try {
+      if (!navigator.onLine) {
+        console.log('[Products] Offline - using cached data');
+        return;
+      }
       const [productsRes, categoriesRes] = await Promise.all([
         supabase.from('products').select('*').order('created_at', { ascending: false }),
         supabase.from('categories').select('*').eq('is_active', true),

@@ -5,6 +5,7 @@ import {
   healthCheckManager,
   operationExecutor,
   financialStateManager,
+  initialSyncManager,
   type HealthCheckResult,
   type SyncResult,
 } from '../lib/offline';
@@ -48,6 +49,12 @@ export const OfflineFirstProvider: React.FC<{ children: React.ReactNode }> = ({ 
         healthCheckManager.startPeriodicChecks(30);
         console.log('[OfflineFirstContext] Health checks started');
 
+        if (navigator.onLine) {
+          console.log('[OfflineFirstContext] Online - performing initial sync...');
+          const syncResult = await initialSyncManager.performInitialSync();
+          console.log('[OfflineFirstContext] Initial sync result:', syncResult);
+        }
+
         await enhancedSyncManager.startAutoSync(30);
         console.log('[OfflineFirstContext] Auto-sync started');
 
@@ -55,6 +62,7 @@ export const OfflineFirstProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.log('[OfflineFirstContext] Offline system ready');
       } catch (error) {
         console.error('[OfflineFirstContext] Initialization failed:', error);
+        setExecutorReady(true);
       }
     };
 

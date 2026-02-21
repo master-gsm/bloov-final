@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCanEdit } from '../hooks/useCanEdit';
+import { useOfflineData } from '../hooks/useOfflineData';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Download, MessageSquare, Send, CheckCircle, AlertCircle, Loader2, Crown, Star, UserX, Filter, TrendingUp, Calendar, Award, StickyNote, ArrowUpDown, ArrowUp, ArrowDown, Trophy, Zap } from 'lucide-react';
@@ -56,6 +57,19 @@ export function Customers() {
   const { user } = useAuth();
   const canEdit = useCanEdit();
   const isRTL = language === 'ar';
+
+  const { data: offlineCustomers, loading: customersLoading } = useOfflineData<Customer>({
+    table: 'customers',
+    fallbackToServer: true,
+    autoRefresh: true,
+  });
+
+  const { data: offlineBranches, loading: branchesLoading } = useOfflineData({
+    table: 'branches',
+    fallbackToServer: true,
+    autoRefresh: true,
+  });
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -81,10 +95,31 @@ export function Customers() {
   const [branches, setBranches] = useState<any[]>([]);
 
   useEffect(() => {
-    loadCustomers();
+    if (!customersLoading && !branchesLoading) {
+      setCustomers(offlineCustomers);
+      const activeBranches = offlineBranches.filter((b: any) => b.is_active !== false);
+      setBranches(activeBranches);
+      setLoading(false);
+    }
+  }, [offlineCustomers, offlineBranches, customersLoading, branchesLoading]);
+
+  useEffect(() => {
     loadUserBranch();
-    loadBranches();
   }, []);
+
+  const loadCustomers = async () => {
+    if (!navigator.onLine) return;
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) setCustomers(data as any[]);
+    } catch (err) {
+      console.error('Error loading customers:', err);
+    }
+  };
 
   const loadUserBranch = async () => {
     if (!user) return;
@@ -117,20 +152,6 @@ export function Customers() {
     }
   };
 
-  const loadCustomers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*, branches(name, code)')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) setCustomers(data as any[]);
-    } catch (err) {
-      console.error('Error loading customers:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const generateCode = () => {
     const num = customers.length + 1;

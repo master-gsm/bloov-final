@@ -3,3 +3,4 @@ export { healthCheckManager, type HealthCheckResult, type ConnectionQuality } fr
 export { enhancedSyncManager, type SyncResult, type SyncOptions } from './enhancedSyncManager';
 export { operationExecutor, type ExecutionResult, type OperationContext } from './operationExecutor';
 export { financialStateManager, type FinancialState } from './financialStateManager';
+export { initialSyncManager, type InitialSyncStatus, type SyncProgress } from './initialSyncManager';

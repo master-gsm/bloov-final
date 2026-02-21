@@ -307,6 +307,33 @@ class IndexedDBManager {
     });
   }
 
+  async cacheData(table: string, records: any[]): Promise<void> {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction([STORES.DATA_CACHE], 'readwrite');
+      const store = tx.objectStore(STORES.DATA_CACHE);
+
+      records.forEach(record => {
+        const cachedRecord: CachedRecord = {
+          id: crypto.randomUUID(),
+          table,
+          recordId: record.id,
+          data: record,
+          localVersion: Date.now(),
+          remoteVersion: record.updated_at ? new Date(record.updated_at).getTime() : 0,
+          isDirty: false,
+          cachedAt: Date.now(),
+          syncedAt: null,
+        };
+        store.put(cachedRecord);
+      });
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async clearCachedTable(table: string): Promise<void> {
     await this.init();
 
