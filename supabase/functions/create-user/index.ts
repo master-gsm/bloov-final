@@ -159,7 +159,6 @@ Deno.serve(async (req: Request) => {
       full_name: displayName,
       role: role,
       is_active: true,
-      email: email,
       permissions: userPermissions,
     });
 
