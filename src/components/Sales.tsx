@@ -4,9 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { useOfflineData } from '../hooks/useOfflineData';
 import { useOffline } from '../contexts/OfflineContext';
+import { useOfflineFirst } from '../contexts/OfflineFirstContext';
 import { supabase } from '../lib/supabase';
 import { indexedDBManager } from '../lib/offline/indexedDBManager';
 import { enhancedSyncManager } from '../lib/offline/enhancedSyncManager';
+import { HybridSalesWrite } from '../lib/hybridSalesWrite';
 import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, Edit, RotateCcw } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
 import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
@@ -87,6 +89,7 @@ export function Sales() {
   const { user } = useAuth();
   const canEdit = useCanEdit();
   const { isSyncing, pendingOperationsCount } = useOffline();
+  const { isOnline } = useOfflineFirst();
   const isRTL = language === 'ar';
 
   // Offline-First Data Hooks
@@ -421,9 +424,11 @@ export function Sales() {
     try {
       const isCredit = paymentMethod === 'credit';
       const saleId = crypto.randomUUID();
-      const saleNumber = `S${Date.now().toString(36).toUpperCase()}`;
+      const saleNumber = isOnline
+        ? `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-PENDING`
+        : `S${Date.now().toString(36).toUpperCase()}`;
 
-      // 1. Create sale record locally in IndexedDB (OFFLINE-FIRST)
+      // 1. Build sale payload
       const salePayload = {
         id: saleId,
         branch_id: userBranchId,
@@ -456,98 +461,60 @@ export function Sales() {
         updated_at: new Date().toISOString(),
       };
 
-      // Queue sale insert
-      await indexedDBManager.addOperationToQueue({
-        operationId: crypto.randomUUID(),
-        table: 'sales',
-        operation: 'insert',
-        data: salePayload,
-        localVersion: Date.now(),
-        remoteVersion: null,
-        status: 'pending',
-        retries: 0,
-        maxRetries: 3,
-        error: null,
-        syncedAt: null,
-        serverResponse: null,
+      // 2. Build sale items
+      const saleItemsPayload = saleItems.map(() => ({
+        id: crypto.randomUUID(),
+        sale_id: saleId,
+        product_id: '',
+        quantity: 0,
+        unit_price: 0,
+        purchase_price: 0,
+        discount: 0,
+        total: 0,
+        created_at: new Date().toISOString(),
+      }));
+
+      saleItems.forEach((item, i) => {
+        saleItemsPayload[i] = {
+          id: crypto.randomUUID(),
+          sale_id: saleId,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          purchase_price: item.purchase_price || 0,
+          discount: item.discount,
+          total: item.total,
+          created_at: new Date().toISOString(),
+        };
       });
 
-      // 2. Create sale items locally (OFFLINE-FIRST)
-      for (const item of saleItems) {
-        const saleItemPayload = {
-          id: crypto.randomUUID(),
-          sale_id: saleId,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          purchase_price: item.purchase_price || 0,
-          discount: item.discount,
-          total: item.total,
-          created_at: new Date().toISOString(),
-        };
+      // 3. Use Hybrid Write Path
+      const writeResult = await HybridSalesWrite.createSale(
+        isOnline,
+        salePayload as any,
+        saleItemsPayload as any
+      );
 
-        // Queue each sale item
-        await indexedDBManager.addOperationToQueue({
-          operationId: crypto.randomUUID(),
-          table: 'sale_items',
-          operation: 'insert',
-          data: saleItemPayload,
-          localVersion: Date.now(),
-          remoteVersion: null,
-          status: 'pending',
-          retries: 0,
-          maxRetries: 3,
-          error: null,
-          syncedAt: null,
-          serverResponse: null,
-        });
+      if (!writeResult.success) {
+        setError(writeResult.error || 'Failed to create sale');
+        setSubmitting(false);
+        return;
       }
 
-      // Cache sale and items locally
-      await indexedDBManager.cacheRecord('sales', salePayload, true);
-      for (const item of saleItems) {
-        const saleItemPayload = {
-          id: crypto.randomUUID(),
-          sale_id: saleId,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          purchase_price: item.purchase_price || 0,
-          discount: item.discount,
-          total: item.total,
-          created_at: new Date().toISOString(),
-        };
-        await indexedDBManager.cacheRecord('sale_items', saleItemPayload, true);
-      }
+      console.log(`[Sales] Sale created (${writeResult.mode}):`, {
+        saleId: writeResult.saleId,
+        status: writeResult.status,
+        invoiceNumber: writeResult.invoiceNumber,
+        mode: writeResult.mode,
+      });
 
-      // 3. For loyalty points (if customer selected): queue in operation queue
-      if (selectedCustomer && navigator.onLine) {
-        const loyaltyPoints = Math.floor(total);
-
-        await indexedDBManager.addOperationToQueue({
-          operationId: crypto.randomUUID(),
-          table: 'customer_loyalty_update',
-          operation: 'custom',
-          data: {
-            customer_id: selectedCustomer,
-            points_earned: loyaltyPoints,
-            points_redeemed: pointsToRedeem,
-            sale_id: saleId,
-          },
-          localVersion: Date.now(),
-          remoteVersion: null,
-          status: 'pending',
-          retries: 0,
-          maxRetries: 3,
-          error: null,
-          syncedAt: null,
-          serverResponse: null,
-        });
-      }
-
-      // 4. Show success - sale queued (add to state with draft status)
-      console.log('[Sales] Sale created locally:', saleId, 'number:', saleNumber, 'status: draft');
-      setSales([salePayload as any, ...sales]);
+      // 4. Update UI state
+      const displaySale = {
+        ...salePayload,
+        invoice_number: writeResult.invoiceNumber,
+        status: writeResult.status,
+      } as any;
+      setSales([displaySale, ...sales]);
       const saleItemsData = saleItems.map((item, i) => ({
         id: `temp-${i}`,
         sale_id: saleId,
