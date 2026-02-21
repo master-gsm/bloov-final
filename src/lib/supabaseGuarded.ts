@@ -16,7 +16,7 @@ export function guardedInsert<T = any>(table: SupabaseTable, data: any) {
   return supabase.from(table).insert(data);
 }
 
-export function guardedUpdate<T = any>(table: SupabaseTable) {
+export function guardedUpdate<T = any>(table: SupabaseTable, data: any) {
   if (isTestModeActive()) {
     console.warn(`🧪 Test Mode: Blocked UPDATE on ${table}`);
     return {
@@ -36,7 +36,7 @@ export function guardedUpdate<T = any>(table: SupabaseTable) {
       }),
     } as any;
   }
-  return supabase.from(table).update;
+  return supabase.from(table).update(data);
 }
 
 export function guardedDelete<T = any>(table: SupabaseTable) {
@@ -51,7 +51,7 @@ export function guardedDelete<T = any>(table: SupabaseTable) {
       }),
     } as any;
   }
-  return supabase.from(table).delete;
+  return supabase.from(table).delete();
 }
 
 export function guardedUpsert<T = any>(table: SupabaseTable, data: any, options?: any) {
