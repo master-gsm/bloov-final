@@ -115,7 +115,7 @@ export function Sales() {
   const [taxRate, setTaxRate] = useState(0.15);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [saleSource, setSaleSource] = useState<'store' | 'salla'>('store');
+  const [saleSource, setSaleSource] = useState<'store' | 'salla' | 'external'>('store');
   const [sallaShippingCost, setSallaShippingCost] = useState(0);
   const [sallaPaymentFee, setSallaPaymentFee] = useState(0);
 
@@ -1015,8 +1015,9 @@ export function Sales() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'مصدر البيع' : 'Sale Source'}</label>
-                <select value={saleSource} onChange={(e) => setSaleSource(e.target.value as 'store' | 'salla')} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm bg-white" disabled={!canEdit}>
+                <select value={saleSource} onChange={(e) => setSaleSource(e.target.value as 'store' | 'salla' | 'external')} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm bg-white" disabled={!canEdit}>
                   <option value="store">{isRTL ? 'مبيعات المحل' : 'Store Sales'}</option>
+                  <option value="external">{isRTL ? 'مبيعات خارجية' : 'External Sales'}</option>
                   <option value="salla">{isRTL ? 'مبيعات المتجر الإلكتروني (سلة)' : 'Online Sales (Salla)'}</option>
                 </select>
               </div>
@@ -1041,7 +1042,7 @@ export function Sales() {
                   <option value="card">{isRTL ? 'شبكة' : 'Card'}</option>
                   <option value="transfer">{isRTL ? 'تحويل' : 'Transfer'}</option>
                   <option value="credit">{isRTL ? 'آجل' : 'Credit'}</option>
-                  {saleSource === 'salla' && <option value="online">{isRTL ? 'دفع إلكتروني' : 'Online Payment'}</option>}
+                  {(saleSource === 'salla' || saleSource === 'external') && <option value="online">{isRTL ? 'دفع إلكتروني' : 'Online Payment'}</option>}
                 </select>
                 {paymentMethod === 'credit' && !selectedCustomer && (
                   <p className="text-xs text-amber-600 mt-1">{isRTL ? 'يجب اختيار عميل مسجل للبيع الآجل' : 'Select a registered customer for credit sales'}</p>

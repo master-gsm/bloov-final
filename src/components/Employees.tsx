@@ -20,6 +20,7 @@ interface Employee {
   hire_date: string;
   basic_salary: number;
   commission_rate: number;
+  commission_rate_external: number;
   is_active: boolean;
   employment_type: 'full_time' | 'part_time' | 'contract';
   notes: string;
@@ -83,6 +84,7 @@ export function Employees() {
     hire_date: new Date().toISOString().split('T')[0],
     basic_salary: 0,
     commission_rate: 0,
+    commission_rate_external: 0,
     is_active: true,
     employment_type: 'full_time' as const,
     notes: '',
@@ -153,6 +155,7 @@ export function Employees() {
         hire_date: formData.hire_date,
         basic_salary: formData.basic_salary,
         commission_rate: formData.commission_rate,
+        commission_rate_external: formData.commission_rate_external,
         is_active: formData.is_active,
         employment_type: formData.employment_type,
         notes: formData.notes,
@@ -219,6 +222,7 @@ export function Employees() {
       hire_date: new Date().toISOString().split('T')[0],
       basic_salary: 0,
       commission_rate: 0,
+      commission_rate_external: 0,
       is_active: true,
       employment_type: 'full_time' as const,
       notes: '',
@@ -253,6 +257,7 @@ export function Employees() {
       hire_date: employee.hire_date,
       basic_salary: employee.basic_salary,
       commission_rate: employee.commission_rate,
+      commission_rate_external: employee.commission_rate_external || 0,
       is_active: employee.is_active,
       employment_type: (employee.employment_type || 'full_time') as 'full_time',
       notes: employee.notes || '',
@@ -407,7 +412,12 @@ export function Employees() {
                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">
                           {(emp.basic_salary ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{emp.commission_rate}%</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          <div className="space-y-0.5">
+                            <div className="text-xs text-gray-500">{isRTL ? 'داخلي' : 'Internal'}: {emp.commission_rate ?? 0}%</div>
+                            <div className="text-xs text-gray-500">{isRTL ? 'خارجي' : 'External'}: {emp.commission_rate_external ?? 0}%</div>
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                             emp.is_active
@@ -820,7 +830,7 @@ export function Employees() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'نسبة العمولة %' : 'Commission Rate %'}
+                  {isRTL ? 'نسبة عمولة المبيعات الداخلية %' : 'Internal Sales Commission %'}
                 </label>
                 <input
                   type="number"
@@ -830,6 +840,23 @@ export function Employees() {
                   min="0"
                   max="100"
                   step="0.1"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {isRTL ? 'نسبة عمولة المبيعات الخارجية %' : 'External Sales Commission %'}
+                </label>
+                <input
+                  type="number"
+                  value={formData.commission_rate_external}
+                  onChange={(e) => setFormData({ ...formData, commission_rate_external: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  placeholder="0"
                 />
               </div>
 
