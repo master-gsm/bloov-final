@@ -142,13 +142,28 @@ export function Employees() {
 
   const handleSaveEmployee = async () => {
     try {
+      const payload = {
+        full_name: formData.full_name,
+        phone: formData.phone,
+        email: formData.email,
+        national_id: formData.national_id,
+        position: formData.position,
+        department: formData.department,
+        branch_id: formData.branch_id || null,
+        hire_date: formData.hire_date,
+        basic_salary: formData.basic_salary,
+        commission_rate: formData.commission_rate,
+        is_active: formData.is_active,
+        employment_type: formData.employment_type,
+        notes: formData.notes,
+      };
       if (editingEmployee) {
         await supabase
           .from('employees')
-          .update(formData)
+          .update(payload)
           .eq('id', editingEmployee.id);
       } else {
-        await supabase.from('employees').insert([formData] as any);
+        await supabase.from('employees').insert([payload] as any);
       }
       setShowModal(false);
       setEditingEmployee(null);
@@ -565,12 +580,16 @@ export function Employees() {
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          comm.is_paid
+                          (comm as any).status === 'approved' || comm.is_paid
                             ? 'bg-green-100 text-green-700'
+                            : (comm as any).status === 'void'
+                            ? 'bg-red-100 text-red-700'
                             : 'bg-yellow-100 text-yellow-700'
                         }`}>
-                          {comm.is_paid ? (
-                            <><CheckCircle className="w-3 h-3" /> {isRTL ? 'مدفوعة' : 'Paid'}</>
+                          {(comm as any).status === 'approved' || comm.is_paid ? (
+                            <><CheckCircle className="w-3 h-3" /> {isRTL ? 'مؤكدة' : 'Approved'}</>
+                          ) : (comm as any).status === 'void' ? (
+                            <><X className="w-3 h-3" /> {isRTL ? 'ملغاة' : 'Void'}</>
                           ) : (
                             <><Clock className="w-3 h-3" /> {isRTL ? 'معلقة' : 'Pending'}</>
                           )}
