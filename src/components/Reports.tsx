@@ -129,6 +129,7 @@ export function Reports() {
     try {
       const startDateObj = new Date(dateFrom);
       const endDateObj = new Date(dateTo);
+      endDateObj.setHours(23, 59, 59, 999);
 
       // Fetch all data in parallel
       const [
