@@ -453,6 +453,7 @@ export function Sales() {
         salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
         salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
         salesperson_id: selectedEmployee,
+        created_by: user?.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };

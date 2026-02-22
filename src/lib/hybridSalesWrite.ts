@@ -159,9 +159,12 @@ export class HybridSalesWrite {
 
         if (confirmError) {
           console.error('[HybridSalesWrite.Online] Confirmation failed:', confirmError);
+          throw new Error(`Sale confirmation failed: ${confirmError.message}`);
         } else if (confirmed) {
           confirmedSale = confirmed;
           console.log(`[HybridSalesWrite.Online] Sale confirmed: status=${confirmed.status}, invoice_number=${confirmed.invoice_number}`);
+        } else {
+          throw new Error('Sale confirmation returned no data');
         }
       }
 
