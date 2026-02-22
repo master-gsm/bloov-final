@@ -348,7 +348,7 @@ export function Reports() {
         branchData.push({
           branch_id: branch.id,
           branch_name: branch.name,
-          branch_name_ar: branch.name_ar,
+          branch_name_ar: branch.name_ar || branch.name,
           sales: branchGrossProfit,
           expenses: branchExpenses,
           profit: branchProfit

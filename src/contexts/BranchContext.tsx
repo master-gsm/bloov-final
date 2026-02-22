@@ -74,7 +74,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       if (admin) {
         const { data: branches, error: branchError } = await supabase
           .from('branches')
-          .select('id, name, name_ar, code, location, city, is_active')
+          .select('id, name, code, location, city, is_active')
           .eq('is_active', true)
           .order('name');
 
@@ -99,7 +99,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
 
         const { data: branch, error: bErr } = await supabase
           .from('branches')
-          .select('id, name, name_ar, code, location, city, is_active')
+          .select('id, name, code, location, city, is_active')
           .eq('id', userData.branch_id)
           .maybeSingle();
 
