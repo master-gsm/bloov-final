@@ -1,7 +1,8 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useOffline } from '../contexts/OfflineContext';
-import { LogOut, Globe, Wifi, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
+import { useBranch } from '../contexts/BranchContext';
+import { LogOut, Globe, Wifi, WifiOff, RefreshCw, AlertCircle, Building2, ChevronDown } from 'lucide-react';
 import { ConnectionStatusButton } from './ConnectionStatusButton';
 import { useState, useEffect } from 'react';
 
@@ -9,7 +10,9 @@ export function Navbar() {
   const { signOut } = useAuth();
   const { language, setLanguage, t, isRTL } = useLanguage();
   const { isOnline, isSyncing, pendingOperationsCount, syncError } = useOffline();
+  const { isAdmin, allBranches, selectedBranchFilter, setSelectedBranchFilter, currentBranchId } = useBranch();
   const [showConnectionMenu, setShowConnectionMenu] = useState(false);
+  const [showBranchMenu, setShowBranchMenu] = useState(false);
   const [actualOnline, setActualOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -210,6 +213,48 @@ export function Navbar() {
                 </>
               )}
             </div>
+
+            {/* Branch Switcher - admin only */}
+            {isAdmin && allBranches.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowBranchMenu(!showBranchMenu)}
+                  className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200 transition text-sm"
+                >
+                  <Building2 className="w-4 h-4 text-teal-600" />
+                  <span className="hidden sm:inline font-medium max-w-[120px] truncate">
+                    {selectedBranchFilter
+                      ? (allBranches.find(b => b.id === selectedBranchFilter)?.name || (isRTL ? 'فرع' : 'Branch'))
+                      : (isRTL ? 'كل الفروع' : 'All Branches')}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showBranchMenu && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowBranchMenu(false)} />
+                    <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 z-40 overflow-hidden`}>
+                      <div className="p-2">
+                        <button
+                          onClick={() => { setSelectedBranchFilter(null); setShowBranchMenu(false); }}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${!selectedBranchFilter ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                        >
+                          {isRTL ? 'كل الفروع' : 'All Branches'}
+                        </button>
+                        {allBranches.map(branch => (
+                          <button
+                            key={branch.id}
+                            onClick={() => { setSelectedBranchFilter(branch.id); setShowBranchMenu(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${selectedBranchFilter === branch.id ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                          >
+                            {isRTL ? (branch.name_ar || branch.name) : branch.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             <button
               onClick={toggleLanguage}

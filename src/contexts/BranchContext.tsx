@@ -74,7 +74,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       if (admin) {
         const { data: branches, error: branchError } = await supabase
           .from('branches')
-          .select('id, name, code, location, city, is_active')
+          .select('id, name, name_ar, code, location, city, is_active')
           .eq('is_active', true)
           .order('name');
 
@@ -82,16 +82,17 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
           console.error('[BranchContext] ERROR reading branches table:', branchError);
         }
 
-        console.log('[BranchContext] branches fetched for admin:', branches?.length ?? 0, 'rows');
-        setAllBranches((branches as Branch[]) || []);
+        const branchList = (branches as Branch[]) || [];
+        console.log('[BranchContext] branches fetched for admin:', branchList.length, 'rows');
+        setAllBranches(branchList);
 
-        const adminBranchId = userData.branch_id || null;
+        const adminBranchId = userData.branch_id || (branchList[0]?.id ?? null);
         setCurrentBranchId(adminBranchId);
         setCurrentBranch(null);
         console.log('[BranchContext] admin → currentBranchId set to:', adminBranchId);
 
         if (!adminBranchId) {
-          console.warn('[BranchContext] Admin has NO branch_id in users table! RLS on branch-isolated tables will block all data.');
+          console.warn('[BranchContext] Admin has NO branch_id and no branches found!');
         }
       } else if (userData.branch_id) {
         setCurrentBranchId(userData.branch_id);
@@ -122,6 +123,13 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     loadBranchData();
   }, [user]);
 
+  const handleSetSelectedBranchFilter = (id: string | null) => {
+    setSelectedBranchFilter(id);
+    if (isAdmin && id !== null) {
+      setCurrentBranchId(id);
+    }
+  };
+
   return (
     <BranchContext.Provider value={{
       currentBranch,
@@ -129,7 +137,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       isAdmin,
       allBranches,
       selectedBranchFilter,
-      setSelectedBranchFilter,
+      setSelectedBranchFilter: handleSetSelectedBranchFilter,
       loading,
       refetch: loadBranchData,
     }}>

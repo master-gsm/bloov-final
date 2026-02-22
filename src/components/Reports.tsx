@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import {
   FileText, TrendingUp, TrendingDown, DollarSign, Calendar,
   BarChart3, Receipt, ShieldAlert, Package, AlertTriangle,
-  Building2, Download, FileSpreadsheet
+  Building2, Download, FileSpreadsheet, Scale, BookOpen, PieChart, FileCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -99,6 +99,17 @@ export function Reports() {
 
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [activeTab, setActiveTab] = useState<'operational' | 'trial_balance' | 'income_statement' | 'balance_sheet' | 'vat_summary'>('operational');
+  const [financialLoading, setFinancialLoading] = useState(false);
+
+  const [trialBalance, setTrialBalance] = useState<any[]>([]);
+  const [incomeStatement, setIncomeStatement] = useState<any>(null);
+  const [balanceSheet, setBalanceSheet] = useState<any>(null);
+  const [vatSummary, setVatSummary] = useState<any>(null);
+
+  // VAT month/year filter
+  const [vatMonth, setVatMonth] = useState(() => new Date().getMonth() + 1);
+  const [vatYear, setVatYear] = useState(() => new Date().getFullYear());
 
   // Date filter state
   const [dateFrom, setDateFrom] = useState(() => {
@@ -409,6 +420,81 @@ export function Reports() {
     }
   };
 
+  const loadTrialBalance = async () => {
+    setFinancialLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_trial_balance', {
+        p_branch_id: null,
+        p_date_from: dateFrom,
+        p_date_to: dateTo,
+      });
+      if (error) throw error;
+      setTrialBalance(data || []);
+    } catch (err) {
+      console.error('Error loading trial balance:', err);
+    } finally {
+      setFinancialLoading(false);
+    }
+  };
+
+  const loadIncomeStatement = async () => {
+    setFinancialLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_income_statement', {
+        p_branch_id: null,
+        p_date_from: dateFrom,
+        p_date_to: dateTo,
+      });
+      if (error) throw error;
+      setIncomeStatement(data);
+    } catch (err) {
+      console.error('Error loading income statement:', err);
+    } finally {
+      setFinancialLoading(false);
+    }
+  };
+
+  const loadBalanceSheet = async () => {
+    setFinancialLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_balance_sheet', {
+        p_branch_id: null,
+        p_as_of_date: dateTo,
+      });
+      if (error) throw error;
+      setBalanceSheet(data);
+    } catch (err) {
+      console.error('Error loading balance sheet:', err);
+    } finally {
+      setFinancialLoading(false);
+    }
+  };
+
+  const loadVatSummary = async () => {
+    setFinancialLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_vat_summary', {
+        p_branch_id: null,
+        p_month: vatMonth,
+        p_year: vatYear,
+      });
+      if (error) throw error;
+      setVatSummary(data);
+    } catch (err) {
+      console.error('Error loading VAT summary:', err);
+    } finally {
+      setFinancialLoading(false);
+    }
+  };
+
+  const handleTabChange = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    if (tab === 'trial_balance') loadTrialBalance();
+    else if (tab === 'income_statement') loadIncomeStatement();
+    else if (tab === 'balance_sheet') loadBalanceSheet();
+    else if (tab === 'vat_summary') loadVatSummary();
+  };
+
   const handleQuickDateRange = (range: 'today' | 'week' | 'month' | 'quarter' | 'year') => {
     const today = new Date();
     const to = today.toISOString().split('T')[0];
@@ -619,6 +705,316 @@ export function Reports() {
           </div>
         </div>
       </div>
+
+      {/* Tab Navigation */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-1 flex gap-1 overflow-x-auto">
+        {[
+          { id: 'operational', icon: BarChart3, label: isRTL ? 'التقرير التشغيلي' : 'Operational' },
+          { id: 'trial_balance', icon: Scale, label: isRTL ? 'ميزان المراجعة' : 'Trial Balance' },
+          { id: 'income_statement', icon: BookOpen, label: isRTL ? 'قائمة الدخل' : 'Income Statement' },
+          { id: 'balance_sheet', icon: PieChart, label: isRTL ? 'الميزانية العمومية' : 'Balance Sheet' },
+          { id: 'vat_summary', icon: FileCheck, label: isRTL ? 'ملخص ضريبة القيمة المضافة' : 'VAT Summary' },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id as any)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                isActive
+                  ? 'bg-teal-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* VAT Month/Year filter (visible only in vat_summary tab) */}
+      {activeTab === 'vat_summary' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap items-center gap-4">
+          <span className="text-sm font-medium text-gray-700">{isRTL ? 'الشهر / السنة:' : 'Month / Year:'}</span>
+          <select
+            value={vatMonth}
+            onChange={(e) => setVatMonth(Number(e.target.value))}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+          >
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+              <option key={m} value={m}>
+                {new Date(2000, m - 1, 1).toLocaleString(isRTL ? 'ar-SA' : 'en-US', { month: 'long' })}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            value={vatYear}
+            onChange={(e) => setVatYear(Number(e.target.value))}
+            min={2020}
+            max={2030}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm w-24 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+          />
+          <button
+            onClick={loadVatSummary}
+            className="px-4 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition"
+          >
+            {isRTL ? 'تحميل' : 'Load'}
+          </button>
+        </div>
+      )}
+
+      {/* Financial Reports Loading */}
+      {financialLoading && activeTab !== 'operational' && (
+        <div className="flex items-center justify-center py-16">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="mt-3 text-gray-500 text-sm">{isRTL ? 'جاري تحميل البيانات...' : 'Loading data...'}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Trial Balance */}
+      {activeTab === 'trial_balance' && !financialLoading && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Scale className="w-5 h-5 text-teal-600" />
+              {isRTL ? 'ميزان المراجعة' : 'Trial Balance'}
+            </h3>
+            <span className="text-sm text-gray-500">{isRTL ? `${dateFrom} — ${dateTo}` : `${dateFrom} — ${dateTo}`}</span>
+          </div>
+          {trialBalance.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Scale className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <p>{isRTL ? 'لا توجد قيود محاسبية في هذه الفترة' : 'No journal entries in this period'}</p>
+              <button onClick={loadTrialBalance} className="mt-3 text-teal-600 text-sm hover:underline">
+                {isRTL ? 'إعادة التحميل' : 'Reload'}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">{isRTL ? 'الكود' : 'Code'}</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">{isRTL ? 'اسم الحساب' : 'Account Name'}</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'رصيد الافتتاح مدين' : 'Opening Debit'}</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'رصيد الافتتاح دائن' : 'Opening Credit'}</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'حركة مدين' : 'Period Debit'}</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'حركة دائن' : 'Period Credit'}</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'رصيد ختامي مدين' : 'Closing Debit'}</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-700">{isRTL ? 'رصيد ختامي دائن' : 'Closing Credit'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trialBalance.map((row: any, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-2.5 px-4 font-mono text-gray-600">{row.account_code}</td>
+                        <td className="py-2.5 px-4 text-gray-900">{isRTL ? (row.account_name_ar || row.account_name) : row.account_name}</td>
+                        <td className="py-2.5 px-4 text-right text-gray-700">{formatCurrency(row.opening_debit || 0)}</td>
+                        <td className="py-2.5 px-4 text-right text-gray-700">{formatCurrency(row.opening_credit || 0)}</td>
+                        <td className="py-2.5 px-4 text-right text-blue-700 font-medium">{formatCurrency(row.period_debit || 0)}</td>
+                        <td className="py-2.5 px-4 text-right text-blue-700 font-medium">{formatCurrency(row.period_credit || 0)}</td>
+                        <td className="py-2.5 px-4 text-right text-teal-700 font-bold">{formatCurrency(row.closing_debit || 0)}</td>
+                        <td className="py-2.5 px-4 text-right text-teal-700 font-bold">{formatCurrency(row.closing_credit || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                      <td colSpan={2} className="py-3 px-4 text-gray-900">{isRTL ? 'الإجمالي' : 'Total'}</td>
+                      <td className="py-3 px-4 text-right text-gray-900">{formatCurrency(trialBalance.reduce((s, r) => s + (r.opening_debit || 0), 0))}</td>
+                      <td className="py-3 px-4 text-right text-gray-900">{formatCurrency(trialBalance.reduce((s, r) => s + (r.opening_credit || 0), 0))}</td>
+                      <td className="py-3 px-4 text-right text-blue-900">{formatCurrency(trialBalance.reduce((s, r) => s + (r.period_debit || 0), 0))}</td>
+                      <td className="py-3 px-4 text-right text-blue-900">{formatCurrency(trialBalance.reduce((s, r) => s + (r.period_credit || 0), 0))}</td>
+                      <td className="py-3 px-4 text-right text-teal-900">{formatCurrency(trialBalance.reduce((s, r) => s + (r.closing_debit || 0), 0))}</td>
+                      <td className="py-3 px-4 text-right text-teal-900">{formatCurrency(trialBalance.reduce((s, r) => s + (r.closing_credit || 0), 0))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              {(() => {
+                const totalDr = trialBalance.reduce((s, r) => s + (r.closing_debit || 0), 0);
+                const totalCr = trialBalance.reduce((s, r) => s + (r.closing_credit || 0), 0);
+                const balanced = Math.abs(totalDr - totalCr) < 0.01;
+                return (
+                  <div className={`mt-4 flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${balanced ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                    {balanced
+                      ? (isRTL ? 'الميزان متوازن - المدين يساوي الدائن' : 'Trial Balance is BALANCED — Debit equals Credit')
+                      : (isRTL ? `الميزان غير متوازن - الفرق: ${formatCurrency(Math.abs(totalDr - totalCr))}` : `Trial Balance NOT BALANCED — Difference: ${formatCurrency(Math.abs(totalDr - totalCr))}`)}
+                  </div>
+                );
+              })()}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Income Statement */}
+      {activeTab === 'income_statement' && !financialLoading && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-2xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-teal-600" />
+              {isRTL ? 'قائمة الدخل' : 'Income Statement'}
+            </h3>
+            <span className="text-sm text-gray-500">{dateFrom} — {dateTo}</span>
+          </div>
+          {!incomeStatement ? (
+            <div className="text-center py-12 text-gray-400">
+              <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <p>{isRTL ? 'لا توجد بيانات' : 'No data available'}</p>
+              <button onClick={loadIncomeStatement} className="mt-3 text-teal-600 text-sm hover:underline">
+                {isRTL ? 'إعادة التحميل' : 'Reload'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {[
+                { label: isRTL ? 'إجمالي المبيعات' : 'Total Revenue', value: incomeStatement.revenue, bold: false, color: 'text-teal-700' },
+                { label: isRTL ? 'ضريبة القيمة المضافة (مبيعات)' : 'VAT Collected', value: incomeStatement.vat_collected, bold: false, color: 'text-gray-500', indent: true },
+                { label: isRTL ? 'تكلفة البضاعة المباعة' : 'Cost of Goods Sold (COGS)', value: incomeStatement.cogs, bold: false, color: 'text-red-600', indent: true },
+                { label: isRTL ? 'إجمالي الربح' : 'Gross Profit', value: incomeStatement.gross_profit, bold: true, separator: true, color: incomeStatement.gross_profit >= 0 ? 'text-emerald-700' : 'text-red-700' },
+                { label: isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses', value: incomeStatement.operating_expenses, bold: false, color: 'text-red-600', indent: true },
+                { label: isRTL ? 'مصاريف التسويق' : 'Marketing Expenses', value: incomeStatement.marketing_expenses, bold: false, color: 'text-red-600', indent: true },
+                { label: isRTL ? 'رواتب الموظفين' : 'Employee Salaries', value: incomeStatement.salaries, bold: false, color: 'text-red-600', indent: true },
+                { label: isRTL ? 'العمولات' : 'Commissions', value: incomeStatement.commissions, bold: false, color: 'text-red-600', indent: true },
+                { label: isRTL ? 'صافي النشاط التشغيلي' : 'Operating Net Profit', value: incomeStatement.operating_net, bold: true, separator: true, color: incomeStatement.operating_net >= 0 ? 'text-emerald-700' : 'text-red-700' },
+                { label: isRTL ? 'إهلاك الأصول الثابتة' : 'Depreciation', value: incomeStatement.depreciation, bold: false, color: 'text-red-600', indent: true },
+                { label: isRTL ? 'صافي الربح المحاسبي' : 'Net Profit (Accounting)', value: incomeStatement.net_profit, bold: true, separator: true, color: incomeStatement.net_profit >= 0 ? 'text-emerald-700' : 'text-red-700', large: true },
+              ].map((row, i) => (
+                <div key={i}>
+                  {row.separator && <div className="border-t border-gray-200 my-1" />}
+                  <div className={`flex items-center justify-between py-2.5 ${row.indent ? 'pl-6' : ''} ${row.separator ? 'bg-gray-50 px-3 rounded-lg' : 'px-3'}`}>
+                    <span className={`text-sm ${row.bold ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{row.label}</span>
+                    <span className={`font-mono ${row.large ? 'text-lg' : 'text-sm'} font-bold ${row.color}`}>
+                      {formatCurrency(Math.abs(row.value || 0))}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-3 gap-4">
+                <div className="text-center bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">{isRTL ? 'هامش إجمالي الربح' : 'Gross Margin'}</p>
+                  <p className="text-base font-bold text-teal-700">{formatPercent(incomeStatement.gross_margin || 0)}</p>
+                </div>
+                <div className="text-center bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">{isRTL ? 'هامش التشغيل' : 'Operating Margin'}</p>
+                  <p className="text-base font-bold text-blue-700">{formatPercent(incomeStatement.operating_margin || 0)}</p>
+                </div>
+                <div className="text-center bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">{isRTL ? 'هامش الربح الصافي' : 'Net Margin'}</p>
+                  <p className={`text-base font-bold ${(incomeStatement.net_margin || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{formatPercent(incomeStatement.net_margin || 0)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Balance Sheet */}
+      {activeTab === 'balance_sheet' && !financialLoading && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <PieChart className="w-5 h-5 text-teal-600" />
+              {isRTL ? 'الميزانية العمومية' : 'Balance Sheet'}
+            </h3>
+            <span className="text-sm text-gray-500">{isRTL ? `كما في: ${dateTo}` : `As of: ${dateTo}`}</span>
+          </div>
+          {!balanceSheet ? (
+            <div className="text-center py-12 text-gray-400">
+              <PieChart className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <p>{isRTL ? 'لا توجد بيانات' : 'No data available'}</p>
+              <button onClick={loadBalanceSheet} className="mt-3 text-teal-600 text-sm hover:underline">
+                {isRTL ? 'إعادة التحميل' : 'Reload'}
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Assets */}
+              <div>
+                <h4 className="text-base font-bold text-gray-800 mb-3 pb-2 border-b border-gray-200">{isRTL ? 'الأصول' : 'Assets'}</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm py-1.5 px-3 bg-blue-50 rounded"><span className="text-gray-700">{isRTL ? 'النقد والصندوق' : 'Cash & Register'}</span><span className="font-bold text-blue-800">{formatCurrency(balanceSheet.assets?.cash || 0)}</span></div>
+                  <div className="flex justify-between text-sm py-1.5 px-3"><span className="text-gray-600">{isRTL ? 'الذمم المدينة' : 'Accounts Receivable'}</span><span className="font-medium">{formatCurrency(balanceSheet.assets?.accounts_receivable || 0)}</span></div>
+                  <div className="flex justify-between text-sm py-1.5 px-3 bg-gray-50 rounded"><span className="text-gray-600">{isRTL ? 'المخزون' : 'Inventory'}</span><span className="font-medium">{formatCurrency(balanceSheet.assets?.inventory || 0)}</span></div>
+                  <div className="flex justify-between text-sm py-1.5 px-3"><span className="text-gray-600">{isRTL ? 'الأصول الثابتة (صافي)' : 'Fixed Assets (Net)'}</span><span className="font-medium">{formatCurrency(balanceSheet.assets?.fixed_assets_net || 0)}</span></div>
+                  <div className="flex justify-between text-sm py-2 px-3 bg-teal-50 rounded-lg border border-teal-200 font-bold"><span className="text-teal-900">{isRTL ? 'إجمالي الأصول' : 'Total Assets'}</span><span className="text-teal-900">{formatCurrency(balanceSheet.assets?.total || 0)}</span></div>
+                </div>
+              </div>
+
+              {/* Liabilities + Equity */}
+              <div>
+                <h4 className="text-base font-bold text-gray-800 mb-3 pb-2 border-b border-gray-200">{isRTL ? 'الخصوم وحقوق الملكية' : 'Liabilities & Equity'}</h4>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1">{isRTL ? 'الخصوم' : 'Liabilities'}</p>
+                  <div className="flex justify-between text-sm py-1.5 px-3 bg-red-50 rounded"><span className="text-gray-700">{isRTL ? 'الذمم الدائنة' : 'Accounts Payable'}</span><span className="font-bold text-red-700">{formatCurrency(balanceSheet.liabilities?.accounts_payable || 0)}</span></div>
+                  <div className="flex justify-between text-sm py-1.5 px-3"><span className="text-gray-600">{isRTL ? 'ضريبة القيمة المضافة المستحقة' : 'VAT Payable'}</span><span className="font-medium">{formatCurrency(balanceSheet.liabilities?.vat_payable || 0)}</span></div>
+                  <div className="flex justify-between text-sm py-1.5 px-3 bg-gray-50 rounded font-semibold"><span className="text-gray-700">{isRTL ? 'إجمالي الخصوم' : 'Total Liabilities'}</span><span>{formatCurrency(balanceSheet.liabilities?.total || 0)}</span></div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-3">{isRTL ? 'حقوق الملكية' : 'Equity'}</p>
+                  <div className="flex justify-between text-sm py-1.5 px-3 bg-emerald-50 rounded"><span className="text-gray-700">{isRTL ? 'رأس مال الشركاء' : 'Partner Capital'}</span><span className="font-bold text-emerald-700">{formatCurrency(balanceSheet.equity?.partner_capital || 0)}</span></div>
+                  <div className="flex justify-between text-sm py-1.5 px-3"><span className="text-gray-600">{isRTL ? 'الأرباح المحتجزة' : 'Retained Earnings'}</span><span className="font-medium">{formatCurrency(balanceSheet.equity?.retained_earnings || 0)}</span></div>
+                  <div className="flex justify-between text-sm py-1.5 px-3 bg-gray-50 rounded font-semibold"><span className="text-gray-700">{isRTL ? 'إجمالي حقوق الملكية' : 'Total Equity'}</span><span>{formatCurrency(balanceSheet.equity?.total || 0)}</span></div>
+                  <div className={`flex justify-between text-sm py-2 px-3 rounded-lg border font-bold ${balanceSheet.check_balanced ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
+                    <span>{isRTL ? 'الميزانية متوازنة؟' : 'Balanced?'}</span>
+                    <span>{balanceSheet.check_balanced ? (isRTL ? 'نعم ✓' : 'Yes ✓') : (isRTL ? 'لا ✗' : 'No ✗')}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VAT Summary */}
+      {activeTab === 'vat_summary' && !financialLoading && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <FileCheck className="w-5 h-5 text-teal-600" />
+              {isRTL ? 'ملخص ضريبة القيمة المضافة' : 'VAT Summary'}
+            </h3>
+            <span className="text-sm text-gray-500">
+              {new Date(vatYear, vatMonth - 1, 1).toLocaleString(isRTL ? 'ar-SA' : 'en-US', { month: 'long', year: 'numeric' })}
+            </span>
+          </div>
+          {!vatSummary ? (
+            <div className="text-center py-12 text-gray-400">
+              <FileCheck className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <p>{isRTL ? 'اختر الشهر والسنة واضغط تحميل' : 'Select month & year then click Load'}</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="p-4 bg-teal-50 rounded-xl border border-teal-100">
+                <p className="text-xs text-teal-600 font-medium uppercase tracking-wide mb-1">{isRTL ? 'ضريبة المخرجات (مبيعات)' : 'Output VAT (Sales)'}</p>
+                <p className="text-2xl font-bold text-teal-900">{formatCurrency(vatSummary.output_vat || 0)}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{isRTL ? 'ضريبة المدخلات (مشتريات)' : 'Input VAT (Purchases)'}</p>
+                <div className="flex justify-between text-sm py-2 px-3 bg-gray-50 rounded"><span className="text-gray-600">{isRTL ? 'خاضعة للضريبة (15%)' : 'Standard Rate (15%)'}</span><span className="font-medium">{formatCurrency(vatSummary.input_vat_standard || 0)}</span></div>
+                <div className="flex justify-between text-sm py-2 px-3 bg-gray-50 rounded"><span className="text-gray-600">{isRTL ? 'الصفر بالمائة' : 'Zero-Rated'}</span><span className="font-medium">{formatCurrency(vatSummary.input_vat_zero || 0)}</span></div>
+                <div className="flex justify-between text-sm py-2 px-3 bg-gray-50 rounded"><span className="text-gray-600">{isRTL ? 'معفاة' : 'Exempt'}</span><span className="font-medium">{formatCurrency(vatSummary.input_vat_exempt || 0)}</span></div>
+              </div>
+              <div className={`flex items-center justify-between p-4 rounded-xl border-2 font-bold text-lg ${
+                vatSummary.is_refund
+                  ? 'bg-blue-50 border-blue-300 text-blue-900'
+                  : 'bg-orange-50 border-orange-300 text-orange-900'
+              }`}>
+                <span>{vatSummary.is_refund ? (isRTL ? 'مبلغ مستحق الاسترداد' : 'VAT Refund Due') : (isRTL ? 'صافي الضريبة المستحقة' : 'Net VAT Payable')}</span>
+                <span>{formatCurrency(Math.abs(vatSummary.net_vat_payable || 0))}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Operational Reports (existing content) */}
+      {activeTab === 'operational' && <>
 
       {/* 3-Level Profit Structure */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -1200,6 +1596,7 @@ export function Reports() {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }

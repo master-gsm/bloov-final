@@ -199,18 +199,6 @@ class EnhancedSyncManager {
       if (serverResponse) {
         console.log(`    [Operation] Updating local cache...`);
         await this.updateLocalRecordWithServerData(table, data.id, serverResponse);
-
-        if (table === 'sales' && op === 'insert') {
-          const saleStatus = serverResponse?.status || 'unknown';
-          console.log(`    [Sale] Synced: id=${data.id}, status=${saleStatus}`);
-
-          if (saleStatus === 'draft') {
-            console.log(`    [Sale] Sale is still draft. Confirming...`);
-            await this.confirmSaleAfterSync(data.id, serverResponse);
-          } else {
-            console.log(`    [Sale] Sale already confirmed with status: ${saleStatus}`);
-          }
-        }
       }
 
       console.log(`    [Operation] ✅ Sync completed for ${table}/${data.id}`);
@@ -265,6 +253,25 @@ class EnhancedSyncManager {
     ];
 
     if (IMMUTABLE_TABLES.includes(table)) {
+      if (table === 'sales') {
+        const idempotencyKey = data.idempotency_key || `OFFLINE-SALE-${data.id}`;
+        const payload = { ...data, idempotency_key: idempotencyKey };
+
+        const { data: result, error: rpcError } = await supabase
+          .rpc('create_sale_atomic', { p_payload: payload });
+
+        if (rpcError) throw rpcError;
+        if (!result?.success) throw new Error(result?.error || 'Atomic sale creation failed');
+
+        const { data: freshSale } = await supabase
+          .from('sales')
+          .select('*')
+          .eq('id', result.sale_id)
+          .maybeSingle();
+
+        return freshSale || { id: result.sale_id, sale_number: result.sale_number, status: 'confirmed' };
+      }
+
       const { data: insertedData, error } = await supabase
         .from(table as any)
         .insert([data])
@@ -273,38 +280,15 @@ class EnhancedSyncManager {
 
       if (error) {
         if (error.code === '23505') {
-          console.warn(`Record already exists in ${table}, attempting update`);
-          const { id, ...updateData } = data;
-          const { data: updatedData, error: updateError } = await supabase
+          console.warn(`Record already exists in ${table}, fetching existing`);
+          const { data: existing } = await supabase
             .from(table as any)
-            .update(updateData)
-            .eq('id', id)
             .select('*')
+            .eq('id', data.id)
             .maybeSingle();
-
-          if (updateError) throw updateError;
-          return updatedData;
+          return existing;
         } else {
           throw error;
-        }
-      }
-
-      if (table === 'sales' && insertedData) {
-        console.log(`      [Sales] Fetching fresh record...`);
-        const { data: freshSale, error: fetchError } = await supabase
-          .from('sales')
-          .select('*')
-          .eq('id', insertedData.id)
-          .maybeSingle();
-
-        if (fetchError) {
-          console.warn(`      [Sales] Failed to fetch fresh record:`, fetchError);
-          return insertedData;
-        }
-
-        if (freshSale) {
-          console.log(`      [Sales] Fresh record loaded: sale_number=${freshSale.sale_number}`);
-          return freshSale;
         }
       }
 

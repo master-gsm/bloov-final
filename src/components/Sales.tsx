@@ -441,109 +441,69 @@ export function Sales() {
     try {
       const isCredit = paymentMethod === 'credit';
       const saleId = crypto.randomUUID();
+      const idempotencyKey = `SALE-${user?.id}-${Date.now()}`;
 
-      // 1. Build sale payload
-      const salePayload = {
+      const atomicPayload = {
         id: saleId,
+        idempotency_key: idempotencyKey,
         branch_id: userBranchId,
-        customer_id: selectedCustomer && selectedCustomer.trim() !== '' ? selectedCustomer : null,
+        customer_id: selectedCustomer && selectedCustomer.trim() !== '' ? selectedCustomer : '',
         customer_name: !selectedCustomer || selectedCustomer.trim() === ''
-          ? (walkinName && walkinName.trim() !== '' ? walkinName : null)
-          : null,
+          ? (walkinName && walkinName.trim() !== '' ? walkinName : '')
+          : '',
         customer_phone: !selectedCustomer || selectedCustomer.trim() === ''
-          ? (walkinPhone && walkinPhone.trim() !== '' ? walkinPhone : null)
-          : null,
+          ? (walkinPhone && walkinPhone.trim() !== '' ? walkinPhone : '')
+          : '',
         sale_date: new Date().toISOString(),
-        status: 'draft',
         subtotal,
         tax: vatAmount,
         discount: saleDiscount,
         total,
-        paid_amount: isCredit ? 0 : total,
         payment_status: isCredit ? 'unpaid' : 'paid',
         payment_method: paymentMethod,
         delivery_charge: deliveryCharge,
-        delivery_address: deliveryAddress && deliveryAddress.trim() !== '' ? deliveryAddress : null,
-        card_message: cardMessage && cardMessage.trim() !== '' ? cardMessage : null,
-        notes: saleNotes && saleNotes.trim() !== '' ? saleNotes : null,
+        delivery_address: deliveryAddress || '',
+        card_message: cardMessage || '',
+        notes: saleNotes || '',
         source: saleSource,
         salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
         salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
         buyer_type: buyerType,
-        company_name: buyerType === 'business' && companyName.trim() ? companyName.trim() : null,
-        company_vat_number: buyerType === 'business' && companyVatNumber.trim() ? companyVatNumber.trim() : null,
-        company_address: buyerType === 'business' && companyAddress.trim() ? companyAddress.trim() : null,
+        company_name: buyerType === 'business' ? companyName : '',
+        company_vat_number: buyerType === 'business' ? companyVatNumber : '',
+        company_address: buyerType === 'business' ? companyAddress : '',
         salesperson_id: selectedEmployee,
         created_by: user?.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      // 2. Build sale items
-      const saleItemsPayload = saleItems.map(() => ({
-        id: crypto.randomUUID(),
-        sale_id: saleId,
-        product_id: '',
-        quantity: 0,
-        unit_price: 0,
-        purchase_price: 0,
-        discount: 0,
-        total: 0,
-        created_at: new Date().toISOString(),
-      }));
-
-      saleItems.forEach((item, i) => {
-        saleItemsPayload[i] = {
-          id: crypto.randomUUID(),
-          sale_id: saleId,
+        items: saleItems.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
           unit_price: item.unit_price,
           purchase_price: item.purchase_price || 0,
           discount: item.discount,
           total: item.total,
-          created_at: new Date().toISOString(),
-        };
-      });
+        })),
+      };
 
-      // 3. Direct insert to Supabase
-      console.log('[Sales] Direct insert to Supabase...');
-      const { data: insertedSale, error: saleError } = await supabase
-        .from('sales')
-        .insert([salePayload])
-        .select('*')
-        .maybeSingle();
+      const { data: result, error: rpcError } = await supabase
+        .rpc('create_sale_atomic', { p_payload: atomicPayload });
 
-      if (saleError) throw new Error(saleError.message);
-      if (!insertedSale) throw new Error('No response from server');
+      if (rpcError) throw new Error(rpcError.message);
+      if (!result?.success) throw new Error(result?.error || 'Sale creation failed');
 
-      // 4. Insert sale items
-      if (saleItemsPayload.length > 0) {
-        const { error: itemsError } = await supabase
-          .from('sale_items')
-          .insert(saleItemsPayload);
-        if (itemsError) throw new Error(itemsError.message);
-      }
+      const finalSaleId = result.sale_id;
+      const finalSaleNumber = result.sale_number;
 
-      // 5. Confirm the sale
-      const { data: confirmedSale, error: confirmError } = await supabase
-        .from('sales')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', insertedSale.id)
-        .select('*')
-        .maybeSingle();
-
-      if (confirmError) throw new Error(confirmError.message);
-
-      const finalSale = confirmedSale || insertedSale;
-      console.log('[Sales] Sale confirmed:', finalSale.sale_number, finalSale.status);
-
-      // 6. Update UI state
       await loadSalesAndSettings();
+
+      const { data: fetchedSale } = await supabase
+        .from('sales')
+        .select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)')
+        .eq('id', finalSaleId)
+        .maybeSingle();
 
       const saleItemsData = saleItems.map((item, i) => ({
         id: `temp-${i}`,
-        sale_id: saleId,
+        sale_id: finalSaleId,
         product_id: item.product_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
@@ -557,7 +517,7 @@ export function Sales() {
         },
       }));
 
-      setPrintingSale(finalSale as any);
+      setPrintingSale(fetchedSale as any || { id: finalSaleId, sale_number: finalSaleNumber, status: 'confirmed', subtotal, tax: vatAmount, discount: saleDiscount, total } as any);
       setPrintItems(saleItemsData);
       setShowForm(false);
 

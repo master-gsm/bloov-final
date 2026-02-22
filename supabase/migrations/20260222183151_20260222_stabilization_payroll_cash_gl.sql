@@ -1,0 +1,243 @@
+/*
+  # Stabilization Patch 3: Payroll — Cash Register Movement + GL Journal Entry on Pay
+
+  ## Summary
+  Rewrites pay_payroll_run() to:
+    1. Create expense records for salaries AND commissions
+    2. Create cash_transaction record (deducts from open cash register)
+    3. Create GL journal entry: Dr Salaries (6100) + Dr Commissions (6100) → Cr Cash (1110)
+    4. Update employee_commissions.is_paid = true
+    5. Update employee_loans.remaining_balance
+    6. Mark payroll as paid
+
+  ## Account codes used (existing in Chart of Accounts)
+  - 1110: Cash and Cash Equivalents
+  - 6100: Salaries and Wages
+  - 2130: VAT Payable
+*/
+
+-- Add commission account under expenses if missing
+INSERT INTO accounts (id, code, name, name_ar, type, is_active, created_at, updated_at)
+VALUES
+  (gen_random_uuid(), '6110', 'Commissions Expense', 'مصروف العمولات', 'Expense', true, now(), now())
+ON CONFLICT (code) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION pay_payroll_run(
+  p_run_id         uuid,
+  p_payment_method text DEFAULT 'bank_transfer'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_run             payroll_runs%ROWTYPE;
+  v_item            payroll_items%ROWTYPE;
+  v_expense_number  text;
+  v_salary_total    numeric := 0;
+  v_commission_total numeric := 0;
+  v_net_total       numeric := 0;
+  v_register_id     uuid;
+  v_loan_id         uuid;
+  v_tx_number       text;
+  v_je_id           uuid;
+  v_je_number       text;
+  v_cash_account_id       uuid;
+  v_salary_account_id     uuid;
+  v_commission_account_id uuid;
+  v_expense_seq     int := 1;
+BEGIN
+  SELECT * INTO v_run FROM payroll_runs WHERE id = p_run_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Payroll run not found: %', p_run_id;
+  END IF;
+  IF v_run.status != 'approved' THEN
+    RAISE EXCEPTION 'Payroll run must be approved before payment (current: %)', v_run.status;
+  END IF;
+
+  PERFORM set_config('app.bypass_immutable', 'true', true);
+
+  SELECT id INTO v_cash_account_id       FROM accounts WHERE code = '1110' LIMIT 1;
+  SELECT id INTO v_salary_account_id     FROM accounts WHERE code = '6100' LIMIT 1;
+  SELECT id INTO v_commission_account_id FROM accounts WHERE code = '6110' LIMIT 1;
+
+  FOR v_item IN
+    SELECT * FROM payroll_items WHERE payroll_run_id = p_run_id
+  LOOP
+    SELECT 'EXP-' || TO_CHAR(now(), 'YYYYMMDD') || '-' || LPAD(v_expense_seq::text, 4, '0')
+    INTO v_expense_number;
+    v_expense_seq := v_expense_seq + 1;
+
+    IF COALESCE(v_item.net_salary, v_item.net_pay, 0) > 0 THEN
+      INSERT INTO expenses (
+        id, expense_number, category, description, description_ar,
+        amount, expense_date, payment_method, branch_id,
+        created_by, created_at
+      ) VALUES (
+        gen_random_uuid(), v_expense_number, 'salaries',
+        'Payroll: ' || TO_CHAR(make_date(v_run.period_year, v_run.period_month, 1), 'Month YYYY'),
+        'رواتب: ' || TO_CHAR(make_date(v_run.period_year, v_run.period_month, 1), 'Month YYYY'),
+        COALESCE(v_item.net_salary, v_item.net_pay, 0),
+        CURRENT_DATE, p_payment_method, v_run.branch_id,
+        v_run.created_by, now()
+      );
+      v_salary_total := v_salary_total + COALESCE(v_item.net_salary, v_item.net_pay, 0);
+    END IF;
+
+    IF COALESCE(v_item.commission_amount, v_item.commission_total, 0) > 0 THEN
+      SELECT 'EXP-' || TO_CHAR(now(), 'YYYYMMDD') || '-' || LPAD(v_expense_seq::text, 4, '0')
+      INTO v_expense_number;
+      v_expense_seq := v_expense_seq + 1;
+
+      INSERT INTO expenses (
+        id, expense_number, category, description, description_ar,
+        amount, expense_date, payment_method, branch_id,
+        created_by, created_at
+      ) VALUES (
+        gen_random_uuid(), v_expense_number, 'commissions',
+        'Commissions: ' || TO_CHAR(make_date(v_run.period_year, v_run.period_month, 1), 'Month YYYY'),
+        'عمولات: ' || TO_CHAR(make_date(v_run.period_year, v_run.period_month, 1), 'Month YYYY'),
+        COALESCE(v_item.commission_amount, v_item.commission_total, 0),
+        CURRENT_DATE, p_payment_method, v_run.branch_id,
+        v_run.created_by, now()
+      );
+      v_commission_total := v_commission_total + COALESCE(v_item.commission_amount, v_item.commission_total, 0);
+    END IF;
+
+    UPDATE employee_commissions
+    SET is_paid = true, status = 'approved', updated_at = now()
+    WHERE employee_id = v_item.employee_id
+      AND period_month = v_run.period_month
+      AND period_year  = v_run.period_year
+      AND is_paid = false;
+
+    IF COALESCE(v_item.loan_deduction, 0) > 0 THEN
+      SELECT id INTO v_loan_id
+      FROM employee_loans
+      WHERE employee_id = v_item.employee_id
+        AND status = 'active'
+        AND branch_id = v_run.branch_id
+      LIMIT 1;
+
+      IF v_loan_id IS NOT NULL THEN
+        UPDATE employee_loans
+        SET
+          remaining_balance = GREATEST(remaining_balance - v_item.loan_deduction, 0),
+          status = CASE
+            WHEN remaining_balance - v_item.loan_deduction <= 0 THEN 'completed'
+            ELSE status
+          END,
+          updated_at = now()
+        WHERE id = v_loan_id;
+      END IF;
+    END IF;
+
+    UPDATE employee_leaves
+    SET payroll_deducted = true, updated_at = now()
+    WHERE employee_id = v_item.employee_id
+      AND leave_type = 'unpaid'
+      AND status = 'approved'
+      AND payroll_deducted = false
+      AND EXTRACT(MONTH FROM start_date) = v_run.period_month
+      AND EXTRACT(YEAR  FROM start_date) = v_run.period_year;
+  END LOOP;
+
+  v_net_total := v_salary_total + v_commission_total;
+
+  IF p_payment_method IN ('cash', 'bank_transfer') THEN
+    SELECT id INTO v_register_id
+    FROM cash_registers
+    WHERE branch_id = v_run.branch_id AND status = 'open'
+    ORDER BY opened_at DESC
+    LIMIT 1;
+
+    IF v_register_id IS NOT NULL THEN
+      v_tx_number := 'CT-PAY-' || TO_CHAR(now(), 'YYYYMMDDHHMI') || '-' || SUBSTRING(p_run_id::text, 1, 6);
+
+      INSERT INTO cash_transactions (
+        id, register_id, branch_id, transaction_type,
+        amount, description, reference_id, reference_type,
+        transaction_number, created_by, created_at
+      ) VALUES (
+        gen_random_uuid(), v_register_id, v_run.branch_id, 'expense_out',
+        v_net_total,
+        'Payroll: ' || TO_CHAR(make_date(v_run.period_year, v_run.period_month, 1), 'Month YYYY'),
+        p_run_id, 'payroll_run',
+        v_tx_number, v_run.created_by, now()
+      );
+
+      UPDATE cash_registers
+      SET current_balance = current_balance - v_net_total,
+          updated_at = now()
+      WHERE id = v_register_id;
+    END IF;
+  END IF;
+
+  IF v_cash_account_id IS NOT NULL AND v_net_total > 0 THEN
+    v_je_id     := gen_random_uuid();
+    v_je_number := 'JE-PAY-' || TO_CHAR(now(), 'YYYYMMDD') || '-' || SUBSTRING(p_run_id::text, 1, 8);
+
+    INSERT INTO journal_entries (
+      id, entry_number, entry_date, description,
+      branch_id, reference_id, reference_type,
+      status, created_by, created_at, updated_at
+    ) VALUES (
+      v_je_id, v_je_number, CURRENT_DATE,
+      'Payroll payment: ' || TO_CHAR(make_date(v_run.period_year, v_run.period_month, 1), 'Month YYYY'),
+      v_run.branch_id, p_run_id, 'payroll_run',
+      'posted', v_run.created_by, now(), now()
+    );
+
+    IF v_salary_total > 0 AND v_salary_account_id IS NOT NULL THEN
+      INSERT INTO journal_lines (id, journal_entry_id, account_id, debit, credit, description, created_at)
+      VALUES (gen_random_uuid(), v_je_id, v_salary_account_id, v_salary_total, 0, 'Salaries paid', now());
+    END IF;
+
+    IF v_commission_total > 0 THEN
+      INSERT INTO journal_lines (id, journal_entry_id, account_id, debit, credit, description, created_at)
+      VALUES (gen_random_uuid(), v_je_id, COALESCE(v_commission_account_id, v_salary_account_id), v_commission_total, 0, 'Commissions paid', now());
+    END IF;
+
+    INSERT INTO journal_lines (id, journal_entry_id, account_id, debit, credit, description, created_at)
+    VALUES (gen_random_uuid(), v_je_id, v_cash_account_id, 0, v_net_total, 'Cash out: payroll', now());
+  END IF;
+
+  UPDATE payroll_runs SET
+    status         = 'paid',
+    payment_method = p_payment_method,
+    paid_at        = now(),
+    approved_at    = COALESCE(approved_at, now()),
+    updated_at     = now()
+  WHERE id = p_run_id;
+
+  PERFORM set_config('app.bypass_immutable', 'false', true);
+
+  RETURN jsonb_build_object(
+    'success',          true,
+    'salary_total',     v_salary_total,
+    'commission_total', v_commission_total,
+    'net_total',        v_net_total,
+    'cash_registered',  (v_register_id IS NOT NULL)
+  );
+
+EXCEPTION WHEN OTHERS THEN
+  PERFORM set_config('app.bypass_immutable', 'false', true);
+  RAISE;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION pay_payroll_run(uuid, text) TO authenticated;
+
+-- Fix get_trial_balance and get_balance_sheet to use correct column name 'type'
+-- (journal_lines column check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'journal_lines' AND column_name = 'debit'
+  ) THEN
+    ALTER TABLE journal_lines ADD COLUMN debit numeric DEFAULT 0;
+    ALTER TABLE journal_lines ADD COLUMN credit numeric DEFAULT 0;
+  END IF;
+END $$;

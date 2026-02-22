@@ -29,6 +29,7 @@ import { AIAnalysis } from './components/AIAnalysis';
 import Branches from './components/Branches';
 import Backup from './components/Backup';
 import FixedAssets from './components/FixedAssets';
+import { SyncQueue } from './components/SyncQueue';
 import { supabase } from './lib/supabase';
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
@@ -52,6 +53,7 @@ const SECTION_PERMISSIONS: Record<string, string[]> = {
   backup: ['admin'],
   users: ['admin'],
   settings: ['admin'],
+  syncqueue: ['admin', 'accountant', 'salesperson', 'viewer'],
 };
 
 function AppContent() {
@@ -142,6 +144,7 @@ function AppContent() {
       case 'backup': return <Backup />;
       case 'users': return <UserManagement />;
       case 'settings': return <Settings />;
+      case 'syncqueue': return <SyncQueue />;
       default: return <Dashboard />;
     }
   };
