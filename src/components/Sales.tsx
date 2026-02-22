@@ -8,7 +8,6 @@ import { useOfflineFirst } from '../contexts/OfflineFirstContext';
 import { supabase } from '../lib/supabase';
 import { indexedDBManager } from '../lib/offline/indexedDBManager';
 import { enhancedSyncManager } from '../lib/offline/enhancedSyncManager';
-import { HybridSalesWrite } from '../lib/hybridSalesWrite';
 import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, CreditCard as Edit, RotateCcw } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
 import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
@@ -485,33 +484,41 @@ export function Sales() {
         };
       });
 
-      // 3. Use Hybrid Write Path
-      const writeResult = await HybridSalesWrite.createSale(
-        isOnline,
-        salePayload as any,
-        saleItemsPayload as any
-      );
+      // 3. Direct insert to Supabase
+      console.log('[Sales] Direct insert to Supabase...');
+      const { data: insertedSale, error: saleError } = await supabase
+        .from('sales')
+        .insert([salePayload])
+        .select('*')
+        .maybeSingle();
 
-      if (!writeResult.success) {
-        setError(writeResult.error || 'Failed to create sale');
-        setSubmitting(false);
-        return;
+      if (saleError) throw new Error(saleError.message);
+      if (!insertedSale) throw new Error('No response from server');
+
+      // 4. Insert sale items
+      if (saleItemsPayload.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('sale_items')
+          .insert(saleItemsPayload);
+        if (itemsError) throw new Error(itemsError.message);
       }
 
-      console.log(`[Sales] Sale created (${writeResult.mode}):`, {
-        saleId: writeResult.saleId,
-        status: writeResult.status,
-        invoiceNumber: writeResult.invoiceNumber,
-        mode: writeResult.mode,
-      });
+      // 5. Confirm the sale
+      const { data: confirmedSale, error: confirmError } = await supabase
+        .from('sales')
+        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+        .eq('id', insertedSale.id)
+        .select('*')
+        .maybeSingle();
 
-      // 4. Update UI state
-      const displaySale = {
-        ...salePayload,
-        sale_number: writeResult.invoiceNumber || salePayload.sale_number,
-        status: writeResult.status,
-      } as any;
-      setSales([displaySale, ...sales]);
+      if (confirmError) throw new Error(confirmError.message);
+
+      const finalSale = confirmedSale || insertedSale;
+      console.log('[Sales] Sale confirmed:', finalSale.sale_number, finalSale.status);
+
+      // 6. Update UI state
+      await loadSalesAndSettings();
+
       const saleItemsData = saleItems.map((item, i) => ({
         id: `temp-${i}`,
         sale_id: saleId,
@@ -528,11 +535,10 @@ export function Sales() {
         },
       }));
 
-      setPrintingSale(salePayload as any);
+      setPrintingSale(finalSale as any);
       setPrintItems(saleItemsData);
       setShowForm(false);
 
-      // Clear form
       setSaleItems([]);
       setSelectedCustomer('');
       setSelectedEmployee('');
@@ -542,10 +548,6 @@ export function Sales() {
       setDeliveryCharge(0);
       setCardMessage('');
       setSaleNotes('');
-
-      // Don't reload immediately - let sync engine handle it
-      // loadSalesAndSettings() will be called by sync completion listener
-      console.log('[Sales] Sale queued for sync. Will reload when sync completes.');
     } catch (err: any) {
       setError(err.message || (isRTL ? 'حدث خطأ' : 'An error occurred'));
       console.error('Sale creation error:', err);
