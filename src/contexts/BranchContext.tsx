@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { AlertTriangle } from 'lucide-react';
 
 interface Branch {
   id: string;
@@ -14,7 +15,7 @@ interface Branch {
 
 interface BranchContextType {
   currentBranch: Branch | null;
-  currentBranchId: string | null;
+  currentBranchId: string;
   isAdmin: boolean;
   allBranches: Branch[];
   selectedBranchFilter: string | null;
@@ -33,6 +34,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [branchError, setBranchError] = useState<string | null>(null);
 
   const loadBranchData = async () => {
     if (!user) {
@@ -41,9 +43,11 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       setCurrentBranchId(null);
       setIsAdmin(false);
       setAllBranches([]);
+      setBranchError(null);
       setLoading(false);
       return;
     }
+    setBranchError(null);
 
     console.log('[BranchContext] Loading branch data for user.id:', user.id);
 
@@ -63,7 +67,8 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       console.log('[BranchContext] user.branch_id:', userData?.branch_id ?? 'NULL');
 
       if (!userData) {
-        console.warn('[BranchContext] userData is null — RLS may be blocking access or user not in users table. Falling back to no-branch mode.');
+        console.warn('[BranchContext] userData is null — RLS may be blocking access or user not in users table.');
+        setBranchError('لا يمكن تحديد بيانات المستخدم. يرجى التواصل مع المسؤول.');
         setLoading(false);
         return;
       }
@@ -87,13 +92,14 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         setAllBranches(branchList);
 
         const adminBranchId = userData.branch_id || (branchList[0]?.id ?? null);
+        if (!adminBranchId) {
+          setBranchError('لا يوجد فرع نشط في النظام. يرجى إنشاء فرع أولاً قبل الدخول.');
+          setLoading(false);
+          return;
+        }
         setCurrentBranchId(adminBranchId);
         setCurrentBranch(null);
         console.log('[BranchContext] admin → currentBranchId set to:', adminBranchId);
-
-        if (!adminBranchId) {
-          console.warn('[BranchContext] Admin has NO branch_id and no branches found!');
-        }
       } else if (userData.branch_id) {
         setCurrentBranchId(userData.branch_id);
         console.log('[BranchContext] non-admin → currentBranchId set to:', userData.branch_id);
@@ -110,7 +116,10 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         setAllBranches(branch ? [branch as Branch] : []);
         setSelectedBranchFilter(userData.branch_id);
       } else {
-        console.warn('[BranchContext] Non-admin user has NO branch_id — all branch-filtered queries will return empty!');
+        console.warn('[BranchContext] Non-admin user has NO branch_id.');
+        setBranchError('لم يتم تعيين فرع لهذا المستخدم. يرجى التواصل مع المسؤول لتعيين الفرع.');
+        setLoading(false);
+        return;
       }
     } catch (err) {
       console.error('[BranchContext] Unexpected error:', err);
@@ -130,10 +139,32 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  if (!loading && branchError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
+          <div className="flex justify-center mb-4">
+            <div className="bg-red-100 rounded-full p-4">
+              <AlertTriangle className="w-10 h-10 text-red-600" />
+            </div>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">تعذّر تحديد الفرع</h2>
+          <p className="text-gray-600 mb-6">{branchError}</p>
+          <button
+            onClick={() => { setBranchError(null); loadBranchData(); }}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <BranchContext.Provider value={{
       currentBranch,
-      currentBranchId,
+      currentBranchId: currentBranchId as string,
       isAdmin,
       allBranches,
       selectedBranchFilter,

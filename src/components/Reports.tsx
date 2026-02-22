@@ -188,10 +188,12 @@ export function Reports() {
           .gte('purchase_date', startDateObj.toISOString())
           .lte('purchase_date', endDateObj.toISOString()),
 
-        // Operating expenses (for branch breakdown)
+        // Operating expenses (for branch breakdown) — reads from unified expenses table
         supabase
-          .from('operating_expenses')
-          .select('amount, branch_id'),
+          .from('expenses')
+          .select('amount, branch_id')
+          .eq('is_deleted', false)
+          .not('category', 'in', '(salaries,commissions,purchases)'),
 
         // Current inventory
         supabase
