@@ -27,7 +27,9 @@ export function Dashboard() {
     storeSales: 0,
     sallaSales: 0,
     totalPurchases: 0,
-    netProfit: 0,
+    grossProfit: 0,
+    operatingNet: 0,
+    accountingNet: 0,
     inventoryValue: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -58,15 +60,16 @@ export function Dashboard() {
         return sum + (item.quantity * (item.products?.purchase_price || 0));
       }, 0) || 0;
 
-      // Get all financial metrics from database - NO calculations in React
-      const netProfit = financialRes.data?.[0]?.net_profit || 0;
+      const financial = financialRes.data?.[0] || {};
 
       setStats({
         totalSales,
         storeSales,
         sallaSales,
         totalPurchases,
-        netProfit,
+        grossProfit: financial.gross_profit || 0,
+        operatingNet: financial.operating_net || 0,
+        accountingNet: financial.net_profit || 0,
         inventoryValue,
       });
     } catch (error) {
@@ -90,22 +93,22 @@ export function Dashboard() {
       color: 'from-blue-500 to-blue-600'
     },
     {
-      title: isRTL ? 'إجمالي المبيعات' : 'Total Revenue',
-      value: stats.totalSales,
+      title: isRTL ? 'إجمالي الربح' : 'Gross Profit',
+      value: stats.grossProfit,
       icon: DollarSign,
       color: 'from-green-500 to-green-600'
     },
     {
-      title: t('dashboard.totalPurchases'),
-      value: stats.totalPurchases,
-      icon: TrendingDown,
-      color: 'from-red-500 to-red-600'
+      title: isRTL ? 'صافي النشاط' : 'Operating Net',
+      value: stats.operatingNet,
+      icon: TrendingUp,
+      color: stats.operatingNet >= 0 ? 'from-blue-500 to-blue-600' : 'from-red-500 to-red-600'
     },
     {
-      title: t('dashboard.netProfit'),
-      value: stats.netProfit,
+      title: isRTL ? 'صافي الربح المحاسبي' : 'Accounting Net',
+      value: stats.accountingNet,
       icon: TrendingUp,
-      color: 'from-purple-500 to-purple-600'
+      color: stats.accountingNet >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'
     },
     {
       title: t('dashboard.inventory'),
@@ -184,7 +187,7 @@ export function Dashboard() {
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-bold text-teal-600">
-                      {formatCurrency((stats.netProfit * partner.share_percentage) / 100)}
+                      {formatCurrency((stats.operatingNet * partner.share_percentage) / 100)}
                     </p>
                     <p className="text-xs text-gray-500">{isRTL ? 'الفترة الحالية' : 'Current Period'}</p>
                   </div>

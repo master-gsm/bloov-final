@@ -19,6 +19,7 @@ import {
   Building2,
   DollarSign,
   Database,
+  Landmark,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,6 +32,7 @@ const MENU_ACCESS: Record<string, string[]> = {
   sales: ['admin', 'accountant', 'salesperson', 'viewer'],
   purchases: ['admin', 'accountant', 'viewer'],
   expenses: ['admin', 'accountant', 'viewer'],
+  fixedassets: ['admin', 'accountant', 'viewer'],
   products: ['admin', 'accountant', 'salesperson', 'viewer'],
   inventory: ['admin', 'accountant', 'salesperson', 'viewer'],
   customers: ['admin', 'accountant', 'viewer'],
@@ -56,6 +58,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'sales', icon: ShoppingCart, label: t('nav.sales') },
     { id: 'purchases', icon: ShoppingBag, label: t('nav.purchases') },
     { id: 'expenses', icon: Receipt, label: isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses' },
+    { id: 'fixedassets', icon: Landmark, label: isRTL ? 'الأصول الثابتة' : 'Fixed Assets' },
     { id: 'products', icon: Package, label: t('nav.products') },
     { id: 'inventory', icon: Warehouse, label: t('nav.inventory') },
     { id: 'customers', icon: Users, label: t('nav.customers') },

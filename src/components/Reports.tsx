@@ -31,8 +31,15 @@ interface ReportData {
   expenses: {
     total: number;
     operating: number;
-    setup: number;
+    salaries: number;
     count: number;
+  };
+  profitLevels: {
+    grossProfit: number;
+    operatingNet: number;
+    accountingNet: number;
+    depreciation: number;
+    fixedAssetsCost: number;
   };
   inventory: {
     totalValue: number;
@@ -93,7 +100,8 @@ export function Reports() {
   const [reportData, setReportData] = useState<ReportData>({
     sales: { total: 0, totalVAT: 0, totalWithoutVAT: 0, count: 0, totalCost: 0, grossProfit: 0, bySource: { store: 0, salla: 0 } },
     purchases: { total: 0, totalVAT: 0, totalWithoutVAT: 0, count: 0 },
-    expenses: { total: 0, operating: 0, setup: 0, count: 0 },
+    expenses: { total: 0, operating: 0, salaries: 0, count: 0 },
+    profitLevels: { grossProfit: 0, operatingNet: 0, accountingNet: 0, depreciation: 0, fixedAssetsCost: 0 },
     inventory: { totalValue: 0, totalQuantity: 0, lowStock: 0, outOfStock: 0 },
     wastage: { totalValue: 0, totalQuantity: 0, items: [] },
     slowMoving: [],
@@ -342,10 +350,17 @@ export function Reports() {
           count: purchasesRes.data?.length || 0
         },
         expenses: {
-          total: financial.total_operating_expenses + financial.total_setup_expenses + financial.total_employee_salaries || 0,
+          total: (financial.total_operating_expenses || 0) + (financial.total_employee_salaries || 0),
           operating: financial.total_operating_expenses || 0,
-          setup: financial.total_setup_expenses || 0,
+          salaries: financial.total_employee_salaries || 0,
           count: 0
+        },
+        profitLevels: {
+          grossProfit: financial.gross_profit || 0,
+          operatingNet: financial.operating_net || 0,
+          accountingNet: financial.net_profit || 0,
+          depreciation: financial.total_depreciation || 0,
+          fixedAssetsCost: financial.total_fixed_assets_cost || 0,
         },
         inventory: {
           totalValue: totalInventoryValue,
@@ -400,27 +415,27 @@ export function Reports() {
   const exportToExcel = () => {
     const workbook = XLSX.utils.book_new();
 
-    // Summary sheet
     const summaryData = [
       [isRTL ? 'التقرير المالي الشامل' : 'Comprehensive Financial Report'],
       [isRTL ? 'نظام بلوف المحاسبي' : 'BLOOV Accounting System'],
       [isRTL ? `الفترة: من ${dateFrom} إلى ${dateTo}` : `Period: From ${dateFrom} To ${dateTo}`],
       [],
       [isRTL ? 'المبيعات' : 'Sales', formatCurrency(reportData.sales.total)],
-      [isRTL ? 'ضريبة المبيعات' : 'Sales VAT', formatCurrency(reportData.sales.totalVAT)],
       [isRTL ? 'تكلفة البضاعة المباعة' : 'Cost of Goods Sold', formatCurrency(reportData.sales.totalCost)],
-      [isRTL ? 'الربح الإجمالي' : 'Gross Profit', formatCurrency(reportData.sales.grossProfit)],
-      [],
-      [isRTL ? 'المشتريات' : 'Purchases', formatCurrency(reportData.purchases.total)],
-      [isRTL ? 'ضريبة المشتريات' : 'Purchases VAT', formatCurrency(reportData.purchases.totalVAT)],
+      [isRTL ? '--- إجمالي الربح (Gross Profit)' : '--- Gross Profit', formatCurrency(reportData.profitLevels.grossProfit)],
       [],
       [isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses', formatCurrency(reportData.expenses.operating)],
-      [isRTL ? 'مصاريف التأسيس' : 'Setup Expenses', formatCurrency(reportData.expenses.setup)],
-      [isRTL ? 'رواتب الموظفين' : 'Employee Salaries', '(included in total)'],
-      [isRTL ? 'إجمالي المصاريف' : 'Total Expenses', formatCurrency(reportData.expenses.total)],
+      [isRTL ? 'الرواتب' : 'Salaries', formatCurrency(reportData.expenses.salaries)],
+      [isRTL ? '--- صافي النشاط (Operating Net)' : '--- Operating Net', formatCurrency(reportData.profitLevels.operatingNet)],
       [],
-      [isRTL ? 'صافي الربح' : 'Net Profit', formatCurrency(reportData.sales.grossProfit - reportData.expenses.total)],
-      [isRTL ? 'صافي الضريبة المستحقة' : 'Net VAT Payable', formatCurrency(reportData.sales.totalVAT - reportData.purchases.totalVAT)],
+      [isRTL ? 'الإهلاك' : 'Depreciation', formatCurrency(reportData.profitLevels.depreciation)],
+      [isRTL ? '--- صافي الربح المحاسبي (Accounting Net)' : '--- Accounting Net Profit', formatCurrency(reportData.profitLevels.accountingNet)],
+      [],
+      [isRTL ? 'ضريبة المبيعات' : 'Sales VAT', formatCurrency(reportData.sales.totalVAT)],
+      [isRTL ? 'ضريبة المشتريات' : 'Purchases VAT', formatCurrency(reportData.purchases.totalVAT)],
+      [isRTL ? 'صافي الضريبة المستحقة' : 'Net VAT Payable', formatCurrency(netVAT)],
+      [],
+      [isRTL ? 'قيمة الأصول الثابتة' : 'Fixed Assets Value', formatCurrency(reportData.profitLevels.fixedAssetsCost)],
     ];
 
     const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
@@ -507,12 +522,11 @@ export function Reports() {
     );
   }
 
-  // All calculations come from database now
-  const netProfit = reportData.sales.grossProfit - reportData.expenses.total;
   const netVAT = reportData.sales.totalVAT - reportData.purchases.totalVAT;
-  const profitMargin = reportData.sales.total > 0
-    ? ((netProfit / reportData.sales.total) * 100)
-    : 0;
+  const grossMargin = reportData.sales.total > 0
+    ? ((reportData.profitLevels.grossProfit / reportData.sales.total) * 100) : 0;
+  const operatingMargin = reportData.sales.total > 0
+    ? ((reportData.profitLevels.operatingNet / reportData.sales.total) * 100) : 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -582,90 +596,178 @@ export function Reports() {
         </div>
       </div>
 
-      {/* Key Metrics Cards */}
+      {/* 3-Level Profit Structure */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-teal-600" />
+          {isRTL ? 'هيكل الأرباح (3 مستويات)' : 'Profit Structure (3 Levels)'}
+        </h3>
+        <div className="space-y-4">
+          {/* Row: Total Sales */}
+          <div className="flex items-center justify-between p-4 bg-teal-50 rounded-lg border border-teal-100">
+            <div className="flex items-center gap-3">
+              <DollarSign className="w-5 h-5 text-teal-600" />
+              <div>
+                <p className="font-semibold text-teal-900">{isRTL ? 'إجمالي المبيعات' : 'Total Sales'}</p>
+                <p className="text-xs text-teal-600">{reportData.sales.count} {isRTL ? 'عملية' : 'transactions'}</p>
+              </div>
+            </div>
+            <p className="text-xl font-bold text-teal-900">{formatCurrency(reportData.sales.total)}</p>
+          </div>
+
+          {/* Row: COGS */}
+          <div className="flex items-center justify-between px-4 py-2 text-sm text-gray-600">
+            <span>{isRTL ? 'تكلفة البضاعة المباعة (COGS)' : 'Cost of Goods Sold (COGS)'}</span>
+            <span className="font-medium text-red-700">- {formatCurrency(reportData.sales.totalCost)}</span>
+          </div>
+
+          {/* Level 1: Gross Profit */}
+          <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg border-2 border-emerald-200">
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-600 text-white text-xs font-bold px-2 py-1 rounded">1</div>
+              <div>
+                <p className="font-bold text-emerald-900">{isRTL ? 'إجمالي الربح (Gross Profit)' : 'Gross Profit'}</p>
+                <p className="text-xs text-emerald-600">{isRTL ? 'المبيعات - تكلفة البضاعة' : 'Sales - COGS'}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xl font-bold text-emerald-900">{formatCurrency(reportData.profitLevels.grossProfit)}</p>
+              <p className="text-xs font-medium text-emerald-600">{formatPercent(grossMargin)}</p>
+            </div>
+          </div>
+
+          {/* Row: Operating Expenses */}
+          <div className="flex items-center justify-between px-4 py-2 text-sm text-gray-600">
+            <span>{isRTL ? 'المصاريف التشغيلية' : 'Operating Expenses'}</span>
+            <span className="font-medium text-red-700">- {formatCurrency(reportData.expenses.operating)}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2 text-sm text-gray-600">
+            <span>{isRTL ? 'الرواتب' : 'Salaries'}</span>
+            <span className="font-medium text-red-700">- {formatCurrency(reportData.expenses.salaries)}</span>
+          </div>
+
+          {/* Level 2: Operating Net */}
+          <div className={`flex items-center justify-between p-4 rounded-lg border-2 ${
+            reportData.profitLevels.operatingNet >= 0
+              ? 'bg-blue-50 border-blue-200'
+              : 'bg-red-50 border-red-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`text-white text-xs font-bold px-2 py-1 rounded ${
+                reportData.profitLevels.operatingNet >= 0 ? 'bg-blue-600' : 'bg-red-600'
+              }`}>2</div>
+              <div>
+                <p className={`font-bold ${reportData.profitLevels.operatingNet >= 0 ? 'text-blue-900' : 'text-red-900'}`}>
+                  {isRTL ? 'صافي النشاط التشغيلي (Operating Net)' : 'Operating Net'}
+                </p>
+                <p className={`text-xs ${reportData.profitLevels.operatingNet >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  {isRTL ? 'إجمالي الربح - المصاريف التشغيلية - الرواتب' : 'Gross Profit - OpEx - Salaries'}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`text-xl font-bold ${reportData.profitLevels.operatingNet >= 0 ? 'text-blue-900' : 'text-red-900'}`}>
+                {formatCurrency(reportData.profitLevels.operatingNet)}
+              </p>
+              <p className={`text-xs font-medium ${reportData.profitLevels.operatingNet >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                {formatPercent(operatingMargin)}
+              </p>
+            </div>
+          </div>
+
+          {/* Row: Depreciation */}
+          <div className="flex items-center justify-between px-4 py-2 text-sm text-gray-600">
+            <div>
+              <span>{isRTL ? 'الإهلاك' : 'Depreciation'}</span>
+              {reportData.profitLevels.fixedAssetsCost > 0 && (
+                <span className="text-xs text-gray-400 ml-2">
+                  ({isRTL ? 'أصول ثابتة:' : 'Fixed assets:'} {formatCurrency(reportData.profitLevels.fixedAssetsCost)})
+                </span>
+              )}
+            </div>
+            <span className="font-medium text-red-700">- {formatCurrency(reportData.profitLevels.depreciation)}</span>
+          </div>
+
+          {/* Level 3: Accounting Net Profit */}
+          <div className={`flex items-center justify-between p-4 rounded-lg border-2 ${
+            reportData.profitLevels.accountingNet >= 0
+              ? 'bg-green-50 border-green-300'
+              : 'bg-red-50 border-red-300'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`text-white text-xs font-bold px-2 py-1 rounded ${
+                reportData.profitLevels.accountingNet >= 0 ? 'bg-green-700' : 'bg-red-700'
+              }`}>3</div>
+              <div>
+                <p className={`font-bold ${reportData.profitLevels.accountingNet >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+                  {isRTL ? 'صافي الربح المحاسبي (Accounting Net)' : 'Accounting Net Profit'}
+                </p>
+                <p className={`text-xs ${reportData.profitLevels.accountingNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {isRTL ? 'صافي النشاط - الإهلاك' : 'Operating Net - Depreciation'}
+                </p>
+              </div>
+            </div>
+            <p className={`text-xl font-bold ${reportData.profitLevels.accountingNet >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+              {formatCurrency(reportData.profitLevels.accountingNet)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Sales */}
         <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl p-6 border border-teal-200">
           <div className="flex items-center justify-between mb-3">
             <div className="bg-teal-600 p-2.5 rounded-lg">
               <DollarSign className="w-5 h-5 text-white" />
             </div>
-            <TrendingUp className="w-5 h-5 text-teal-600" />
           </div>
-          <p className="text-sm text-teal-700 font-medium mb-1">
-            {isRTL ? 'إجمالي المبيعات' : 'Total Sales'}
-          </p>
-          <p className="text-2xl font-bold text-teal-900">
-            {formatCurrency(reportData.sales.total)}
-          </p>
-          <p className="text-xs text-teal-600 mt-2">
-            {reportData.sales.count} {isRTL ? 'عملية بيع' : 'transactions'}
-          </p>
+          <p className="text-sm text-teal-700 font-medium mb-1">{isRTL ? 'إجمالي المبيعات' : 'Total Sales'}</p>
+          <p className="text-2xl font-bold text-teal-900">{formatCurrency(reportData.sales.total)}</p>
         </div>
 
-        {/* Gross Profit */}
-        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-6 border border-emerald-200">
+        <div className={`bg-gradient-to-br rounded-xl p-6 border ${
+          reportData.profitLevels.operatingNet >= 0
+            ? 'from-blue-50 to-blue-100 border-blue-200'
+            : 'from-red-50 to-red-100 border-red-200'
+        }`}>
           <div className="flex items-center justify-between mb-3">
-            <div className="bg-emerald-600 p-2.5 rounded-lg">
+            <div className={`p-2.5 rounded-lg ${reportData.profitLevels.operatingNet >= 0 ? 'bg-blue-600' : 'bg-red-600'}`}>
               <TrendingUp className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xs font-semibold text-emerald-700 bg-emerald-200 px-2 py-1 rounded">
-              {formatPercent(profitMargin)}
-            </span>
+            <span className={`text-xs font-semibold px-2 py-1 rounded ${
+              reportData.profitLevels.operatingNet >= 0 ? 'text-blue-700 bg-blue-200' : 'text-red-700 bg-red-200'
+            }`}>{formatPercent(operatingMargin)}</span>
           </div>
-          <p className="text-sm text-emerald-700 font-medium mb-1">
-            {isRTL ? 'صافي الربح' : 'Net Profit'}
+          <p className={`text-sm font-medium mb-1 ${reportData.profitLevels.operatingNet >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+            {isRTL ? 'صافي النشاط' : 'Operating Net'}
           </p>
-          <p className="text-2xl font-bold text-emerald-900">
-            {formatCurrency(netProfit)}
-          </p>
-          <p className="text-xs text-emerald-600 mt-2">
-            {isRTL ? 'بعد خصم المصاريف' : 'After expenses'}
+          <p className={`text-2xl font-bold ${reportData.profitLevels.operatingNet >= 0 ? 'text-blue-900' : 'text-red-900'}`}>
+            {formatCurrency(reportData.profitLevels.operatingNet)}
           </p>
         </div>
 
-        {/* Net VAT */}
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
           <div className="flex items-center justify-between mb-3">
             <div className="bg-blue-600 p-2.5 rounded-lg">
               <Receipt className="w-5 h-5 text-white" />
             </div>
-            {netVAT > 0 ? (
-              <TrendingDown className="w-5 h-5 text-red-500" />
-            ) : (
-              <TrendingUp className="w-5 h-5 text-green-500" />
-            )}
           </div>
-          <p className="text-sm text-blue-700 font-medium mb-1">
-            {isRTL ? 'صافي الضريبة' : 'Net VAT'}
-          </p>
-          <p className="text-2xl font-bold text-blue-900">
-            {formatCurrency(Math.abs(netVAT))}
-          </p>
-          <p className="text-xs text-blue-600 mt-2">
-            {netVAT > 0
-              ? (isRTL ? 'مستحقة للدفع' : 'Payable')
-              : (isRTL ? 'مستحقة الاسترداد' : 'Refundable')
-            }
+          <p className="text-sm text-blue-700 font-medium mb-1">{isRTL ? 'صافي الضريبة' : 'Net VAT'}</p>
+          <p className="text-2xl font-bold text-blue-900">{formatCurrency(Math.abs(netVAT))}</p>
+          <p className="text-xs text-blue-600 mt-1">
+            {netVAT > 0 ? (isRTL ? 'مستحقة للدفع' : 'Payable') : (isRTL ? 'مستحقة الاسترداد' : 'Refundable')}
           </p>
         </div>
 
-        {/* Total Expenses */}
         <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-200">
           <div className="flex items-center justify-between mb-3">
             <div className="bg-orange-600 p-2.5 rounded-lg">
               <TrendingDown className="w-5 h-5 text-white" />
             </div>
           </div>
-          <p className="text-sm text-orange-700 font-medium mb-1">
-            {isRTL ? 'إجمالي المصاريف' : 'Total Expenses'}
-          </p>
-          <p className="text-2xl font-bold text-orange-900">
-            {formatCurrency(reportData.expenses.total)}
-          </p>
-          <p className="text-xs text-orange-600 mt-2">
-            {reportData.expenses.count} {isRTL ? 'مصروف' : 'expenses'}
-          </p>
+          <p className="text-sm text-orange-700 font-medium mb-1">{isRTL ? 'إجمالي المصاريف' : 'Total Expenses'}</p>
+          <p className="text-2xl font-bold text-orange-900">{formatCurrency(reportData.expenses.total)}</p>
         </div>
       </div>
 
@@ -756,12 +858,20 @@ export function Reports() {
                 {formatCurrency(reportData.expenses.operating)}
               </span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
               <span className="text-sm font-medium text-gray-700">
-                {isRTL ? 'تأسيس' : 'Setup'}
+                {isRTL ? 'رواتب' : 'Salaries'}
               </span>
-              <span className="text-lg font-bold text-purple-900">
-                {formatCurrency(reportData.expenses.setup)}
+              <span className="text-lg font-bold text-blue-900">
+                {formatCurrency(reportData.expenses.salaries)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">
+                {isRTL ? 'إهلاك الأصول' : 'Depreciation'}
+              </span>
+              <span className="text-lg font-bold text-amber-900">
+                {formatCurrency(reportData.profitLevels.depreciation)}
               </span>
             </div>
           </div>

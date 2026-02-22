@@ -27,6 +27,7 @@ import { SallaOrders } from './components/SallaOrders';
 import { AIAnalysis } from './components/AIAnalysis';
 import Branches from './components/Branches';
 import Backup from './components/Backup';
+import FixedAssets from './components/FixedAssets';
 import { supabase } from './lib/supabase';
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
@@ -34,6 +35,7 @@ const SECTION_PERMISSIONS: Record<string, string[]> = {
   sales: ['admin', 'accountant', 'salesperson', 'viewer'],
   purchases: ['admin', 'accountant', 'viewer'],
   expenses: ['admin', 'accountant', 'viewer'],
+  fixedassets: ['admin', 'accountant', 'viewer'],
   setupexpenses: ['admin'],
   products: ['admin', 'accountant', 'salesperson', 'viewer'],
   inventory: ['admin', 'accountant', 'salesperson', 'viewer'],
@@ -127,6 +129,7 @@ function AppContent() {
       case 'sales': return <Sales />;
       case 'purchases': return <Purchases />;
       case 'expenses': return <Expenses />;
+      case 'fixedassets': return <FixedAssets />;
       case 'inventory': return <Inventory />;
       case 'customers': return <Customers />;
       case 'suppliers': return <Suppliers />;
