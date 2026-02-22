@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useOffline } from '../contexts/OfflineContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Wifi, WifiOff, RefreshCw, AlertCircle, Clock, X } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, AlertCircle, Trash2, X } from 'lucide-react';
 
 export function ConnectionStatusButton() {
-  const { isOnline, isSyncing, pendingOperationsCount, lastSyncTime, syncError, syncNow } = useOffline();
+  const { isOnline, isSyncing, pendingOperationsCount, lastSyncTime, syncError, syncNow, clearAllPending } = useOffline();
   const { language, t } = useLanguage();
   const isRTL = language === 'ar';
   const [showPopover, setShowPopover] = useState(false);
@@ -144,11 +144,29 @@ export function ConnectionStatusButton() {
                   </span>
                 </div>
                 {pendingOperationsCount > 0 && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {isRTL
-                      ? 'سيتم مزامنتها عند الاتصال بالإنترنت'
-                      : 'Will sync when online'}
-                  </p>
+                  <>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {isRTL
+                        ? 'سيتم مزامنتها عند الاتصال بالإنترنت'
+                        : 'Will sync when online'}
+                    </p>
+                    <button
+                      onClick={async () => {
+                        const ok = window.confirm(
+                          isRTL
+                            ? `هل تريد مسح ${pendingOperationsCount} عملية معلقة؟ هذا لن يؤثر على البيانات المحفوظة.`
+                            : `Clear ${pendingOperationsCount} pending operations? This won't affect saved data.`
+                        );
+                        if (!ok) return;
+                        const cleared = await clearAllPending();
+                        alert(isRTL ? `تم مسح ${cleared} عملية` : `Cleared ${cleared} operations`);
+                      }}
+                      className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition text-sm font-medium"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {isRTL ? 'مسح العمليات المعلقة' : 'Clear Pending'}
+                    </button>
+                  </>
                 )}
               </div>
 

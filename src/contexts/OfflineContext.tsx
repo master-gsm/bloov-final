@@ -11,6 +11,7 @@ interface OfflineContextType {
   syncError: string | null;
   syncNow: () => Promise<void>;
   addPendingOperation: (table: string, operation: 'insert' | 'update' | 'delete', data: any) => Promise<string>;
+  clearAllPending: () => Promise<number>;
 }
 
 const OfflineContext = createContext<OfflineContextType | undefined>(undefined);
@@ -203,6 +204,17 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     return operationId;
   };
 
+  const clearAllPending = async (): Promise<number> => {
+    const pending = await indexedDBManager.getQueuedOperations('pending');
+    const failed = await indexedDBManager.getQueuedOperations('failed');
+    const allOps = [...pending, ...failed];
+    for (const op of allOps) {
+      await indexedDBManager.removeQueueItem(op.id);
+    }
+    setPendingOperationsCount(0);
+    return allOps.length;
+  };
+
   return (
     <OfflineContext.Provider
       value={{
@@ -214,6 +226,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         syncError,
         syncNow,
         addPendingOperation,
+        clearAllPending,
       }}
     >
       {children}
