@@ -621,6 +621,26 @@ export function Settings() {
                   </p>
                 </div>
               </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={saveSettings}
+                  disabled={saving}
+                  className={`w-full flex items-center justify-center gap-2 px-5 py-3 rounded-lg font-medium transition text-base ${
+                    saved
+                      ? 'bg-green-600 text-white'
+                      : 'bg-teal-600 text-white hover:bg-teal-700'
+                  } disabled:opacity-50`}
+                >
+                  {saving ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> {isRTL ? 'جاري الحفظ...' : 'Saving...'}</>
+                  ) : saved ? (
+                    <><CheckCircle className="w-5 h-5" /> {isRTL ? 'تم حفظ الإعدادات' : 'Settings Saved'}</>
+                  ) : (
+                    <><Save className="w-5 h-5" /> {isRTL ? 'حفظ إعدادات الذكاء الاصطناعي' : 'Save AI Settings'}</>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
