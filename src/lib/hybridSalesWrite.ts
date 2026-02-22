@@ -7,7 +7,7 @@ interface SalePayload {
   customer_id: string | null;
   customer_name: string | null;
   customer_phone: string | null;
-  sale_number: string;
+  sale_number?: string;
   sale_date: string;
   status: string;
   subtotal: number;
