@@ -119,29 +119,48 @@ export function AIAnalysis() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        throw new Error('Not authenticated');
+        throw new Error(isRTL ? 'غير مسجل الدخول. يرجى تسجيل الدخول مرة أخرى.' : 'Not authenticated. Please log in again.');
       }
 
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analysis`;
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(payload),
-      });
 
-      const result = await response.json();
+      let response: Response;
+      try {
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+      } catch (networkErr: any) {
+        throw new Error(isRTL
+          ? 'خطأ في الاتصال بالخادم. تحقق من اتصال الإنترنت.'
+          : `Network error: ${networkErr.message}. Check your internet connection.`);
+      }
+
+      let result: any;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error(isRTL
+          ? `خطأ من الخادم (${response.status}). الاستجابة غير صالحة.`
+          : `Server error (${response.status}). Invalid response format.`);
+      }
 
       if (!result.success) {
-        throw new Error(result.error || 'AI analysis failed');
+        const statusCode = result.statusCode || response.status;
+        const errorMsg = result.error || 'AI analysis failed';
+        console.error(`[AI] Error ${statusCode}: ${errorMsg}`, result.errorType || '');
+        throw new Error(`[${statusCode}] ${errorMsg}`);
       }
 
       setTokensUsed((prev) => prev + (result.tokensUsed || 0));
       return result.data;
     } catch (err: any) {
-      setError(err.message || 'Failed to process AI request');
+      const msg = err.message || (isRTL ? 'فشل في معالجة طلب الذكاء الاصطناعي' : 'Failed to process AI request');
+      setError(msg);
       throw err;
     } finally {
       setLoading(false);
@@ -342,9 +361,30 @@ export function AIAnalysis() {
       {error && (
         <div className="bg-red-50 border border-red-300 rounded-lg p-4 flex items-start gap-3">
           <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="font-semibold text-red-900">{isRTL ? 'خطأ' : 'Error'}</p>
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
+            {error.includes('401') && (
+              <p className="text-xs text-red-600 mt-2">
+                {isRTL ? 'مفتاح API غير صالح. تحقق من المفتاح في الإعدادات.' : 'Invalid API key. Check your key in Settings.'}
+              </p>
+            )}
+            {error.includes('402') && (
+              <p className="text-xs text-red-600 mt-2">
+                {isRTL ? 'مشكلة في الفوترة. تحقق من حسابك على platform.openai.com' : 'Billing issue. Check your account at platform.openai.com'}
+              </p>
+            )}
+            {error.includes('429') && (
+              <p className="text-xs text-red-600 mt-2">
+                {isRTL ? 'تجاوز حد الطلبات. انتظر قليلاً وحاول مرة أخرى.' : 'Rate limit exceeded. Wait a moment and try again.'}
+              </p>
+            )}
+            <button
+              onClick={() => setError('')}
+              className="mt-3 text-xs text-red-600 hover:text-red-800 underline"
+            >
+              {isRTL ? 'إخفاء' : 'Dismiss'}
+            </button>
           </div>
         </div>
       )}
