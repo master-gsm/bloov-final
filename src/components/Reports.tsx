@@ -27,6 +27,18 @@ interface ReportData {
     totalVAT: number;
     totalWithoutVAT: number;
     count: number;
+    vatByStatus: {
+      standard: number;
+      zeroRated: number;
+      exempt: number;
+      outsideScope: number;
+    };
+    totalByStatus: {
+      standard: number;
+      zeroRated: number;
+      exempt: number;
+      outsideScope: number;
+    };
   };
   expenses: {
     total: number;
@@ -99,7 +111,7 @@ export function Reports() {
   // Report data state
   const [reportData, setReportData] = useState<ReportData>({
     sales: { total: 0, totalVAT: 0, totalWithoutVAT: 0, count: 0, totalCost: 0, grossProfit: 0, bySource: { store: 0, salla: 0 } },
-    purchases: { total: 0, totalVAT: 0, totalWithoutVAT: 0, count: 0 },
+    purchases: { total: 0, totalVAT: 0, totalWithoutVAT: 0, count: 0, vatByStatus: { standard: 0, zeroRated: 0, exempt: 0, outsideScope: 0 }, totalByStatus: { standard: 0, zeroRated: 0, exempt: 0, outsideScope: 0 } },
     expenses: { total: 0, operating: 0, salaries: 0, count: 0 },
     profitLevels: { grossProfit: 0, operatingNet: 0, accountingNet: 0, depreciation: 0, fixedAssetsCost: 0 },
     inventory: { totalValue: 0, totalQuantity: 0, lowStock: 0, outOfStock: 0 },
@@ -158,10 +170,9 @@ export function Reports() {
           .gte('sale_date', startDateObj.toISOString())
           .lte('sale_date', endDateObj.toISOString()),
 
-        // Purchases data
         supabase
           .from('purchases')
-          .select('total, tax')
+          .select('total, tax, vat_amount, vat_status_snapshot, subtotal, discount')
           .in('status', ['confirmed', 'received'])
           .gte('purchase_date', startDateObj.toISOString())
           .lte('purchase_date', endDateObj.toISOString()),
@@ -232,9 +243,20 @@ export function Reports() {
       const storeTotal = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
       const sallaTotal = salesRes.data?.filter(s => s.source === 'salla').reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
 
-      // Process purchases data
       const purchasesTotal = purchasesRes.data?.reduce((sum, p) => sum + Number(p.total || 0), 0) || 0;
-      const purchasesVAT = purchasesRes.data?.reduce((sum, p) => sum + Number(p.tax || 0), 0) || 0;
+      const purchasesVAT = purchasesRes.data?.reduce((sum, p) => sum + Number(p.vat_amount || p.tax || 0), 0) || 0;
+
+      const vatByStatus = { standard: 0, zeroRated: 0, exempt: 0, outsideScope: 0 };
+      const totalByStatus = { standard: 0, zeroRated: 0, exempt: 0, outsideScope: 0 };
+      purchasesRes.data?.forEach((p: any) => {
+        const status = p.vat_status_snapshot || 'standard';
+        const vat = Number(p.vat_amount || p.tax || 0);
+        const tot = Number(p.total || 0);
+        if (status === 'standard') { vatByStatus.standard += vat; totalByStatus.standard += tot; }
+        else if (status === 'zero_rated') { vatByStatus.zeroRated += vat; totalByStatus.zeroRated += tot; }
+        else if (status === 'exempt') { vatByStatus.exempt += vat; totalByStatus.exempt += tot; }
+        else { vatByStatus.outsideScope += vat; totalByStatus.outsideScope += tot; }
+      });
 
       // Process inventory data
       let totalInventoryValue = 0;
@@ -347,7 +369,9 @@ export function Reports() {
           total: purchasesTotal,
           totalVAT: purchasesVAT,
           totalWithoutVAT: purchasesTotal - purchasesVAT,
-          count: purchasesRes.data?.length || 0
+          count: purchasesRes.data?.length || 0,
+          vatByStatus,
+          totalByStatus,
         },
         expenses: {
           total: (financial.total_operating_expenses || 0) + (financial.total_employee_salaries || 0),
@@ -778,13 +802,14 @@ export function Reports() {
             <Receipt className="w-5 h-5 text-blue-600" />
           </div>
           <h3 className="text-lg font-bold text-gray-900">
-            {isRTL ? 'تفصيل الضريبة (VAT)' : 'VAT Breakdown'}
+            {isRTL ? 'تفصيل الضريبة (VAT) - متوافق مع ZATCA' : 'VAT Breakdown - ZATCA Compliant'}
           </h3>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-green-50 rounded-lg p-4">
             <p className="text-sm text-green-700 font-medium mb-2">
-              {isRTL ? 'ضريبة المبيعات المحصلة' : 'Sales VAT Collected'}
+              {isRTL ? 'ضريبة المبيعات المحصلة (Output VAT)' : 'Output VAT (Sales)'}
             </p>
             <p className="text-xl font-bold text-green-900">
               + {formatCurrency(reportData.sales.totalVAT)}
@@ -792,19 +817,110 @@ export function Reports() {
           </div>
           <div className="bg-red-50 rounded-lg p-4">
             <p className="text-sm text-red-700 font-medium mb-2">
-              {isRTL ? 'ضريبة المشتريات المدفوعة' : 'Purchases VAT Paid'}
+              {isRTL ? 'ضريبة المشتريات القابلة للخصم (Input VAT)' : 'Input VAT (Deductible)'}
             </p>
             <p className="text-xl font-bold text-red-900">
-              - {formatCurrency(reportData.purchases.totalVAT)}
+              - {formatCurrency(reportData.purchases.vatByStatus.standard)}
             </p>
           </div>
           <div className={`${netVAT >= 0 ? 'bg-orange-50' : 'bg-emerald-50'} rounded-lg p-4`}>
             <p className={`text-sm font-medium mb-2 ${netVAT >= 0 ? 'text-orange-700' : 'text-emerald-700'}`}>
-              {isRTL ? 'الصافي المستحق' : 'Net Amount'}
+              {isRTL ? 'صافي الضريبة المستحقة' : 'Net VAT Payable'}
             </p>
             <p className={`text-xl font-bold ${netVAT >= 0 ? 'text-orange-900' : 'text-emerald-900'}`}>
-              {netVAT >= 0 ? '=' : '+'} {formatCurrency(Math.abs(netVAT))}
+              {netVAT >= 0 ? '=' : '='} {formatCurrency(Math.abs(netVAT))}
+              <span className="text-xs font-normal ml-2">
+                {netVAT >= 0 ? (isRTL ? 'مستحقة للدفع' : 'Payable') : (isRTL ? 'مستحقة الاسترداد' : 'Refundable')}
+              </span>
             </p>
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <h4 className="text-sm font-bold text-gray-700 mb-3">
+            {isRTL ? 'تفصيل مشتريات حسب التصنيف الضريبي' : 'Purchases by VAT Classification'}
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600">
+                    {isRTL ? 'التصنيف' : 'Classification'}
+                  </th>
+                  <th className="py-2.5 px-4 text-right text-xs font-semibold text-gray-600">
+                    {isRTL ? 'المشتريات' : 'Purchases'}
+                  </th>
+                  <th className="py-2.5 px-4 text-right text-xs font-semibold text-gray-600">
+                    {isRTL ? 'الضريبة' : 'VAT'}
+                  </th>
+                  <th className="py-2.5 px-4 text-center text-xs font-semibold text-gray-600">
+                    {isRTL ? 'قابل للخصم؟' : 'Deductible?'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-gray-100">
+                  <td className="py-2.5 px-4 font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                      {isRTL ? 'خاضع للضريبة (15%)' : 'Standard Rate (15%)'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(reportData.purchases.totalByStatus.standard)}</td>
+                  <td className="py-2.5 px-4 text-right font-bold text-teal-700">{formatCurrency(reportData.purchases.vatByStatus.standard)}</td>
+                  <td className="py-2.5 px-4 text-center">
+                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                      {isRTL ? 'نعم' : 'Yes'}
+                    </span>
+                  </td>
+                </tr>
+                <tr className="border-b border-gray-100">
+                  <td className="py-2.5 px-4 font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                      {isRTL ? 'نسبة صفرية (0%)' : 'Zero Rated (0%)'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(reportData.purchases.totalByStatus.zeroRated)}</td>
+                  <td className="py-2.5 px-4 text-right text-gray-400">{formatCurrency(0)}</td>
+                  <td className="py-2.5 px-4 text-center">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                      {isRTL ? 'يظهر منفصل' : 'Reported'}
+                    </span>
+                  </td>
+                </tr>
+                <tr className="border-b border-gray-100">
+                  <td className="py-2.5 px-4 font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                      {isRTL ? 'معفى من الضريبة' : 'Exempt'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(reportData.purchases.totalByStatus.exempt)}</td>
+                  <td className="py-2.5 px-4 text-right text-gray-400">-</td>
+                  <td className="py-2.5 px-4 text-center">
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                      {isRTL ? 'لا' : 'No'}
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 px-4 font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                      {isRTL ? 'خارج النطاق' : 'Outside Scope'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(reportData.purchases.totalByStatus.outsideScope)}</td>
+                  <td className="py-2.5 px-4 text-right text-gray-400">-</td>
+                  <td className="py-2.5 px-4 text-center">
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                      {isRTL ? 'لا' : 'No'}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

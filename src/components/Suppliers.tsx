@@ -21,6 +21,7 @@ interface Supplier {
   country_ar: string | null;
   notes: string | null;
   notes_ar: string | null;
+  vat_status: string;
   current_balance: number;
   is_active: boolean;
   created_at: string;
@@ -37,6 +38,7 @@ const emptyForm = {
   country_ar: '',
   notes: '',
   notes_ar: '',
+  vat_status: 'standard',
 };
 
 export function Suppliers() {
@@ -107,6 +109,7 @@ export function Suppliers() {
       country_ar: supplier.country_ar || '',
       notes: supplier.notes || '',
       notes_ar: supplier.notes_ar || '',
+      vat_status: supplier.vat_status || 'standard',
     });
     setError('');
     setShowModal(true);
@@ -129,6 +132,7 @@ export function Suppliers() {
         country_ar: formData.country_ar || null,
         notes: formData.notes || null,
         notes_ar: formData.notes_ar || null,
+        vat_status: formData.vat_status || 'standard',
         created_by: user?.id,
       };
 
@@ -268,6 +272,17 @@ export function Suppliers() {
                       {isRTL ? supplier.name_ar || supplier.name : supplier.name}
                     </h3>
                     <p className="text-xs text-gray-400 font-mono">{supplier.code}</p>
+                    <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                      supplier.vat_status === 'standard' ? 'bg-teal-100 text-teal-700' :
+                      supplier.vat_status === 'zero_rated' ? 'bg-blue-100 text-blue-700' :
+                      supplier.vat_status === 'exempt' ? 'bg-gray-100 text-gray-600' :
+                      'bg-orange-100 text-orange-700'
+                    }`}>
+                      {supplier.vat_status === 'standard' ? (isRTL ? 'خاضع 15%' : 'Standard 15%') :
+                       supplier.vat_status === 'zero_rated' ? (isRTL ? 'نسبة صفر' : 'Zero Rated') :
+                       supplier.vat_status === 'exempt' ? (isRTL ? 'معفى' : 'Exempt') :
+                       (isRTL ? 'خارج النطاق' : 'Outside Scope')}
+                    </span>
                   </div>
                   {canEdit && (
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
@@ -529,9 +544,24 @@ export function Suppliers() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الرقم الضريبي' : 'Tax Number'}</label>
-                <input type="text" value={formData.tax_number} onChange={(e) => setFormData({ ...formData, tax_number: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" dir="ltr" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الرقم الضريبي' : 'Tax Number'}</label>
+                  <input type="text" value={formData.tax_number} onChange={(e) => setFormData({ ...formData, tax_number: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'التصنيف الضريبي (VAT)' : 'VAT Status'}</label>
+                  <select
+                    value={formData.vat_status}
+                    onChange={(e) => setFormData({ ...formData, vat_status: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  >
+                    <option value="standard">{isRTL ? 'خاضع للضريبة (15%)' : 'Standard (15%)'}</option>
+                    <option value="zero_rated">{isRTL ? 'نسبة صفرية (0%)' : 'Zero Rated (0%)'}</option>
+                    <option value="exempt">{isRTL ? 'معفى من الضريبة' : 'Exempt'}</option>
+                    <option value="outside_scope">{isRTL ? 'خارج نطاق الضريبة' : 'Outside Scope'}</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

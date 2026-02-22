@@ -21,6 +21,7 @@ interface Supplier {
   name: string;
   name_ar: string | null;
   code: string;
+  vat_status: string;
 }
 
 interface PurchaseItem {
@@ -41,6 +42,9 @@ interface Purchase {
   tax: number;
   discount: number;
   total: number;
+  vat_amount: number;
+  vat_rate: number;
+  vat_status_snapshot: string | null;
   paid_amount: number;
   payment_status: string;
   payment_method: string | null;
@@ -69,7 +73,6 @@ export function Purchases() {
   const [selectedSupplier, setSelectedSupplier] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [purchaseNotes, setPurchaseNotes] = useState('');
-  const [purchaseTax, setPurchaseTax] = useState(0);
   const [purchaseDiscount, setPurchaseDiscount] = useState(0);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -130,7 +133,7 @@ export function Purchases() {
       const [purchasesRes, productsRes, suppliersRes] = await Promise.all([
         purchasesQuery,
         supabase.from('products').select('id, name, name_ar, purchase_price, sku').eq('is_active', true),
-        supabase.from('suppliers').select('id, name, name_ar, code').eq('is_active', true),
+        supabase.from('suppliers').select('id, name, name_ar, code, vat_status').eq('is_active', true),
       ]);
       if (purchasesRes.data) setPurchases(purchasesRes.data as any[]);
       if (productsRes.data) setProducts(productsRes.data);
@@ -165,14 +168,18 @@ export function Purchases() {
   };
 
   const subtotal = purchaseItems.reduce((sum, item) => sum + item.total, 0);
-  const total = subtotal + purchaseTax - purchaseDiscount;
+  const selectedSupplierObj = suppliers.find((s) => s.id === selectedSupplier);
+  const supplierVatStatus = selectedSupplierObj?.vat_status || 'standard';
+  const vatRate = supplierVatStatus === 'standard' ? 15 : 0;
+  const subtotalAfterDiscount = subtotal - purchaseDiscount;
+  const vatAmount = supplierVatStatus === 'standard' ? Math.round(subtotalAfterDiscount * 0.15 * 100) / 100 : 0;
+  const total = subtotalAfterDiscount + vatAmount;
 
   const openNewPurchase = () => {
     setPurchaseItems([]);
     setSelectedSupplier('');
     setPaymentMethod('cash');
     setPurchaseNotes('');
-    setPurchaseTax(0);
     setPurchaseDiscount(0);
     setAttachmentFile(null);
     setError('');
@@ -211,9 +218,12 @@ export function Purchases() {
         purchase_date: timestamp,
         status: 'confirmed',
         subtotal,
-        tax: purchaseTax,
+        tax: vatAmount,
         discount: purchaseDiscount,
         total,
+        vat_amount: vatAmount,
+        vat_rate: vatRate,
+        vat_status_snapshot: supplierVatStatus,
         paid_amount: total,
         payment_status: 'paid',
         payment_method: paymentMethod,
@@ -270,7 +280,6 @@ export function Purchases() {
       setPurchaseItems([]);
       setSelectedSupplier('');
       setPurchaseNotes('');
-      setPurchaseTax(0);
       setPurchaseDiscount(0);
       setAttachmentFile(null);
       loadData();
@@ -437,8 +446,24 @@ export function Purchases() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الضريبة' : 'Tax'}</label>
-                <input type="number" step="0.01" min="0" value={purchaseTax} onChange={(e) => setPurchaseTax(parseFloat(e.target.value) || 0)} disabled={!canEdit} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {isRTL ? 'ضريبة القيمة المضافة (VAT)' : 'VAT'}
+                </label>
+                <div className={`w-full px-3 py-2.5 rounded-lg text-sm font-medium ${
+                  supplierVatStatus === 'standard' ? 'bg-teal-50 border border-teal-200 text-teal-800' :
+                  supplierVatStatus === 'zero_rated' ? 'bg-blue-50 border border-blue-200 text-blue-800' :
+                  'bg-gray-50 border border-gray-200 text-gray-600'
+                }`}>
+                  {supplierVatStatus === 'standard' ? (isRTL ? 'خاضع 15% - تلقائي' : '15% Standard - Auto') :
+                   supplierVatStatus === 'zero_rated' ? (isRTL ? 'نسبة صفرية 0%' : '0% Zero Rated') :
+                   supplierVatStatus === 'exempt' ? (isRTL ? 'معفى من الضريبة' : 'Exempt') :
+                   (isRTL ? 'خارج نطاق الضريبة' : 'Outside Scope')}
+                </div>
+                {!selectedSupplier && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    {isRTL ? 'اختر مورد لتحديد نسبة الضريبة تلقائياً' : 'Select a supplier to auto-set VAT rate'}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -502,16 +527,35 @@ export function Purchases() {
                 <span className="text-gray-500">{isRTL ? 'المجموع الفرعي' : 'Subtotal'}</span>
                 <span className="font-medium">{formatCurrency(subtotal)}</span>
               </div>
+              {purchaseDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">{isRTL ? 'الخصم' : 'Discount'}</span>
+                  <span className="font-medium text-red-600">-{formatCurrency(purchaseDiscount)}</span>
+                </div>
+              )}
+              {purchaseDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">{isRTL ? 'المبلغ بعد الخصم' : 'After Discount'}</span>
+                  <span className="font-medium">{formatCurrency(subtotalAfterDiscount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{isRTL ? 'الضريبة' : 'Tax'}</span>
-                <span className="font-medium">{formatCurrency(purchaseTax)}</span>
+                <span className="text-gray-500">
+                  {isRTL ? `ضريبة القيمة المضافة (${vatRate}%)` : `VAT (${vatRate}%)`}
+                </span>
+                <span className={`font-medium ${vatAmount > 0 ? 'text-teal-700' : 'text-gray-400'}`}>
+                  {vatAmount > 0 ? `+${formatCurrency(vatAmount)}` : formatCurrency(0)}
+                </span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{isRTL ? 'الخصم' : 'Discount'}</span>
-                <span className="font-medium text-red-600">-{formatCurrency(purchaseDiscount)}</span>
-              </div>
+              {supplierVatStatus !== 'standard' && supplierVatStatus !== 'zero_rated' && (
+                <div className="text-xs text-gray-400 text-center">
+                  {supplierVatStatus === 'exempt'
+                    ? (isRTL ? 'المورد معفى - لا ضريبة' : 'Supplier exempt - No VAT')
+                    : (isRTL ? 'خارج نطاق الضريبة' : 'Outside VAT scope')}
+                </div>
+              )}
               <div className="border-t pt-3 flex justify-between">
-                <span className="font-bold text-gray-900">{isRTL ? 'الإجمالي' : 'Total'}</span>
+                <span className="font-bold text-gray-900">{isRTL ? 'الإجمالي شامل الضريبة' : 'Total (incl. VAT)'}</span>
                 <span className="font-bold text-xl text-teal-600">{formatCurrency(total)}</span>
               </div>
 
@@ -667,9 +711,39 @@ export function Purchases() {
                 </table>
               </div>
 
-              <div className="border-t pt-4 flex justify-between font-bold text-lg">
-                <span>{isRTL ? 'الإجمالي' : 'Total'}</span>
-                <span className="text-teal-600">{formatCurrency(viewingPurchase.total)} {isRTL ? 'ر.س' : 'SAR'}</span>
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>{isRTL ? 'المجموع الفرعي' : 'Subtotal'}</span>
+                  <span>{formatCurrency(viewingPurchase.subtotal)}</span>
+                </div>
+                {viewingPurchase.discount > 0 && (
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>{isRTL ? 'الخصم' : 'Discount'}</span>
+                    <span className="text-red-600">-{formatCurrency(viewingPurchase.discount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 flex items-center gap-2">
+                    {isRTL ? `ضريبة القيمة المضافة (${viewingPurchase.vat_rate || 0}%)` : `VAT (${viewingPurchase.vat_rate || 0}%)`}
+                    {viewingPurchase.vat_status_snapshot && (
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${
+                        viewingPurchase.vat_status_snapshot === 'standard' ? 'bg-teal-100 text-teal-700' :
+                        viewingPurchase.vat_status_snapshot === 'zero_rated' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {viewingPurchase.vat_status_snapshot === 'standard' ? (isRTL ? 'خاضع' : 'Std') :
+                         viewingPurchase.vat_status_snapshot === 'zero_rated' ? (isRTL ? 'صفري' : 'Zero') :
+                         viewingPurchase.vat_status_snapshot === 'exempt' ? (isRTL ? 'معفى' : 'Exempt') :
+                         (isRTL ? 'خارج' : 'N/A')}
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-medium">{formatCurrency(viewingPurchase.vat_amount || viewingPurchase.tax)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                  <span>{isRTL ? 'الإجمالي شامل الضريبة' : 'Total (incl. VAT)'}</span>
+                  <span className="text-teal-600">{formatCurrency(viewingPurchase.total)} {isRTL ? 'ر.س' : 'SAR'}</span>
+                </div>
               </div>
 
               {viewingPurchase.attachment_url && (
