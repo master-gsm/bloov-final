@@ -439,6 +439,44 @@ class IndexedDBManager {
     });
   }
 
+  async getOperationsByStatus(status: OperationQueueItem['status']): Promise<OperationQueueItem[]> {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction([STORES.OPERATION_QUEUE], 'readonly');
+      const store = tx.objectStore(STORES.OPERATION_QUEUE);
+      const index = store.index('status');
+      const request = index.getAll(status);
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async removeOperationFromQueue(operationId: string): Promise<void> {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction([STORES.OPERATION_QUEUE], 'readwrite');
+      const store = tx.objectStore(STORES.OPERATION_QUEUE);
+      const index = store.index('operationId');
+      const getRequest = index.get(operationId);
+
+      getRequest.onsuccess = () => {
+        const item = getRequest.result;
+        if (item) {
+          const deleteRequest = store.delete(item.id);
+          deleteRequest.onsuccess = () => resolve();
+          deleteRequest.onerror = () => reject(deleteRequest.error);
+        } else {
+          resolve();
+        }
+      };
+
+      getRequest.onerror = () => reject(getRequest.error);
+    });
+  }
+
   async clearAll(): Promise<void> {
     await this.init();
 

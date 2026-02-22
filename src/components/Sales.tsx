@@ -747,6 +747,37 @@ export function Sales() {
     });
   };
 
+  const clearPendingOfflineDrafts = async () => {
+    try {
+      const pending = await indexedDBManager.getOperationsByStatus('pending');
+      const draftOps = pending.filter(op => op.table === 'sales' && op.data?.status === 'draft');
+
+      if (draftOps.length === 0) {
+        if (isRTL) alert('لا توجد مسودات معلقة');
+        else alert('No pending drafts');
+        return;
+      }
+
+      const confirmClear = window.confirm(
+        (isRTL
+          ? `هناك ${draftOps.length} مسودات معلقة. هل تريد حذفها؟`
+          : `You have ${draftOps.length} pending drafts. Clear them?`)
+      );
+
+      if (!confirmClear) return;
+
+      for (const op of draftOps) {
+        await indexedDBManager.removeOperationFromQueue(op.operationId);
+      }
+
+      if (isRTL) alert(`تم حذف ${draftOps.length} مسودة معلقة`);
+      else alert(`Cleared ${draftOps.length} pending drafts`);
+    } catch (error: any) {
+      console.error('Error clearing pending drafts:', error);
+      alert(error.message || (isRTL ? 'خطأ في حذف المسودات' : 'Error clearing drafts'));
+    }
+  };
+
   const deleteDraftSale = async (saleId: string, saleStatus: string) => {
     if (saleStatus !== 'draft') {
       alert(isRTL
@@ -761,15 +792,26 @@ export function Sales() {
     if (!window.confirm(isRTL ? 'هل تريد حذف هذه المسودة نهائياً؟' : 'Delete this draft sale permanently?')) return;
 
     try {
-      await supabase.from('employee_commissions').delete().eq('sale_id', saleId);
-      await supabase.from('sale_items').delete().eq('sale_id', saleId);
+      setSubmitting(true);
+
       const { error } = await supabase.from('sales').delete().eq('id', saleId).eq('status', 'draft');
-      if (error) throw error;
+
+      if (error) {
+        console.error('Delete error:', error);
+        throw new Error(error.message || 'Failed to delete draft sale');
+      }
+
       await loadData();
       setViewingSale(null);
+
+      if (isRTL) alert('تم حذف المسودة بنجاح');
+      else alert('Draft sale deleted successfully');
     } catch (error: any) {
       console.error('Error deleting draft sale:', error);
-      alert(error.message || (isRTL ? 'حدث خطأ أثناء حذف المسودة' : 'Error deleting draft sale'));
+      const errorMsg = error.message || (isRTL ? 'حدث خطأ أثناء حذف المسودة' : 'Error deleting draft sale');
+      alert(errorMsg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1359,6 +1401,13 @@ export function Sales() {
             <option value="returned">{isRTL ? 'مرتجع' : 'Returned'}</option>
             <option value="cancelled">{isRTL ? 'ملغي' : 'Cancelled'}</option>
           </select>
+          <button
+            onClick={clearPendingOfflineDrafts}
+            className="px-3 py-2.5 border border-orange-300 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition font-medium text-sm"
+            title={isRTL ? 'حذف المسودات المعلقة' : 'Clear pending drafts'}
+          >
+            {isRTL ? 'مسح المعلقة' : 'Clear Pending'}
+          </button>
         </div>
 
         {filtered.length === 0 ? (
