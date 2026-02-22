@@ -478,6 +478,14 @@ class EnhancedSyncManager {
       /customer.*not found/i,
       /invalid.*reference/i,
       /foreign key violation/i,
+      /column.*not found/i,
+      /schema cache/i,
+      /has no field/i,
+      /duplicate key/i,
+      /unique.*constraint/i,
+      /violates.*constraint/i,
+      /not allowed/i,
+      /permission denied/i,
     ];
 
     for (const pattern of permanentErrorPatterns) {

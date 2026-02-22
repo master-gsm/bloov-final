@@ -356,7 +356,7 @@ export function Sales() {
       setLookedUpCustomer(newCustomer as any);
       setCustomerLoyalty({ id: '', customer_id: newCustomer.id, points: 0, total_earned: 0, total_redeemed: 0 });
       setShowQuickRegister(false);
-      await loadData();
+      await loadSalesAndSettings();
     } catch (err) {
       console.error('Error registering customer:', err);
       setError(isRTL ? 'حدث خطأ في التسجيل' : 'Registration error');
@@ -668,7 +668,7 @@ export function Sales() {
         p_reason: `Status changed to ${status} via UI`,
       });
       if (error) throw error;
-      await loadData();
+      await loadSalesAndSettings();
       setViewingSale(null);
     } catch (error: any) {
       console.error('Error updating sale status:', error);
@@ -688,7 +688,7 @@ export function Sales() {
         p_reason: 'Reactivated via UI',
       });
       if (error) throw error;
-      await loadData();
+      await loadSalesAndSettings();
       setViewingSale(null);
     } catch (error: any) {
       console.error('Error reactivating sale:', error);
@@ -712,7 +712,7 @@ export function Sales() {
         p_reason: 'Voided via UI',
       });
       if (error) throw error;
-      await loadData();
+      await loadSalesAndSettings();
       setViewingSale(null);
       alert(isRTL ? 'تم إلغاء الفاتورة نهائياً' : 'Sale voided successfully');
     } catch (error: any) {
@@ -737,7 +737,7 @@ export function Sales() {
             p_reason: 'Marked as returned via UI',
           });
           if (error) throw error;
-          await loadData();
+          await loadSalesAndSettings();
           setViewingSale(null);
         } catch (error: any) {
           console.error('Error returning sale:', error);
@@ -802,7 +802,7 @@ export function Sales() {
         throw new Error(error.message || 'Failed to delete draft sale');
       }
 
-      await loadData();
+      await loadSalesAndSettings();
       setViewingSale(null);
 
       if (isRTL) alert('تم حذف المسودة بنجاح');
