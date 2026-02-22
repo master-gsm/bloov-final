@@ -54,6 +54,10 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       const admin = userData?.role === 'admin';
       setIsAdmin(admin);
 
+      console.log('[BranchContext] user.id:', user.id);
+      console.log('[BranchContext] user.role:', userData?.role);
+      console.log('[BranchContext] user.branch_id from DB:', userData?.branch_id);
+
       if (admin) {
         const { data: branches } = await supabase
           .from('branches')
@@ -61,10 +65,14 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
           .eq('is_active', true)
           .order('name');
         setAllBranches((branches as Branch[]) || []);
-        setCurrentBranchId(null);
+        // Admin: set currentBranchId to their own branch_id so RLS works
+        const adminBranchId = userData?.branch_id || null;
+        setCurrentBranchId(adminBranchId);
         setCurrentBranch(null);
+        console.log('[BranchContext] admin → currentBranchId set to:', adminBranchId);
       } else if (userData?.branch_id) {
         setCurrentBranchId(userData.branch_id);
+        console.log('[BranchContext] non-admin → currentBranchId set to:', userData.branch_id);
 
         const { data: branch } = await supabase
           .from('branches')

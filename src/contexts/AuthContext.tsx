@@ -41,6 +41,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         permissions: (data.permissions || {}) as unknown as Record<string, boolean>,
         branch_id: data.branch_id || null,
       });
+      console.log('[AuthContext] Profile loaded → userId:', userId, '| role:', data.role, '| branch_id:', data.branch_id);
+    } else {
+      console.warn('[AuthContext] No profile found in users table for userId:', userId);
     }
   };
 
