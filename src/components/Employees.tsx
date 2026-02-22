@@ -111,10 +111,16 @@ export function Employees() {
     setLoading(true);
     try {
       if (activeTab === 'employees') {
-        const { data: empData } = await supabase
+        let empQuery = supabase
           .from('employees')
           .select('*, branches(name)')
           .order('created_at', { ascending: false });
+
+        if (!isAdmin && userProfile?.branch_id) {
+          empQuery = (empQuery as any).eq('branch_id', userProfile.branch_id);
+        }
+
+        const { data: empData } = await empQuery;
         setEmployees((empData || []) as any[]);
 
         const { data: branchData } = await supabase

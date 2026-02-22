@@ -74,7 +74,7 @@ export default function Expenses() {
       if (error) throw error;
       if (data) {
         setUserBranchId(data.branch_id);
-        setIsSuperAdmin(data.role === 'admin');
+        setIsSuperAdmin(data.role === 'admin' || data.role === 'observer');
       }
     } catch (err) {
       console.error('Error loading user branch:', err);

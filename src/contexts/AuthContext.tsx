@@ -3,7 +3,7 @@ import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 interface UserProfile {
-  role: 'super_admin' | 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier';
+  role: 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier' | 'manager' | 'employee';
   permissions: Record<string, boolean>;
   branch_id: string | null;
 }
@@ -18,7 +18,6 @@ interface AuthContextType {
   hasPermission: (key: string) => boolean;
   isAdmin: boolean;
   isViewer: boolean;
-  isSuperAdmin: boolean;
   branchId: string | null;
 }
 
@@ -86,16 +85,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = profile?.role === 'admin';
   const isViewer = profile?.role === 'viewer';
-  const isSuperAdmin = profile?.role === 'super_admin';
   const branchId = profile?.branch_id ?? null;
 
   const hasPermission = (key: string): boolean => {
-    if (profile?.role === 'admin' || profile?.role === 'super_admin') return true;
+    if (profile?.role === 'admin') return true;
     return profile?.permissions?.[key] === true;
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, hasPermission, isAdmin, isViewer, isSuperAdmin, branchId }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, hasPermission, isAdmin, isViewer, branchId }}>
       {children}
     </AuthContext.Provider>
   );

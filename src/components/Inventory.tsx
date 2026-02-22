@@ -35,7 +35,7 @@ interface Movement {
 export function Inventory() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
-  const { currentBranchId, isSuperAdmin } = useBranch();
+  const { currentBranchId, isAdmin } = useBranch();
   const isRTL = language === 'ar';
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -58,7 +58,7 @@ export function Inventory() {
   useEffect(() => {
     loadData();
     loadUserBranch();
-  }, [currentBranchId, isSuperAdmin]);
+  }, [currentBranchId, isAdmin]);
 
   const loadUserBranch = async () => {
     if (!user) return;
@@ -83,7 +83,7 @@ export function Inventory() {
         .select('*, products(name, name_ar, sku, type, sale_price, purchase_price, min_stock_level)')
         .order('quantity', { ascending: true });
 
-      if (!isSuperAdmin && currentBranchId) {
+      if (!isAdmin && currentBranchId) {
         invQuery = (invQuery as any).eq('branch_id', currentBranchId);
       }
 

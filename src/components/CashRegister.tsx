@@ -55,7 +55,7 @@ const EXPENSE_CATEGORIES = [
 export function CashRegister() {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { currentBranchId, isSuperAdmin } = useBranch();
+  const { currentBranchId, isAdmin } = useBranch();
   const isRTL = language === 'ar';
 
   const [activeRegister, setActiveRegister] = useState<CashRegisterRecord | null>(null);
@@ -83,7 +83,7 @@ export function CashRegister() {
 
   useEffect(() => {
     loadData();
-  }, [currentBranchId, isSuperAdmin]);
+  }, [currentBranchId, isAdmin]);
 
   const loadData = async () => {
     try {
@@ -93,7 +93,7 @@ export function CashRegister() {
       let expQuery = supabase.from('expenses').select('*').gte('expense_date', today).order('created_at', { ascending: false });
       let histQuery = supabase.from('cash_registers').select('*').order('opened_at', { ascending: false }).limit(30);
 
-      if (!isSuperAdmin && currentBranchId) {
+      if (!isAdmin && currentBranchId) {
         regQuery = (regQuery as any).eq('branch_id', currentBranchId);
         expQuery = (expQuery as any).eq('branch_id', currentBranchId);
         histQuery = (histQuery as any).eq('branch_id', currentBranchId);
@@ -137,7 +137,7 @@ export function CashRegister() {
   };
 
   const openRegister = async () => {
-    if (!currentBranchId && !isSuperAdmin) return;
+    if (!currentBranchId && !isAdmin) return;
     setSubmitting(true);
     const { error } = await supabase.from('cash_registers').insert({
       opening_balance: openingBalance,

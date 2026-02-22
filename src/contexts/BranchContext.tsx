@@ -15,7 +15,7 @@ interface Branch {
 interface BranchContextType {
   currentBranch: Branch | null;
   currentBranchId: string | null;
-  isSuperAdmin: boolean;
+  isAdmin: boolean;
   allBranches: Branch[];
   selectedBranchFilter: string | null;
   setSelectedBranchFilter: (id: string | null) => void;
@@ -29,7 +29,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [currentBranch, setCurrentBranch] = useState<Branch | null>(null);
   const [currentBranchId, setCurrentBranchId] = useState<string | null>(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     if (!user) {
       setCurrentBranch(null);
       setCurrentBranchId(null);
-      setIsSuperAdmin(false);
+      setIsAdmin(false);
       setAllBranches([]);
       setLoading(false);
       return;
@@ -51,13 +51,13 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         .eq('id', user.id)
         .maybeSingle();
 
-      const superAdmin = userData?.role === 'super_admin';
-      setIsSuperAdmin(superAdmin);
+      const admin = userData?.role === 'admin';
+      setIsAdmin(admin);
 
-      if (superAdmin) {
+      if (admin) {
         const { data: branches } = await supabase
           .from('branches')
-          .select('id, name, code, location, city, is_active')
+          .select('id, name, name_ar, code, location, city, is_active')
           .eq('is_active', true)
           .order('name');
         setAllBranches((branches as Branch[]) || []);
@@ -68,7 +68,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
 
         const { data: branch } = await supabase
           .from('branches')
-          .select('id, name, code, location, city, is_active')
+          .select('id, name, name_ar, code, location, city, is_active')
           .eq('id', userData.branch_id)
           .maybeSingle();
 
@@ -91,7 +91,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     <BranchContext.Provider value={{
       currentBranch,
       currentBranchId,
-      isSuperAdmin,
+      isAdmin,
       allBranches,
       selectedBranchFilter,
       setSelectedBranchFilter,
