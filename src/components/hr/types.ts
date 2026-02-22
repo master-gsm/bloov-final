@@ -86,4 +86,17 @@ export interface EmployeeSettlement {
   employees?: { full_name: string };
 }
 
-export type Tab = 'employees' | 'salaries' | 'commissions' | 'leaves' | 'settlements';
+export type Tab = 'employees' | 'salaries' | 'commissions' | 'leaves' | 'settlements' | 'payroll' | 'loans';
+
+export interface Loan {
+  id: string;
+  employee_id: string;
+  branch_id: string;
+  loan_amount: number;
+  monthly_deduction: number;
+  remaining_balance: number;
+  status: 'active' | 'completed' | 'cancelled';
+  notes: string;
+  created_at: string;
+  employees?: { full_name: string };
+}

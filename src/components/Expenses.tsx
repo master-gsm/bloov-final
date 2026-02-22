@@ -13,6 +13,7 @@ interface OperatingExpense {
   id: string;
   expense_number: string;
   expense_type: string;
+  category: string;
   description: string;
   description_ar?: string;
   amount: number;
@@ -94,11 +95,12 @@ export default function Expenses() {
   const loadExpenses = async () => {
     try {
       let query = supabase
-        .from('operating_expenses')
+        .from('expenses')
         .select('*')
+        .eq('is_deleted', false)
+        .not('category', 'in', '(salaries,commissions,purchases)')
         .order('expense_date', { ascending: false });
 
-      // RLS will handle filtering, but we can optimize the query
       if (!isSuperAdmin && userBranchId) {
         query = query.eq('branch_id', userBranchId);
       }
@@ -106,7 +108,7 @@ export default function Expenses() {
       const { data, error } = await query;
 
       if (error) throw error;
-      if (data) setExpenses(data as any[]);
+      if (data) setExpenses(data.map((e: any) => ({ ...e, expense_type: e.category })) as any[]);
     } catch (err) {
       console.error('Error loading expenses:', err);
     } finally {
@@ -153,10 +155,10 @@ export default function Expenses() {
         }
       }
 
-      const { error } = await supabase.from('operating_expenses').insert([
+      const { error } = await supabase.from('expenses').insert([
         {
           expense_number: expenseNumber,
-          expense_type: formData.expense_type,
+          category: formData.expense_type,
           description: formData.description,
           description_ar: formData.description_ar || formData.description,
           amount: parseFloat(formData.amount),
@@ -197,7 +199,7 @@ export default function Expenses() {
       return;
     }
     try {
-      const { data, error } = await supabase.rpc('void_operating_expense', {
+      const { data, error } = await supabase.rpc('void_expense', {
         p_expense_id: id,
         p_reason: 'Voided via UI',
       });
