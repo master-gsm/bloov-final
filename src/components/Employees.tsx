@@ -4,58 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
   Users, Plus, Edit2, Trash2, DollarSign, TrendingUp, Calendar,
-  Search, Filter, X, Save, Loader2, AlertCircle, Briefcase,
-  CreditCard, Percent, CheckCircle, Clock
+  Search, X, Save, Loader2, AlertCircle, CheckCircle, Clock,
+  CalendarDays, FileText, UserX,
 } from 'lucide-react';
-
-interface Employee {
-  id: string;
-  full_name: string;
-  phone: string;
-  email: string;
-  national_id: string;
-  position: string;
-  department: string;
-  branch_id: string;
-  hire_date: string;
-  basic_salary: number;
-  commission_rate: number;
-  commission_rate_external: number;
-  is_active: boolean;
-  employment_type: 'full_time' | 'part_time' | 'contract';
-  notes: string;
-  branches?: { name: string };
-}
-
-interface SalaryPayment {
-  id: string;
-  employee_id: string;
-  payment_date: string;
-  period_start: string;
-  period_end: string;
-  basic_amount: number;
-  commission_amount: number;
-  bonus: number;
-  deductions: number;
-  total_amount: number;
-  payment_method: string;
-  notes: string;
-  employees?: { full_name: string };
-}
-
-interface Commission {
-  id: string;
-  employee_id: string;
-  sale_id: string;
-  commission_rate: number;
-  sale_amount: number;
-  commission_amount: number;
-  is_paid: boolean;
-  created_at: string;
-  employees?: { full_name: string };
-}
-
-type Tab = 'employees' | 'salaries' | 'commissions';
+import { LeavesTab } from './hr/LeavesTab';
+import { SettlementsTab } from './hr/SettlementsTab';
+import type { Employee, SalaryPayment, Commission, EmployeeLeave, EmployeeSettlement, Tab } from './hr/types';
 
 export function Employees() {
   const { language } = useLanguage();
@@ -66,6 +20,8 @@ export function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [salaries, setSalaries] = useState<SalaryPayment[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [leaves, setLeaves] = useState<EmployeeLeave[]>([]);
+  const [settlements, setSettlements] = useState<EmployeeSettlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -73,7 +29,7 @@ export function Employees() {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [branches, setBranches] = useState<any[]>([]);
 
-  const [formData, setFormData] = useState({
+  const defaultForm = {
     full_name: '',
     phone: '',
     email: '',
@@ -87,8 +43,14 @@ export function Employees() {
     commission_rate_external: 0,
     is_active: true,
     employment_type: 'full_time' as const,
+    contract_type: 'permanent' as const,
+    vacation_balance_days: 21,
+    termination_date: '',
+    termination_reason: '',
     notes: '',
-  });
+  };
+
+  const [formData, setFormData] = useState(defaultForm);
 
   const [salaryForm, setSalaryForm] = useState({
     employee_id: '',
@@ -115,31 +77,46 @@ export function Employees() {
           .from('employees')
           .select('*, branches(name)')
           .order('created_at', { ascending: false });
-
-        if (!isAdmin && userProfile?.branch_id) {
-          empQuery = (empQuery as any).eq('branch_id', userProfile.branch_id);
+        if (!isAdmin && (userProfile as any)?.branch_id) {
+          empQuery = (empQuery as any).eq('branch_id', (userProfile as any).branch_id);
         }
-
         const { data: empData } = await empQuery;
         setEmployees((empData || []) as any[]);
 
-        const { data: branchData } = await supabase
-          .from('branches')
-          .select('*')
-          .order('name');
+        const { data: branchData } = await supabase.from('branches').select('*').order('name');
         setBranches(branchData || []);
       } else if (activeTab === 'salaries') {
-        const { data: salData } = await supabase
+        const { data } = await supabase
           .from('salary_payments')
           .select('*, employees(full_name)')
           .order('payment_date', { ascending: false });
-        setSalaries((salData || []) as any[]);
+        setSalaries((data || []) as any[]);
       } else if (activeTab === 'commissions') {
-        const { data: commData } = await supabase
+        const { data } = await supabase
           .from('employee_commissions')
           .select('*, employees(full_name)')
           .order('created_at', { ascending: false });
-        setCommissions((commData || []) as any[]);
+        setCommissions((data || []) as any[]);
+      } else if (activeTab === 'leaves') {
+        if (employees.length === 0) {
+          const { data: empData } = await supabase.from('employees').select('*, branches(name)').order('created_at', { ascending: false });
+          setEmployees((empData || []) as any[]);
+        }
+        const { data } = await supabase
+          .from('employee_leaves')
+          .select('*, employees(full_name, basic_salary)')
+          .order('created_at', { ascending: false });
+        setLeaves((data || []) as any[]);
+      } else if (activeTab === 'settlements') {
+        if (employees.length === 0) {
+          const { data: empData } = await supabase.from('employees').select('*, branches(name)').order('created_at', { ascending: false });
+          setEmployees((empData || []) as any[]);
+        }
+        const { data } = await supabase
+          .from('employee_settlements')
+          .select('*, employees(full_name)')
+          .order('created_at', { ascending: false });
+        setSettlements((data || []) as any[]);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -150,7 +127,7 @@ export function Employees() {
 
   const handleSaveEmployee = async () => {
     try {
-      const payload = {
+      const payload: any = {
         full_name: formData.full_name,
         phone: formData.phone,
         email: formData.email,
@@ -164,19 +141,22 @@ export function Employees() {
         commission_rate_external: formData.commission_rate_external,
         is_active: formData.is_active,
         employment_type: formData.employment_type,
+        contract_type: formData.contract_type,
+        vacation_balance_days: formData.vacation_balance_days,
         notes: formData.notes,
       };
+      if (formData.termination_date) {
+        payload.termination_date = formData.termination_date;
+        payload.termination_reason = formData.termination_reason;
+      }
       if (editingEmployee) {
-        await supabase
-          .from('employees')
-          .update(payload)
-          .eq('id', editingEmployee.id);
+        await supabase.from('employees').update(payload).eq('id', editingEmployee.id);
       } else {
         await supabase.from('employees').insert([payload] as any);
       }
       setShowModal(false);
       setEditingEmployee(null);
-      resetForm();
+      setFormData(defaultForm);
       loadData();
     } catch (error) {
       console.error('Error saving employee:', error);
@@ -185,21 +165,17 @@ export function Employees() {
 
   const handleDeleteEmployee = async (id: string) => {
     if (!confirm(isRTL ? 'هل تريد حذف هذا الموظف؟' : 'Delete this employee?')) return;
-    try {
-      await supabase.from('employees').delete().eq('id', id);
-      loadData();
-    } catch (error) {
-      console.error('Error deleting employee:', error);
-    }
+    await supabase.from('employees').delete().eq('id', id);
+    loadData();
   };
 
   const handlePaySalary = async () => {
     try {
       const totalAmount =
-        parseFloat(salaryForm.basic_amount.toString()) +
-        parseFloat(salaryForm.commission_amount.toString()) +
-        parseFloat(salaryForm.bonus.toString()) -
-        parseFloat(salaryForm.deductions.toString());
+        (salaryForm.basic_amount || 0) +
+        (salaryForm.commission_amount || 0) +
+        (salaryForm.bonus || 0) -
+        (salaryForm.deductions || 0);
 
       await supabase.from('salary_payments').insert([{
         ...salaryForm,
@@ -207,47 +183,16 @@ export function Employees() {
         branch_id: (userProfile as any)?.branch_id,
         created_by: (userProfile as any)?.id,
       }]);
-
       setShowSalaryModal(false);
-      resetSalaryForm();
+      setSalaryForm({
+        employee_id: '', payment_date: new Date().toISOString().split('T')[0],
+        period_start: '', period_end: '', basic_amount: 0, commission_amount: 0,
+        bonus: 0, deductions: 0, payment_method: 'cash', notes: '',
+      });
       loadData();
-    } catch (error) {
-      console.error('Error paying salary:', error);
+    } catch (error: any) {
+      alert(error?.message || 'Error saving salary');
     }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      full_name: '',
-      phone: '',
-      email: '',
-      national_id: '',
-      position: '',
-      department: '',
-      branch_id: (userProfile as any)?.branch_id || '',
-      hire_date: new Date().toISOString().split('T')[0],
-      basic_salary: 0,
-      commission_rate: 0,
-      commission_rate_external: 0,
-      is_active: true,
-      employment_type: 'full_time' as const,
-      notes: '',
-    });
-  };
-
-  const resetSalaryForm = () => {
-    setSalaryForm({
-      employee_id: '',
-      payment_date: new Date().toISOString().split('T')[0],
-      period_start: '',
-      period_end: '',
-      basic_amount: 0,
-      commission_amount: 0,
-      bonus: 0,
-      deductions: 0,
-      payment_method: 'cash',
-      notes: '',
-    });
   };
 
   const openEditModal = (employee: Employee) => {
@@ -265,7 +210,11 @@ export function Employees() {
       commission_rate: employee.commission_rate,
       commission_rate_external: employee.commission_rate_external || 0,
       is_active: employee.is_active,
-      employment_type: (employee.employment_type || 'full_time') as 'full_time',
+      employment_type: employee.employment_type || 'full_time',
+      contract_type: (employee as any).contract_type || 'permanent',
+      vacation_balance_days: (employee as any).vacation_balance_days ?? 21,
+      termination_date: employee.termination_date || '',
+      termination_reason: employee.termination_reason || '',
       notes: employee.notes || '',
     });
     setShowModal(true);
@@ -289,25 +238,29 @@ export function Employees() {
     );
   }
 
+  const tabs: { key: Tab; labelAr: string; labelEn: string; icon: React.ReactNode }[] = [
+    { key: 'employees',   labelAr: 'الموظفين',    labelEn: 'Employees',    icon: <Users className="w-4 h-4" /> },
+    { key: 'salaries',    labelAr: 'الرواتب',     labelEn: 'Salaries',     icon: <DollarSign className="w-4 h-4" /> },
+    { key: 'commissions', labelAr: 'العمولات',    labelEn: 'Commissions',  icon: <TrendingUp className="w-4 h-4" /> },
+    { key: 'leaves',      labelAr: 'الإجازات',    labelEn: 'Leaves',       icon: <CalendarDays className="w-4 h-4" /> },
+    { key: 'settlements', labelAr: 'نهاية الخدمة', labelEn: 'Settlements', icon: <FileText className="w-4 h-4" /> },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Users className="w-7 h-7 text-teal-600" />
-            {isRTL ? 'الموظفين والرواتب' : 'Employees & Salaries'}
+            {isRTL ? 'الموارد البشرية والرواتب' : 'HR & Payroll'}
           </h2>
           <p className="text-gray-500 mt-1">
-            {isRTL ? 'إدارة الموظفين والرواتب والعمولات' : 'Manage employees, salaries, and commissions'}
+            {isRTL ? 'إدارة الموظفين والرواتب والإجازات ونهاية الخدمة' : 'Manage employees, salaries, leaves & settlements'}
           </p>
         </div>
         {activeTab === 'employees' && (
           <button
-            onClick={() => {
-              resetForm();
-              setEditingEmployee(null);
-              setShowModal(true);
-            }}
+            onClick={() => { setFormData(defaultForm); setEditingEmployee(null); setShowModal(true); }}
             className="flex items-center gap-2 bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition"
           >
             <Plus className="w-5 h-5" />
@@ -316,10 +269,7 @@ export function Employees() {
         )}
         {activeTab === 'salaries' && (
           <button
-            onClick={() => {
-              resetSalaryForm();
-              setShowSalaryModal(true);
-            }}
+            onClick={() => setShowSalaryModal(true)}
             className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition"
           >
             <DollarSign className="w-5 h-5" />
@@ -328,40 +278,34 @@ export function Employees() {
         )}
       </div>
 
-      <div className="flex gap-2 border-b overflow-x-auto">
-        {(['employees', 'salaries', 'commissions'] as Tab[]).map(tab => (
+      <div className="flex gap-1 border-b overflow-x-auto">
+        {tabs.map(tab => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-              activeTab === tab
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
+              activeTab === tab.key
                 ? 'border-teal-600 text-teal-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {tab === 'employees' && <Users className="w-4 h-4" />}
-            {tab === 'salaries' && <DollarSign className="w-4 h-4" />}
-            {tab === 'commissions' && <TrendingUp className="w-4 h-4" />}
-            {tab === 'employees' && (isRTL ? 'الموظفين' : 'Employees')}
-            {tab === 'salaries' && (isRTL ? 'الرواتب' : 'Salaries')}
-            {tab === 'commissions' && (isRTL ? 'العمولات' : 'Commissions')}
+            {tab.icon}
+            {isRTL ? tab.labelAr : tab.labelEn}
           </button>
         ))}
       </div>
 
       {activeTab === 'employees' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={isRTL ? 'بحث عن موظف...' : 'Search employee...'}
-                className="w-full pr-10 pl-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder={isRTL ? 'بحث عن موظف...' : 'Search employee...'}
+              className="w-full pr-10 pl-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+            />
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -369,89 +313,87 @@ export function Employees() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                      {isRTL ? 'الاسم' : 'Name'}
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                      {isRTL ? 'المنصب' : 'Position'}
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                      {isRTL ? 'القسم' : 'Department'}
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                      {isRTL ? 'الفرع' : 'Branch'}
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                      {isRTL ? 'الراتب' : 'Salary'}
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                      {isRTL ? 'العمولة %' : 'Commission %'}
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                      {isRTL ? 'الحالة' : 'Status'}
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                      {isRTL ? 'الإجراءات' : 'Actions'}
-                    </th>
+                    {[
+                      isRTL ? 'الاسم' : 'Name',
+                      isRTL ? 'المنصب' : 'Position',
+                      isRTL ? 'القسم' : 'Department',
+                      isRTL ? 'الفرع' : 'Branch',
+                      isRTL ? 'الراتب' : 'Salary',
+                      isRTL ? 'رصيد الإجازة' : 'Leave Balance',
+                      isRTL ? 'العمولة %' : 'Commission %',
+                      isRTL ? 'الحالة' : 'Status',
+                      isRTL ? 'الإجراءات' : 'Actions',
+                    ].map((h, i) => (
+                      <th key={i} className="px-4 py-3 text-right text-sm font-medium text-gray-700">{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {loading ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center">
-                        <Loader2 className="w-8 h-8 animate-spin mx-auto text-teal-600" />
-                      </td>
-                    </tr>
+                    <tr><td colSpan={9} className="px-4 py-8 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-teal-600" />
+                    </td></tr>
                   ) : filteredEmployees.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                        {isRTL ? 'لا يوجد موظفين' : 'No employees'}
+                    <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                      {isRTL ? 'لا يوجد موظفين' : 'No employees'}
+                    </td></tr>
+                  ) : filteredEmployees.map(emp => (
+                    <tr key={emp.id} className={`hover:bg-gray-50 ${emp.termination_date ? 'opacity-60' : ''}`}>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        <div className="flex items-center gap-2">
+                          {emp.termination_date && <UserX className="w-3.5 h-3.5 text-red-500" />}
+                          <span className="font-medium">{emp.full_name}</span>
+                        </div>
                       </td>
-                    </tr>
-                  ) : (
-                    filteredEmployees.map(emp => (
-                      <tr key={emp.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900">{emp.full_name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{emp.position}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{emp.department}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{emp.branches?.name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                          {(emp.basic_salary ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          <div className="space-y-0.5">
-                            <div className="text-xs text-gray-500">{isRTL ? 'داخلي' : 'Internal'}: {emp.commission_rate ?? 0}%</div>
-                            <div className="text-xs text-gray-500">{isRTL ? 'خارجي' : 'External'}: {emp.commission_rate_external ?? 0}%</div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                            emp.is_active
+                      <td className="px-4 py-3 text-sm text-gray-600">{emp.position}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{emp.department}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{emp.branches?.name}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                        {(emp.basic_salary ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${
+                          (emp as any).vacation_balance_days > 5
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          <Calendar className="w-3 h-3" />
+                          {(emp as any).vacation_balance_days ?? 0} {isRTL ? 'يوم' : 'd'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <div className="space-y-0.5">
+                          <div className="text-xs text-gray-500">{isRTL ? 'داخلي' : 'Int'}: {emp.commission_rate ?? 0}%</div>
+                          <div className="text-xs text-gray-500">{isRTL ? 'خارجي' : 'Ext'}: {emp.commission_rate_external ?? 0}%</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                          emp.termination_date
+                            ? 'bg-red-100 text-red-700'
+                            : emp.is_active
                               ? 'bg-green-100 text-green-700'
                               : 'bg-gray-100 text-gray-700'
-                          }`}>
-                            {emp.is_active ? (isRTL ? 'نشط' : 'Active') : (isRTL ? 'غير نشط' : 'Inactive')}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => openEditModal(emp)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteEmployee(emp.id)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                        }`}>
+                          {emp.termination_date
+                            ? (isRTL ? 'منتهي الخدمة' : 'Terminated')
+                            : emp.is_active
+                              ? (isRTL ? 'نشط' : 'Active')
+                              : (isRTL ? 'غير نشط' : 'Inactive')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openEditModal(emp)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded">
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDeleteEmployee(emp.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -465,75 +407,45 @@ export function Employees() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'الموظف' : 'Employee'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'الفترة' : 'Period'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'الراتب الأساسي' : 'Basic Salary'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'العمولات' : 'Commissions'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'المكافآت' : 'Bonus'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'الخصومات' : 'Deductions'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'الإجمالي' : 'Total'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'التاريخ' : 'Date'}
-                  </th>
+                  {[
+                    isRTL ? 'الموظف' : 'Employee',
+                    isRTL ? 'الفترة' : 'Period',
+                    isRTL ? 'الراتب الأساسي' : 'Basic Salary',
+                    isRTL ? 'العمولات' : 'Commissions',
+                    isRTL ? 'المكافآت' : 'Bonus',
+                    isRTL ? 'الخصومات' : 'Deductions',
+                    isRTL ? 'الإجمالي' : 'Total',
+                    isRTL ? 'التاريخ' : 'Date',
+                  ].map((h, i) => (
+                    <th key={i} className="px-4 py-3 text-right text-sm font-medium text-gray-700">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {loading ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-teal-600" />
-                    </td>
-                  </tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-teal-600" />
+                  </td></tr>
                 ) : salaries.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                      {isRTL ? 'لا يوجد رواتب مدفوعة' : 'No salary payments'}
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                    {isRTL ? 'لا يوجد رواتب مدفوعة' : 'No salary payments'}
+                  </td></tr>
+                ) : salaries.map(salary => (
+                  <tr key={salary.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{salary.employees?.full_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {new Date(salary.period_start).toLocaleDateString()} — {new Date(salary.period_end).toLocaleDateString()}
                     </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{(salary.basic_amount ?? 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-green-600">+{(salary.commission_amount ?? 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-green-600">+{(salary.bonus ?? 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-red-600">-{(salary.deductions ?? 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-gray-900">
+                      {(salary.total_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{new Date(salary.payment_date).toLocaleDateString()}</td>
                   </tr>
-                ) : (
-                  salaries.map(salary => (
-                    <tr key={salary.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {salary.employees?.full_name}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {new Date(salary.period_start).toLocaleDateString()} - {new Date(salary.period_end).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {(salary.basic_amount ?? 0).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-green-600">
-                        +{(salary.commission_amount ?? 0).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-green-600">
-                        +{(salary.bonus ?? 0).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-red-600">
-                        -{(salary.deductions ?? 0).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-bold text-gray-900">
-                        {(salary.total_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {new Date(salary.payment_date).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
@@ -542,163 +454,108 @@ export function Employees() {
 
       {activeTab === 'commissions' && (
         <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border p-5">
-            <p className="text-sm text-gray-500 mb-1">{isRTL ? 'إجمالي العمولات المستحقة' : 'Total Pending Commissions'}</p>
-            <p className="text-2xl font-bold text-amber-600">
-              {commissions
-                .filter(c => (c as any).status === 'pending' || (!(c as any).status && !c.is_paid))
-                .reduce((sum, c) => sum + (c.commission_amount ?? 0), 0)
-                .toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border p-5">
-            <p className="text-sm text-gray-500 mb-1">{isRTL ? 'إجمالي العمولات المعتمدة' : 'Total Approved Commissions'}</p>
-            <p className="text-2xl font-bold text-green-600">
-              {commissions
-                .filter(c => (c as any).status === 'approved' || c.is_paid)
-                .reduce((sum, c) => sum + (c.commission_amount ?? 0), 0)
-                .toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border p-5">
-            <p className="text-sm text-gray-500 mb-1">{isRTL ? 'إجمالي جميع العمولات' : 'Total All Commissions'}</p>
-            <p className="text-2xl font-bold text-teal-600">
-              {commissions
-                .filter(c => (c as any).status !== 'void')
-                .reduce((sum, c) => sum + (c.commission_amount ?? 0), 0)
-                .toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}
-            </p>
-          </div>
-        </div>
-
-        {commissions.length > 0 && (() => {
-          const byEmployee: Record<string, { name: string; pending: number; approved: number; void: number; total: number; count: number }> = {};
-          commissions.forEach(c => {
-            const empId = c.employee_id;
-            const name = c.employees?.full_name || empId;
-            if (!byEmployee[empId]) byEmployee[empId] = { name, pending: 0, approved: 0, void: 0, total: 0, count: 0 };
-            const status = (c as any).status;
-            const amt = c.commission_amount ?? 0;
-            if (status === 'void') { byEmployee[empId].void += amt; }
-            else if (status === 'approved' || c.is_paid) { byEmployee[empId].approved += amt; }
-            else { byEmployee[empId].pending += amt; }
-            if (status !== 'void') byEmployee[empId].total += amt;
-            byEmployee[empId].count += 1;
-          });
-          const entries = Object.values(byEmployee);
-          return (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">{isRTL ? 'تفصيل العمولات لكل موظف' : 'Commission Breakdown by Employee'}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {entries.map((emp, i) => (
-                  <div key={i} className="bg-white rounded-xl border shadow-sm p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-gray-900 text-sm">{emp.name}</span>
-                      <span className="text-xs text-gray-400">{emp.count} {isRTL ? 'عملية' : 'transactions'}</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-amber-600 font-medium">{isRTL ? 'مستحقة' : 'Pending'}</span>
-                        <span className="font-bold text-amber-600">{emp.pending.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-green-600 font-medium">{isRTL ? 'معتمدة' : 'Approved'}</span>
-                        <span className="font-bold text-green-600">{emp.approved.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}</span>
-                      </div>
-                      <div className="border-t pt-1.5 flex justify-between text-xs">
-                        <span className="text-teal-700 font-semibold">{isRTL ? 'الإجمالي' : 'Total'}</span>
-                        <span className="font-bold text-teal-700">{emp.total.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              {
+                label: isRTL ? 'إجمالي العمولات المستحقة' : 'Total Pending',
+                value: commissions.filter(c => (c as any).status === 'pending' || (!(c as any).status && !c.is_paid)).reduce((s, c) => s + (c.commission_amount ?? 0), 0),
+                color: 'text-amber-600',
+              },
+              {
+                label: isRTL ? 'إجمالي العمولات المعتمدة' : 'Total Approved',
+                value: commissions.filter(c => (c as any).status === 'approved' || c.is_paid).reduce((s, c) => s + (c.commission_amount ?? 0), 0),
+                color: 'text-green-600',
+              },
+              {
+                label: isRTL ? 'إجمالي جميع العمولات' : 'Total All',
+                value: commissions.filter(c => (c as any).status !== 'void').reduce((s, c) => s + (c.commission_amount ?? 0), 0),
+                color: 'text-teal-600',
+              },
+            ].map((card, i) => (
+              <div key={i} className="bg-white rounded-xl shadow-sm border p-5">
+                <p className="text-sm text-gray-500 mb-1">{card.label}</p>
+                <p className={`text-2xl font-bold ${card.color}`}>
+                  {card.value.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}
+                </p>
               </div>
-            </div>
-          );
-        })()}
+            ))}
+          </div>
 
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'الموظف' : 'Employee'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'مبلغ البيع' : 'Sale Amount'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'نسبة العمولة' : 'Commission Rate'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'مبلغ العمولة' : 'Commission Amount'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'الحالة' : 'Status'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                    {isRTL ? 'التاريخ' : 'Date'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {loading ? (
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b">
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center">
+                    {[
+                      isRTL ? 'الموظف' : 'Employee',
+                      isRTL ? 'مبلغ البيع' : 'Sale Amount',
+                      isRTL ? 'نسبة العمولة' : 'Rate',
+                      isRTL ? 'مبلغ العمولة' : 'Commission',
+                      isRTL ? 'الحالة' : 'Status',
+                      isRTL ? 'التاريخ' : 'Date',
+                    ].map((h, i) => (
+                      <th key={i} className="px-4 py-3 text-right text-sm font-medium text-gray-700">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {loading ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-teal-600" />
-                    </td>
-                  </tr>
-                ) : commissions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                    </td></tr>
+                  ) : commissions.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                       {isRTL ? 'لا يوجد عمولات' : 'No commissions'}
-                    </td>
-                  </tr>
-                ) : (
-                  commissions.map(comm => (
+                    </td></tr>
+                  ) : commissions.map(comm => (
                     <tr key={comm.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {comm.employees?.full_name}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {(comm.sale_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {comm.commission_rate}%
-                      </td>
-                      <td className="px-4 py-3 text-sm font-bold text-green-600">
-                        {(comm.commission_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
-                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{comm.employees?.full_name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{(comm.sale_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{comm.commission_rate}%</td>
+                      <td className="px-4 py-3 text-sm font-bold text-green-600">{(comm.commission_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          (comm as any).status === 'approved' || comm.is_paid
-                            ? 'bg-green-100 text-green-700'
-                            : (comm as any).status === 'void'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-yellow-100 text-yellow-700'
+                          (comm as any).status === 'approved' || comm.is_paid ? 'bg-green-100 text-green-700' :
+                          (comm as any).status === 'void'                     ? 'bg-red-100 text-red-700'   :
+                                                                                'bg-amber-100 text-amber-700'
                         }`}>
-                          {(comm as any).status === 'approved' || comm.is_paid ? (
-                            <><CheckCircle className="w-3 h-3" /> {isRTL ? 'مؤكدة' : 'Approved'}</>
-                          ) : (comm as any).status === 'void' ? (
-                            <><X className="w-3 h-3" /> {isRTL ? 'ملغاة' : 'Void'}</>
-                          ) : (
-                            <><Clock className="w-3 h-3" /> {isRTL ? 'معلقة' : 'Pending'}</>
-                          )}
+                          {(comm as any).status === 'approved' || comm.is_paid
+                            ? <><CheckCircle className="w-3 h-3" /> {isRTL ? 'مؤكدة' : 'Approved'}</>
+                            : (comm as any).status === 'void'
+                              ? <><X className="w-3 h-3" /> {isRTL ? 'ملغاة' : 'Void'}</>
+                              : <><Clock className="w-3 h-3" /> {isRTL ? 'معلقة' : 'Pending'}</>}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {new Date(comm.created_at).toLocaleDateString()}
-                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{new Date(comm.created_at).toLocaleDateString()}</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-        </div>
+      )}
+
+      {activeTab === 'leaves' && (
+        <LeavesTab
+          isRTL={isRTL}
+          leaves={leaves}
+          employees={employees}
+          userProfile={userProfile}
+          loading={loading}
+          onRefresh={loadData}
+        />
+      )}
+
+      {activeTab === 'settlements' && (
+        <SettlementsTab
+          isRTL={isRTL}
+          settlements={settlements}
+          employees={employees}
+          userProfile={userProfile}
+          loading={loading}
+          onRefresh={loadData}
+        />
       )}
 
       {showModal && (
@@ -706,9 +563,7 @@ export function Employees() {
           <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full p-6 space-y-6 my-8">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-gray-900">
-                {editingEmployee
-                  ? (isRTL ? 'تعديل موظف' : 'Edit Employee')
-                  : (isRTL ? 'إضافة موظف جديد' : 'Add New Employee')}
+                {editingEmployee ? (isRTL ? 'تعديل موظف' : 'Edit Employee') : (isRTL ? 'إضافة موظف جديد' : 'Add New Employee')}
               </h3>
               <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5" />
@@ -717,208 +572,124 @@ export function Employees() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'الاسم الكامل *' : 'Full Name *'}
-                </label>
-                <input
-                  type="text"
-                  value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  required
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الاسم الكامل *' : 'Full Name *'}</label>
+                <input type="text" value={formData.full_name} onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" required />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'رقم الهاتف' : 'Phone'}
-                </label>
-                <input
-                  type="text"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  dir="ltr"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'رقم الهاتف' : 'Phone'}</label>
+                <input type="text" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" dir="ltr" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'البريد الإلكتروني' : 'Email'}
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  dir="ltr"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'البريد الإلكتروني' : 'Email'}</label>
+                <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" dir="ltr" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'رقم الهوية' : 'National ID'}
-                </label>
-                <input
-                  type="text"
-                  value={formData.national_id}
-                  onChange={(e) => setFormData({ ...formData, national_id: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  dir="ltr"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'رقم الهوية' : 'National ID'}</label>
+                <input type="text" value={formData.national_id} onChange={e => setFormData({ ...formData, national_id: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" dir="ltr" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'المنصب' : 'Position'}
-                </label>
-                <input
-                  type="text"
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'المنصب' : 'Position'}</label>
+                <input type="text" value={formData.position} onChange={e => setFormData({ ...formData, position: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'القسم' : 'Department'}
-                </label>
-                <input
-                  type="text"
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'القسم' : 'Department'}</label>
+                <input type="text" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'الفرع' : 'Branch'}
-                </label>
-                <select
-                  value={formData.branch_id}
-                  onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                >
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الفرع' : 'Branch'}</label>
+                <select value={formData.branch_id} onChange={e => setFormData({ ...formData, branch_id: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
                   <option value="">{isRTL ? 'اختر الفرع' : 'Select Branch'}</option>
-                  {branches.map(branch => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'تاريخ التوظيف' : 'Hire Date'}
-                </label>
-                <input
-                  type="date"
-                  value={formData.hire_date}
-                  onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'تاريخ التوظيف' : 'Hire Date'}</label>
+                <input type="date" value={formData.hire_date} onChange={e => setFormData({ ...formData, hire_date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'الراتب الأساسي' : 'Basic Salary'}
-                </label>
-                <input
-                  type="number"
-                  value={formData.basic_salary}
-                  onChange={(e) => setFormData({ ...formData, basic_salary: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  min="0"
-                  step="0.01"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الراتب الأساسي' : 'Basic Salary'}</label>
+                <input type="number" value={formData.basic_salary} onChange={e => setFormData({ ...formData, basic_salary: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" min="0" step="0.01" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'نسبة عمولة المبيعات الداخلية %' : 'Internal Sales Commission %'}
-                </label>
-                <input
-                  type="number"
-                  value={formData.commission_rate}
-                  onChange={(e) => setFormData({ ...formData, commission_rate: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  placeholder="0"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'رصيد الإجازة السنوية (أيام)' : 'Annual Leave Balance (days)'}</label>
+                <input type="number" value={formData.vacation_balance_days} onChange={e => setFormData({ ...formData, vacation_balance_days: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" min="0" step="0.5" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'نسبة عمولة المبيعات الخارجية %' : 'External Sales Commission %'}
-                </label>
-                <input
-                  type="number"
-                  value={formData.commission_rate_external}
-                  onChange={(e) => setFormData({ ...formData, commission_rate_external: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  placeholder="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'نوع العقد' : 'Employment Type'}
-                </label>
-                <select
-                  value={formData.employment_type}
-                  onChange={(e) => setFormData({ ...formData, employment_type: e.target.value as any })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                >
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'نوع التوظيف' : 'Employment Type'}</label>
+                <select value={formData.employment_type} onChange={e => setFormData({ ...formData, employment_type: e.target.value as any })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
                   <option value="full_time">{isRTL ? 'دوام كامل' : 'Full Time'}</option>
                   <option value="part_time">{isRTL ? 'دوام جزئي' : 'Part Time'}</option>
-                  <option value="contract">{isRTL ? 'عقد' : 'Contract'}</option>
+                  <option value="contract">{isRTL ? 'عقد مؤقت' : 'Contract'}</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'نوع العقد' : 'Contract Type'}</label>
+                <select value={formData.contract_type} onChange={e => setFormData({ ...formData, contract_type: e.target.value as any })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
+                  <option value="permanent">{isRTL ? 'دائم' : 'Permanent'}</option>
+                  <option value="fixed_term">{isRTL ? 'محدد المدة' : 'Fixed Term'}</option>
+                  <option value="project">{isRTL ? 'مشروع' : 'Project-based'}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'نسبة عمولة المبيعات الداخلية %' : 'Internal Commission %'}</label>
+                <input type="number" value={formData.commission_rate} onChange={e => setFormData({ ...formData, commission_rate: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" min="0" max="100" step="0.1" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'نسبة عمولة المبيعات الخارجية %' : 'External Commission %'}</label>
+                <input type="number" value={formData.commission_rate_external} onChange={e => setFormData({ ...formData, commission_rate_external: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" min="0" max="100" step="0.1" />
+              </div>
+
+              {editingEmployee && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'تاريخ إنهاء الخدمة' : 'Termination Date'}</label>
+                    <input type="date" value={formData.termination_date} onChange={e => setFormData({ ...formData, termination_date: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'سبب الإنهاء' : 'Termination Reason'}</label>
+                    <input type="text" value={formData.termination_reason} onChange={e => setFormData({ ...formData, termination_reason: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
+                  </div>
+                </>
+              )}
 
               <div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">
-                    {isRTL ? 'موظف نشط' : 'Active Employee'}
-                  </span>
+                <label className="flex items-center gap-2 cursor-pointer mt-2">
+                  <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500" />
+                  <span className="text-sm font-medium text-gray-700">{isRTL ? 'موظف نشط' : 'Active Employee'}</span>
                 </label>
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'ملاحظات' : 'Notes'}
-                </label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  rows={3}
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'ملاحظات' : 'Notes'}</label>
+                <textarea value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" rows={3} />
               </div>
             </div>
 
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
-              >
+              <button onClick={() => setShowModal(false)}
+                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium">
                 {isRTL ? 'إلغاء' : 'Cancel'}
               </button>
-              <button
-                onClick={handleSaveEmployee}
-                className="flex-1 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-medium flex items-center justify-center gap-2"
-              >
+              <button onClick={handleSaveEmployee}
+                className="flex-1 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-medium flex items-center justify-center gap-2">
                 <Save className="w-5 h-5" />
                 {isRTL ? 'حفظ' : 'Save'}
               </button>
@@ -931,9 +702,7 @@ export function Employees() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-gray-900">
-                {isRTL ? 'دفع راتب' : 'Pay Salary'}
-              </h3>
+              <h3 className="text-xl font-bold text-gray-900">{isRTL ? 'دفع راتب' : 'Pay Salary'}</h3>
               <button onClick={() => setShowSalaryModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
@@ -941,180 +710,64 @@ export function Employees() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'الموظف *' : 'Employee *'}
-                </label>
-                <select
-                  value={salaryForm.employee_id}
-                  onChange={(e) => {
-                    const empId = e.target.value;
-                    const emp = employees.find(e => e.id === empId);
-                    setSalaryForm({
-                      ...salaryForm,
-                      employee_id: empId,
-                      basic_amount: emp?.basic_salary || 0,
-                    });
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الموظف *' : 'Employee *'}</label>
+                <select value={salaryForm.employee_id}
+                  onChange={e => {
+                    const emp = employees.find(em => em.id === e.target.value);
+                    setSalaryForm({ ...salaryForm, employee_id: e.target.value, basic_amount: emp?.basic_salary || 0 });
                   }}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  required
-                >
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" required>
                   <option value="">{isRTL ? 'اختر موظف' : 'Select Employee'}</option>
-                  {employees.filter(e => e.is_active).map(emp => (
+                  {employees.filter(e => e.is_active && !e.termination_date).map(emp => (
                     <option key={emp.id} value={emp.id}>{emp.full_name}</option>
                   ))}
                 </select>
               </div>
-
+              {[
+                { key: 'period_start',       label: isRTL ? 'من تاريخ' : 'Period Start', type: 'date' },
+                { key: 'period_end',         label: isRTL ? 'إلى تاريخ' : 'Period End', type: 'date' },
+                { key: 'basic_amount',       label: isRTL ? 'الراتب الأساسي' : 'Basic Amount', type: 'number' },
+                { key: 'commission_amount',  label: isRTL ? 'العمولات' : 'Commissions', type: 'number' },
+                { key: 'bonus',              label: isRTL ? 'المكافآت' : 'Bonus', type: 'number' },
+                { key: 'deductions',         label: isRTL ? 'الخصومات' : 'Deductions', type: 'number' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                  <input type={f.type} value={(salaryForm as any)[f.key]}
+                    onChange={e => setSalaryForm({ ...salaryForm, [f.key]: f.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                    min={f.type === 'number' ? '0' : undefined} step={f.type === 'number' ? '0.01' : undefined} />
+                </div>
+              ))}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'من تاريخ' : 'Period Start'}
-                </label>
-                <input
-                  type="date"
-                  value={salaryForm.period_start}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, period_start: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'إلى تاريخ' : 'Period End'}
-                </label>
-                <input
-                  type="date"
-                  value={salaryForm.period_end}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, period_end: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'الراتب الأساسي' : 'Basic Amount'}
-                </label>
-                <input
-                  type="number"
-                  value={salaryForm.basic_amount}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, basic_amount: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'العمولات' : 'Commissions'}
-                </label>
-                <input
-                  type="number"
-                  value={salaryForm.commission_amount}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, commission_amount: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'المكافآت' : 'Bonus'}
-                </label>
-                <input
-                  type="number"
-                  value={salaryForm.bonus}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, bonus: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'الخصومات' : 'Deductions'}
-                </label>
-                <input
-                  type="number"
-                  value={salaryForm.deductions}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, deductions: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'طريقة الدفع' : 'Payment Method'}
-                </label>
-                <select
-                  value={salaryForm.payment_method}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, payment_method: e.target.value as any })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                >
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'طريقة الدفع' : 'Payment Method'}</label>
+                <select value={salaryForm.payment_method} onChange={e => setSalaryForm({ ...salaryForm, payment_method: e.target.value as any })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
                   <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
                   <option value="bank_transfer">{isRTL ? 'تحويل بنكي' : 'Bank Transfer'}</option>
                   <option value="check">{isRTL ? 'شيك' : 'Check'}</option>
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'تاريخ الدفع' : 'Payment Date'}
-                </label>
-                <input
-                  type="date"
-                  value={salaryForm.payment_date}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, payment_date: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'تاريخ الدفع' : 'Payment Date'}</label>
+                <input type="date" value={salaryForm.payment_date} onChange={e => setSalaryForm({ ...salaryForm, payment_date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
               </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRTL ? 'ملاحظات' : 'Notes'}
-                </label>
-                <textarea
-                  value={salaryForm.notes}
-                  onChange={(e) => setSalaryForm({ ...salaryForm, notes: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  rows={2}
-                />
-              </div>
-
-              <div className="md:col-span-2 bg-teal-50 border border-teal-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">
-                    {isRTL ? 'الإجمالي:' : 'Total:'}
-                  </span>
-                  <span className="text-2xl font-bold text-teal-600">
-                    {(
-                      (salaryForm.basic_amount || 0) +
-                      (salaryForm.commission_amount || 0) +
-                      (salaryForm.bonus || 0) -
-                      (salaryForm.deductions || 0)
-                    ).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
-                  </span>
-                </div>
+              <div className="md:col-span-2 bg-teal-50 border border-teal-200 rounded-lg p-4 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">{isRTL ? 'الإجمالي:' : 'Total:'}</span>
+                <span className="text-2xl font-bold text-teal-600">
+                  {((salaryForm.basic_amount || 0) + (salaryForm.commission_amount || 0) + (salaryForm.bonus || 0) - (salaryForm.deductions || 0)).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                </span>
               </div>
             </div>
 
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowSalaryModal(false)}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
-              >
+              <button onClick={() => setShowSalaryModal(false)}
+                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium">
                 {isRTL ? 'إلغاء' : 'Cancel'}
               </button>
-              <button
-                onClick={handlePaySalary}
-                disabled={!salaryForm.employee_id || !salaryForm.period_start || !salaryForm.period_end}
-                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-              >
+              <button onClick={handlePaySalary} disabled={!salaryForm.employee_id || !salaryForm.period_start || !salaryForm.period_end}
+                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50">
                 <DollarSign className="w-5 h-5" />
                 {isRTL ? 'دفع الراتب' : 'Pay Salary'}
               </button>
