@@ -88,6 +88,86 @@ async function callOpenAI(apiKey: string, model: string, messages: any[], respon
   };
 }
 
+async function callGemini(apiKey: string, model: string, messages: any[], _responseFormat?: any) {
+  const startTime = Date.now();
+
+  const geminiModel = model || 'gemini-2.0-flash';
+
+  const contents = messages.map((msg: any) => ({
+    role: msg.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: msg.content }],
+  }));
+
+  const requestBody = {
+    contents,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 2000,
+      responseMimeType: 'application/json',
+    },
+  };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (fetchError: any) {
+    throw new Error(`Network error connecting to Gemini: ${fetchError.message}`);
+  }
+
+  if (!response.ok) {
+    let errorMessage = response.statusText;
+    let errorDetails = '';
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error?.message || response.statusText;
+      errorDetails = errorData.error?.status || '';
+    } catch {
+      // Could not parse error JSON
+    }
+
+    let statusCode = response.status;
+    if (statusCode === 400 && errorDetails === 'INVALID_ARGUMENT') {
+      statusCode = 401;
+      errorDetails = 'invalid_api_key';
+    }
+
+    const err = new Error(`Gemini API error (${response.status}): ${errorMessage}`);
+    (err as any).statusCode = statusCode;
+    (err as any).errorType = errorDetails;
+    throw err;
+  }
+
+  const result = await response.json();
+  const processingTime = Date.now() - startTime;
+
+  const candidate = result.candidates?.[0];
+  if (!candidate?.content?.parts?.[0]?.text) {
+    throw new Error('Gemini returned an empty response');
+  }
+
+  const totalTokens = (result.usageMetadata?.promptTokenCount || 0) +
+    (result.usageMetadata?.candidatesTokenCount || 0);
+
+  return {
+    content: candidate.content.parts[0].text,
+    tokensUsed: totalTokens,
+    processingTime,
+  };
+}
+
+function callAI(provider: string, apiKey: string, model: string, messages: any[], responseFormat?: any) {
+  if (provider === 'gemini') {
+    return callGemini(apiKey, model, messages, responseFormat);
+  }
+  return callOpenAI(apiKey, model, messages, responseFormat);
+}
+
 async function generateSalesForecast(supabase: any, userId: string, data: any) {
   const { data: sales, error } = await supabase
     .from('sales')
@@ -351,9 +431,11 @@ Deno.serve(async (req: Request) => {
     }
 
     const apiKey = aiSettings.ai_api_key.trim();
-    const model = aiSettings.ai_model || 'gpt-4o-mini';
+    const provider = aiSettings.ai_provider || 'openai';
+    const defaultModel = provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini';
+    const model = aiSettings.ai_model || defaultModel;
 
-    console.log(`[AI] Request type=${type}, model=${model}, provider=${aiSettings.ai_provider}, key_length=${apiKey.length}`);
+    console.log(`[AI] Request type=${type}, model=${model}, provider=${provider}, key_length=${apiKey.length}`);
 
     let prompt = '';
     const responseFormat: any = { type: 'json_object' };
@@ -381,11 +463,11 @@ Deno.serve(async (req: Request) => {
         return errorResponse(`Invalid AI request type: "${type}"`, 400);
     }
 
-    console.log(`[AI] Calling OpenAI model=${model}, prompt_length=${prompt.length}`);
+    console.log(`[AI] Calling ${provider} model=${model}, prompt_length=${prompt.length}`);
 
-    const aiResult = await callOpenAI(apiKey, model, [{ role: 'user', content: prompt }], responseFormat);
+    const aiResult = await callAI(provider, apiKey, model, [{ role: 'user', content: prompt }], responseFormat);
 
-    console.log(`[AI] OpenAI response: tokens=${aiResult.tokensUsed}, time=${aiResult.processingTime}ms`);
+    console.log(`[AI] ${provider} response: tokens=${aiResult.tokensUsed}, time=${aiResult.processingTime}ms`);
 
     let parsedResponse;
     try {
@@ -429,13 +511,13 @@ Deno.serve(async (req: Request) => {
     let userMessage = error.message || 'An error occurred during AI analysis';
 
     if (statusCode === 401 && errorType === 'invalid_api_key') {
-      userMessage = 'Invalid OpenAI API key. Please check your key in Settings.';
+      userMessage = 'Invalid API key. Please check your key in Settings.';
     } else if (statusCode === 429) {
-      userMessage = 'OpenAI rate limit exceeded. Please wait a moment and try again.';
+      userMessage = 'Rate limit exceeded. Please wait a moment and try again.';
     } else if (statusCode === 402) {
-      userMessage = 'OpenAI billing issue. Please check your OpenAI account billing at platform.openai.com.';
+      userMessage = 'Billing issue. Please check your account billing settings.';
     } else if (statusCode === 404) {
-      userMessage = 'The selected AI model is not available. Try changing to gpt-4o-mini in Settings.';
+      userMessage = 'The selected AI model is not available. Try changing the model in Settings.';
     }
 
     return new Response(

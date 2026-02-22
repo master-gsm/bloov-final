@@ -538,42 +538,82 @@ export function Settings() {
                 { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Cheapest)', labelAr: 'GPT-3.5 Turbo (الأرخص)' },
               ])}
 
-              {renderInput('ai_api_key', 'API Key', 'مفتاح API', { type: 'password', placeholder: 'sk-...' })}
+              {settings['ai_provider'] === 'gemini' && renderSelect('ai_model', 'Gemini Model', 'نموذج Gemini', [
+                { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Recommended)', labelAr: 'Gemini 2.0 Flash (موصى به)' },
+                { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash (Latest)', labelAr: 'Gemini 2.5 Flash (الأحدث)' },
+                { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Most Capable)', labelAr: 'Gemini 1.5 Pro (الأقوى)' },
+                { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Fast)', labelAr: 'Gemini 1.5 Flash (سريع)' },
+              ])}
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                <h4 className="font-semibold text-blue-900 mb-2">
-                  {isRTL ? 'كيفية الحصول على مفتاح API:' : 'How to Get API Key:'}
-                </h4>
-                <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
-                  <li>
-                    {isRTL ? 'اذهب إلى' : 'Go to'}{' '}
-                    <a
-                      href="https://platform.openai.com/api-keys"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline font-semibold hover:text-blue-600"
-                    >
-                      platform.openai.com/api-keys
-                    </a>
-                  </li>
-                  <li>{isRTL ? 'سجل دخول أو أنشئ حساب جديد' : 'Sign in or create a new account'}</li>
-                  <li>{isRTL ? 'انقر على "Create new secret key"' : 'Click "Create new secret key"'}</li>
-                  <li>{isRTL ? 'انسخ المفتاح والصقه أعلاه' : 'Copy the key and paste it above'}</li>
-                </ol>
-                <p className="text-xs text-blue-700 mt-3">
-                  {isRTL
-                    ? 'ملاحظة: OpenAI تفرض رسوم بناءً على الاستخدام. GPT-4o Mini موصى به للتكلفة المناسبة.'
-                    : 'Note: OpenAI charges per usage. GPT-4o Mini is recommended for cost-effectiveness.'}
-                </p>
-              </div>
+              {renderInput('ai_api_key', 'API Key', 'مفتاح API', {
+                type: 'password',
+                placeholder: settings['ai_provider'] === 'gemini' ? 'AIza...' : 'sk-...',
+              })}
+
+              {settings['ai_provider'] === 'openai' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                  <h4 className="font-semibold text-blue-900 mb-2">
+                    {isRTL ? 'كيفية الحصول على مفتاح OpenAI:' : 'How to Get OpenAI Key:'}
+                  </h4>
+                  <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                    <li>
+                      {isRTL ? 'اذهب إلى' : 'Go to'}{' '}
+                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-blue-600">
+                        platform.openai.com/api-keys
+                      </a>
+                    </li>
+                    <li>{isRTL ? 'سجل دخول أو أنشئ حساب جديد' : 'Sign in or create a new account'}</li>
+                    <li>{isRTL ? 'انقر على "Create new secret key"' : 'Click "Create new secret key"'}</li>
+                    <li>{isRTL ? 'انسخ المفتاح والصقه أعلاه' : 'Copy the key and paste it above'}</li>
+                  </ol>
+                  <p className="text-xs text-blue-700 mt-3">
+                    {isRTL
+                      ? 'ملاحظة: OpenAI تفرض رسوم بناءً على الاستخدام. GPT-4o Mini موصى به للتكلفة المناسبة.'
+                      : 'Note: OpenAI charges per usage. GPT-4o Mini is recommended for cost-effectiveness.'}
+                  </p>
+                </div>
+              )}
+
+              {settings['ai_provider'] === 'gemini' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                  <h4 className="font-semibold text-blue-900 mb-2">
+                    {isRTL ? 'كيفية الحصول على مفتاح Gemini:' : 'How to Get Gemini Key:'}
+                  </h4>
+                  <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                    <li>
+                      {isRTL ? 'اذهب إلى' : 'Go to'}{' '}
+                      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-blue-600">
+                        aistudio.google.com/apikey
+                      </a>
+                    </li>
+                    <li>{isRTL ? 'سجل دخول بحساب Google' : 'Sign in with your Google account'}</li>
+                    <li>{isRTL ? 'انقر على "Create API Key"' : 'Click "Create API Key"'}</li>
+                    <li>{isRTL ? 'انسخ المفتاح والصقه أعلاه' : 'Copy the key and paste it above'}</li>
+                  </ol>
+                  <p className="text-xs text-blue-700 mt-3">
+                    {isRTL
+                      ? 'ملاحظة: Gemini يقدم طبقة مجانية سخية. Gemini 2.0 Flash موصى به للأداء والتكلفة.'
+                      : 'Note: Gemini offers a generous free tier. Gemini 2.0 Flash is recommended for performance and cost.'}
+                  </p>
+                </div>
+              )}
 
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4">
                 <h4 className="font-semibold text-green-900 mb-2">
                   {isRTL ? 'التكلفة المتوقعة:' : 'Estimated Costs:'}
                 </h4>
                 <div className="text-sm text-green-800 space-y-1">
-                  <p><strong>GPT-4o Mini:</strong> ~$0.01 per query (Budget-friendly)</p>
-                  <p><strong>GPT-4o:</strong> ~$0.10 per query (High quality)</p>
+                  {settings['ai_provider'] === 'gemini' ? (
+                    <>
+                      <p><strong>Gemini 2.0 Flash:</strong> {isRTL ? 'مجاني (حتى 15 طلب/دقيقة)' : 'Free (up to 15 req/min)'}</p>
+                      <p><strong>Gemini 1.5 Pro:</strong> {isRTL ? 'مجاني (حتى 2 طلب/دقيقة)' : 'Free (up to 2 req/min)'}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p><strong>GPT-4o Mini:</strong> ~$0.01 per query (Budget-friendly)</p>
+                      <p><strong>GPT-4o:</strong> ~$0.10 per query (High quality)</p>
+                    </>
+                  )}
                   <p className="text-xs mt-2">
                     {isRTL
                       ? 'هذه تقديرات تقريبية. التكلفة الفعلية تعتمد على طول وتعقيد الاستعلام.'

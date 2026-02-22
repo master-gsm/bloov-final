@@ -371,7 +371,7 @@ export function AIAnalysis() {
             )}
             {error.includes('402') && (
               <p className="text-xs text-red-600 mt-2">
-                {isRTL ? 'مشكلة في الفوترة. تحقق من حسابك على platform.openai.com' : 'Billing issue. Check your account at platform.openai.com'}
+                {isRTL ? 'مشكلة في الفوترة. تحقق من حسابك لدى مزود الذكاء الاصطناعي.' : 'Billing issue. Check your account with the AI provider.'}
               </p>
             )}
             {error.includes('429') && (
