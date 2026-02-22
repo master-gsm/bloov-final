@@ -71,6 +71,7 @@ export function InvoicePrint({ sale, items, onClose, onWhatsApp }: InvoicePrintP
 
   const customerName = sale.customer_name || (sale.customers ? (sale.customers.name_ar || sale.customers.name) : 'Walk-in');
   const customerPhone = sale.customer_phone || sale.customers?.phone || '';
+  const isB2B = sale.buyer_type === 'business';
 
   const qrData = generateZatcaQR(
     companyName,
@@ -180,6 +181,26 @@ export function InvoicePrint({ sale, items, onClose, onWhatsApp }: InvoicePrintP
                     <span dir="ltr">{customerPhone}</span>
                   </div>
                 )}
+                {isB2B && sale.company_name && (
+                  <div style={{ borderTop: '1px dashed #ccc', marginTop: '6px', paddingTop: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                      <span style={{ fontWeight: 'bold' }}>{isRTL ? 'اسم الشركة' : 'Company'}</span>
+                      <span style={{ fontWeight: 'bold' }}>{sale.company_name}</span>
+                    </div>
+                    {sale.company_vat_number && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                        <span>{isRTL ? 'الرقم الضريبي للمشتري' : 'Buyer VAT No.'}</span>
+                        <span dir="ltr" style={{ fontFamily: 'monospace', fontSize: '10px' }}>{sale.company_vat_number}</span>
+                      </div>
+                    )}
+                    {sale.company_address && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                        <span>{isRTL ? 'العنوان' : 'Address'}</span>
+                        <span>{sale.company_address}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
                   <span>{isRTL ? 'الدفع' : 'Payment'}</span>
                   <span>{sale.payment_method === 'cash' ? (isRTL ? 'نقدي' : 'Cash') : sale.payment_method === 'card' ? (isRTL ? 'بطاقة' : 'Card') : (isRTL ? 'تحويل' : 'Transfer')}</span>
@@ -249,7 +270,11 @@ export function InvoicePrint({ sale, items, onClose, onWhatsApp }: InvoicePrintP
               </div>
 
               <div className="vatinfo" style={{ textAlign: 'center', fontSize: '8px', color: '#aaa', marginTop: '8px' }}>
-                <p>{isRTL ? 'هذه فاتورة ضريبية مبسطة وفقاً لمتطلبات هيئة الزكاة والضريبة والجمارك' : 'Simplified tax invoice per ZATCA requirements'}</p>
+                <p>
+                  {isB2B
+                    ? (isRTL ? 'هذه فاتورة ضريبية (B2B) وفقاً لمتطلبات هيئة الزكاة والضريبة والجمارك' : 'Tax Invoice (B2B) per ZATCA requirements')
+                    : (isRTL ? 'هذه فاتورة ضريبية مبسطة وفقاً لمتطلبات هيئة الزكاة والضريبة والجمارك' : 'Simplified tax invoice per ZATCA requirements')}
+                </p>
               </div>
             </div>
           </div>

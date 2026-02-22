@@ -8,7 +8,7 @@ import { useOfflineFirst } from '../contexts/OfflineFirstContext';
 import { supabase } from '../lib/supabase';
 import { indexedDBManager } from '../lib/offline/indexedDBManager';
 import { enhancedSyncManager } from '../lib/offline/enhancedSyncManager';
-import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, CreditCard as Edit, RotateCcw } from 'lucide-react';
+import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, CreditCard as Edit, RotateCcw, Building2 } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
 import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
 
@@ -143,6 +143,10 @@ export function Sales() {
   const [saleSource, setSaleSource] = useState<'store' | 'salla' | 'external'>('store');
   const [sallaShippingCost, setSallaShippingCost] = useState(0);
   const [sallaPaymentFee, setSallaPaymentFee] = useState(0);
+  const [buyerType, setBuyerType] = useState<'individual' | 'business'>('individual');
+  const [companyName, setCompanyName] = useState('');
+  const [companyVatNumber, setCompanyVatNumber] = useState('');
+  const [companyAddress, setCompanyAddress] = useState('');
 
   const [lookedUpCustomer, setLookedUpCustomer] = useState<Customer | null>(null);
   const [customerLoyalty, setCustomerLoyalty] = useState<CustomerLoyalty | null>(null);
@@ -407,6 +411,10 @@ export function Sales() {
     setSaleSource('store');
     setSallaShippingCost(0);
     setSallaPaymentFee(0);
+    setBuyerType('individual');
+    setCompanyName('');
+    setCompanyVatNumber('');
+    setCompanyAddress('');
     setLookedUpCustomer(null);
     setCustomerLoyalty(null);
     setPointsToRedeem(0);
@@ -461,6 +469,10 @@ export function Sales() {
         source: saleSource,
         salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
         salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
+        buyer_type: buyerType,
+        company_name: buyerType === 'business' && companyName.trim() ? companyName.trim() : null,
+        company_vat_number: buyerType === 'business' && companyVatNumber.trim() ? companyVatNumber.trim() : null,
+        company_address: buyerType === 'business' && companyAddress.trim() ? companyAddress.trim() : null,
         salesperson_id: selectedEmployee,
         created_by: user?.id,
         created_at: new Date().toISOString(),
@@ -1159,6 +1171,81 @@ export function Sales() {
                     />
                   </div>
                 </>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">{isRTL ? 'نوع العميل' : 'Buyer Type'}</label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBuyerType('individual')}
+                    className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition ${
+                      buyerType === 'individual'
+                        ? 'bg-teal-600 border-teal-600 text-white'
+                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {isRTL ? 'فرد' : 'Individual'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBuyerType('business')}
+                    className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition ${
+                      buyerType === 'business'
+                        ? 'bg-teal-600 border-teal-600 text-white'
+                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Building2 className="w-4 h-4" />
+                    {isRTL ? 'شركة / منشأة' : 'Business'}
+                  </button>
+                </div>
+              </div>
+
+              {buyerType === 'business' && (
+                <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Building2 className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-semibold text-blue-800">{isRTL ? 'بيانات الشركة (فاتورة ضريبية)' : 'Company Info (Tax Invoice)'}</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{isRTL ? 'اسم الشركة / المنشأة *' : 'Company Name *'}</label>
+                    <input
+                      type="text"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder={isRTL ? 'اسم الشركة' : 'Company name'}
+                      dir="rtl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{isRTL ? 'الرقم الضريبي (VAT) *' : 'VAT Number *'}</label>
+                    <input
+                      type="text"
+                      value={companyVatNumber}
+                      onChange={(e) => setCompanyVatNumber(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono"
+                      placeholder="3XXXXXXXXXXXXXXXX3"
+                      dir="ltr"
+                      maxLength={15}
+                    />
+                    <p className="text-xs text-gray-400 mt-1">{isRTL ? '15 رقم يبدأ وينتهي بـ 3' : '15 digits starting and ending with 3'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{isRTL ? 'عنوان الشركة (اختياري)' : 'Company Address (optional)'}</label>
+                    <input
+                      type="text"
+                      value={companyAddress}
+                      onChange={(e) => setCompanyAddress(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder={isRTL ? 'عنوان الشركة' : 'Company address'}
+                      dir="rtl"
+                    />
+                  </div>
+                </div>
               )}
 
               <div>
