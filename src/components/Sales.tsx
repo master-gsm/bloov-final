@@ -195,7 +195,12 @@ export function Sales() {
         .maybeSingle();
 
       if (error) throw error;
-      if (data) setUserBranchId(data.branch_id as string);
+      if (data) {
+        console.log('[Sales] User branch_id:', data.branch_id, '| user.id:', user.id);
+        setUserBranchId(data.branch_id as string);
+      } else {
+        console.warn('[Sales] No user profile found for id:', user.id);
+      }
     } catch (err) {
       console.error('Error loading user branch:', err);
     }
@@ -236,9 +241,14 @@ export function Sales() {
           supabase.from('sales').select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)').order('created_at', { ascending: false }),
           supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
         ]);
+        if (salesRes.error) {
+          console.error('[Sales] RLS/server error loading sales:', salesRes.error);
+        }
         if (salesRes.data) {
           console.log('[Sales] Loaded', salesRes.data.length, 'sales from server');
           setSales(salesRes.data as any[]);
+        } else {
+          console.warn('[Sales] salesRes.data is null/empty — possible RLS block. Error:', salesRes.error);
         }
         if (settingsRes.data?.tax_rate) setTaxRate(parseFloat(settingsRes.data.tax_rate.toString()));
       } else {
