@@ -45,6 +45,8 @@ export default function Expenses() {
   const attachmentCameraInputRef = useRef<HTMLInputElement>(null);
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
 
   const [formData, setFormData] = useState({
     expense_type: 'other',
@@ -61,6 +63,7 @@ export default function Expenses() {
     loadExpenses();
     checkAdmin();
     loadUserBranch();
+    loadBranches();
   }, []);
 
   const loadUserBranch = async () => {
@@ -76,10 +79,16 @@ export default function Expenses() {
       if (data) {
         setUserBranchId(data.branch_id);
         setIsSuperAdmin(data.role === 'admin' || data.role === 'observer');
+        if (data.branch_id) setSelectedBranchId(data.branch_id);
       }
     } catch (err) {
       console.error('Error loading user branch:', err);
     }
+  };
+
+  const loadBranches = async () => {
+    const { data } = await supabase.from('branches').select('id, name').order('name');
+    setBranches(data || []);
   };
 
   const checkAdmin = async () => {
@@ -141,6 +150,11 @@ export default function Expenses() {
       return;
     }
 
+    if (!selectedBranchId) {
+      alert(isRTL ? 'يرجى اختيار الفرع' : 'Please select a branch');
+      return;
+    }
+
     try {
       const expenseNumber = await generateExpenseNumber();
 
@@ -167,7 +181,7 @@ export default function Expenses() {
           notes: formData.notes,
           notes_ar: formData.notes_ar,
           attachment_url: attachmentUrl,
-          branch_id: userBranchId,
+          branch_id: selectedBranchId,
           created_by: user?.id,
         },
       ]);
@@ -287,6 +301,24 @@ export default function Expenses() {
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {isRTL ? 'الفرع *' : 'Branch *'}
+                </label>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  disabled={!isSuperAdmin}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:bg-gray-50"
+                  required
+                >
+                  <option value="">{isRTL ? 'اختر الفرع' : 'Select Branch'}</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {isRTL ? 'نوع المصروف *' : 'Expense Type *'}
