@@ -175,7 +175,7 @@ class EnhancedSyncManager {
         case 'insert':
           console.log(`      [Insert] Inserting into ${table} with ID: ${data.id}`);
           serverResponse = await this.handleInsert(table, data);
-          console.log(`      [Insert] Server returned:`, { id: serverResponse?.id, has_invoice: !!serverResponse?.invoice_number });
+          console.log(`      [Insert] Server returned:`, { id: serverResponse?.id });
           break;
         case 'update':
           console.log(`      [Update] Updating ${table} ID: ${data.id}`);
@@ -201,13 +201,11 @@ class EnhancedSyncManager {
         await this.updateLocalRecordWithServerData(table, data.id, serverResponse);
 
         if (table === 'sales' && op === 'insert') {
-          const invoiceNum = serverResponse?.invoice_number || 'N/A';
           const saleStatus = serverResponse?.status || 'unknown';
-          console.log(`    [Sale] Synced: id=${data.id}, status=${saleStatus}, invoice_number=${invoiceNum}`);
+          console.log(`    [Sale] Synced: id=${data.id}, status=${saleStatus}`);
 
-          // Always confirm sales after initial insert
           if (saleStatus === 'draft') {
-            console.log(`    [Sale] Sale is still draft. Need to confirm and set final invoice_number...`);
+            console.log(`    [Sale] Sale is still draft. Confirming...`);
             await this.confirmSaleAfterSync(data.id, serverResponse);
           } else {
             console.log(`    [Sale] Sale already confirmed with status: ${saleStatus}`);
@@ -291,9 +289,8 @@ class EnhancedSyncManager {
         }
       }
 
-      // Special case: For sales, fetch fresh record to get generated invoice_number
       if (table === 'sales' && insertedData) {
-        console.log(`      [Sales] Fetching fresh record to get generated invoice_number...`);
+        console.log(`      [Sales] Fetching fresh record...`);
         const { data: freshSale, error: fetchError } = await supabase
           .from('sales')
           .select('*')
@@ -306,7 +303,7 @@ class EnhancedSyncManager {
         }
 
         if (freshSale) {
-          console.log(`      [Sales] Fresh record loaded: invoice_number=${freshSale.invoice_number}`);
+          console.log(`      [Sales] Fresh record loaded: sale_number=${freshSale.sale_number}`);
           return freshSale;
         }
       }
@@ -396,8 +393,8 @@ class EnhancedSyncManager {
 
       await indexedDBManager.cacheRecord(table, mergedData, true);
 
-      if (table === 'sales' && serverData.invoice_number && serverData.id !== localId) {
-        console.log(`[EnhancedSyncManager] Updated sale ID from ${localId} to ${serverData.id}, invoice_number: ${serverData.invoice_number}`);
+      if (table === 'sales' && serverData.id !== localId) {
+        console.log(`[EnhancedSyncManager] Updated sale ID from ${localId} to ${serverData.id}`);
       }
 
       console.log(`[EnhancedSyncManager] Updated local record for ${table}/${localId} with server data`);
@@ -409,38 +406,13 @@ class EnhancedSyncManager {
   private async confirmSaleAfterSync(saleId: string, serverSale: any): Promise<void> {
     try {
       const serverId = serverSale.id || saleId;
-      const currentInvoiceNumber = serverSale.invoice_number;
 
       console.log(`    [Confirm] Starting confirmation for sale ${serverId}...`);
-      console.log(`    [Confirm] Current invoice_number: ${currentInvoiceNumber}`);
 
-      // First: ensure invoice_number is set (fresh fetch if needed)
-      let saleToConfirm = serverSale;
-      if (!currentInvoiceNumber) {
-        console.log(`    [Confirm] No invoice_number in serverSale, fetching fresh record...`);
-        const { data: freshSale, error: fetchError } = await supabase
-          .from('sales')
-          .select('*')
-          .eq('id', serverId)
-          .maybeSingle();
-
-        if (fetchError) {
-          console.error(`    [Confirm] Failed to fetch sale:`, fetchError);
-          return;
-        }
-
-        if (freshSale) {
-          saleToConfirm = freshSale;
-          console.log(`    [Confirm] Fresh sale loaded: invoice_number=${freshSale.invoice_number}`);
-        }
-      }
-
-      // Now confirm with the invoice_number
       const { data: confirmedSale, error } = await supabase
         .from('sales')
         .update({
           status: 'confirmed',
-          invoice_number: saleToConfirm.invoice_number || saleToConfirm.sale_number,
           updated_at: new Date().toISOString(),
         })
         .eq('id', serverId)
@@ -448,18 +420,16 @@ class EnhancedSyncManager {
         .maybeSingle();
 
       if (error) {
-        console.error(`    [Confirm] ❌ Failed to confirm sale ${serverId}:`, error);
+        console.error(`    [Confirm] Failed to confirm sale ${serverId}:`, error);
         return;
       }
 
       if (confirmedSale) {
-        console.log(`    [Confirm] ✅ Sale ${serverId} confirmed`);
-        console.log(`    [Confirm] Final status: ${confirmedSale.status}`);
-        console.log(`    [Confirm] Final invoice_number: ${confirmedSale.invoice_number}`);
+        console.log(`    [Confirm] Sale ${serverId} confirmed: status=${confirmedSale.status}`);
         await indexedDBManager.cacheRecord('sales', confirmedSale, true);
       }
     } catch (error) {
-      console.error(`    [Confirm] ❌ Error confirming sale:`, error);
+      console.error(`    [Confirm] Error confirming sale:`, error);
     }
   }
 

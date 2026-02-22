@@ -109,25 +109,9 @@ export class HybridSalesWrite {
         throw new Error('No response from server after sale insert');
       }
 
-      console.log(`[HybridSalesWrite.Online] Sale inserted: id=${saleResponse.id}, status=${saleResponse.status}, invoice_number=${saleResponse.invoice_number}`);
+      console.log(`[HybridSalesWrite.Online] Sale inserted: id=${saleResponse.id}, status=${saleResponse.status}, sale_number=${saleResponse.sale_number}`);
 
-      // 2. Fetch fresh sale to get generated invoice_number
       let finalSale = saleResponse;
-      if (!saleResponse.invoice_number) {
-        console.log(`[HybridSalesWrite.Online] No invoice_number in response, fetching fresh record...`);
-        const { data: freshSale, error: fetchError } = await supabase
-          .from('sales')
-          .select('*')
-          .eq('id', saleResponse.id)
-          .maybeSingle();
-
-        if (fetchError) {
-          console.warn('[HybridSalesWrite.Online] Fresh fetch failed:', fetchError);
-        } else if (freshSale) {
-          finalSale = freshSale;
-          console.log(`[HybridSalesWrite.Online] Fresh sale loaded: invoice_number=${freshSale.invoice_number}`);
-        }
-      }
 
       // 3. Insert sale items in batch
       if (saleItems.length > 0) {
@@ -142,7 +126,6 @@ export class HybridSalesWrite {
         }
       }
 
-      // 4. Confirm sale if still draft
       let confirmedSale = finalSale;
       if (finalSale.status === 'draft') {
         console.log(`[HybridSalesWrite.Online] Sale is draft, confirming...`);
@@ -150,7 +133,6 @@ export class HybridSalesWrite {
           .from('sales')
           .update({
             status: 'confirmed',
-            invoice_number: finalSale.invoice_number || finalSale.sale_number,
             updated_at: new Date().toISOString(),
           })
           .eq('id', finalSale.id)
@@ -162,7 +144,7 @@ export class HybridSalesWrite {
           throw new Error(`Sale confirmation failed: ${confirmError.message}`);
         } else if (confirmed) {
           confirmedSale = confirmed;
-          console.log(`[HybridSalesWrite.Online] Sale confirmed: status=${confirmed.status}, invoice_number=${confirmed.invoice_number}`);
+          console.log(`[HybridSalesWrite.Online] Sale confirmed: status=${confirmed.status}`);
         } else {
           throw new Error('Sale confirmation returned no data');
         }
@@ -179,7 +161,7 @@ export class HybridSalesWrite {
         success: true,
         saleId: confirmedSale.id,
         status: confirmedSale.status === 'confirmed' ? 'confirmed' : 'draft',
-        invoiceNumber: confirmedSale.invoice_number || confirmedSale.sale_number,
+        invoiceNumber: confirmedSale.sale_number,
         mode: 'online',
       };
     } catch (error) {

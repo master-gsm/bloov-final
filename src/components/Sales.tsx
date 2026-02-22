@@ -508,7 +508,7 @@ export function Sales() {
       // 4. Update UI state
       const displaySale = {
         ...salePayload,
-        invoice_number: writeResult.invoiceNumber,
+        sale_number: writeResult.invoiceNumber || salePayload.sale_number,
         status: writeResult.status,
       } as any;
       setSales([displaySale, ...sales]);
@@ -747,34 +747,35 @@ export function Sales() {
     });
   };
 
-  const clearPendingOfflineDrafts = async () => {
+  const clearPendingOfflineOperations = async () => {
     try {
-      const pending = await indexedDBManager.getOperationsByStatus('pending');
-      const draftOps = pending.filter(op => op.table === 'sales' && op.data?.status === 'draft');
+      const pending = await indexedDBManager.getQueuedOperations('pending');
+      const failed = await indexedDBManager.getQueuedOperations('failed');
+      const allOps = [...pending, ...failed];
 
-      if (draftOps.length === 0) {
-        if (isRTL) alert('لا توجد مسودات معلقة');
-        else alert('No pending drafts');
+      if (allOps.length === 0) {
+        if (isRTL) alert('لا توجد عمليات معلقة');
+        else alert('No pending operations');
         return;
       }
 
       const confirmClear = window.confirm(
-        (isRTL
-          ? `هناك ${draftOps.length} مسودات معلقة. هل تريد حذفها؟`
-          : `You have ${draftOps.length} pending drafts. Clear them?`)
+        isRTL
+          ? `هناك ${allOps.length} عملية معلقة (${pending.length} قيد الانتظار، ${failed.length} فاشلة). هل تريد حذفها؟`
+          : `You have ${allOps.length} operations (${pending.length} pending, ${failed.length} failed). Clear them all?`
       );
 
       if (!confirmClear) return;
 
-      for (const op of draftOps) {
-        await indexedDBManager.removeOperationFromQueue(op.operationId);
+      for (const op of allOps) {
+        await indexedDBManager.removeQueueItem(op.id);
       }
 
-      if (isRTL) alert(`تم حذف ${draftOps.length} مسودة معلقة`);
-      else alert(`Cleared ${draftOps.length} pending drafts`);
+      if (isRTL) alert(`تم حذف ${allOps.length} عملية معلقة`);
+      else alert(`Cleared ${allOps.length} pending operations`);
     } catch (error: any) {
-      console.error('Error clearing pending drafts:', error);
-      alert(error.message || (isRTL ? 'خطأ في حذف المسودات' : 'Error clearing drafts'));
+      console.error('Error clearing pending operations:', error);
+      alert(error.message || (isRTL ? 'خطأ في حذف العمليات' : 'Error clearing operations'));
     }
   };
 
@@ -1402,9 +1403,9 @@ export function Sales() {
             <option value="cancelled">{isRTL ? 'ملغي' : 'Cancelled'}</option>
           </select>
           <button
-            onClick={clearPendingOfflineDrafts}
+            onClick={clearPendingOfflineOperations}
             className="px-3 py-2.5 border border-orange-300 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition font-medium text-sm"
-            title={isRTL ? 'حذف المسودات المعلقة' : 'Clear pending drafts'}
+            title={isRTL ? 'حذف العمليات المعلقة' : 'Clear pending operations'}
           >
             {isRTL ? 'مسح المعلقة' : 'Clear Pending'}
           </button>
