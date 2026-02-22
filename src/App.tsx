@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { BranchProvider } from './contexts/BranchContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { OfflineProvider } from './contexts/OfflineContext';
 import { OfflineFirstProvider } from './contexts/OfflineFirstContext';
@@ -162,15 +163,17 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <LanguageProvider>
-        <TestModeProvider>
-          <OfflineProvider>
-            <OfflineFirstProvider>
-              <AppContent />
-            </OfflineFirstProvider>
-          </OfflineProvider>
-        </TestModeProvider>
-      </LanguageProvider>
+      <BranchProvider>
+        <LanguageProvider>
+          <TestModeProvider>
+            <OfflineProvider>
+              <OfflineFirstProvider>
+                <AppContent />
+              </OfflineFirstProvider>
+            </OfflineProvider>
+          </TestModeProvider>
+        </LanguageProvider>
+      </BranchProvider>
     </AuthProvider>
   );
 }

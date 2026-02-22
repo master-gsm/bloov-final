@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranch } from '../contexts/BranchContext';
 import { supabase } from '../lib/supabase';
 import {
   Wallet, Plus, X, Lock, Unlock, Receipt, DollarSign,
@@ -54,6 +55,7 @@ const EXPENSE_CATEGORIES = [
 export function CashRegister() {
   const { language } = useLanguage();
   const { user } = useAuth();
+  const { currentBranchId, isSuperAdmin } = useBranch();
   const isRTL = language === 'ar';
 
   const [activeRegister, setActiveRegister] = useState<CashRegisterRecord | null>(null);
@@ -81,17 +83,23 @@ export function CashRegister() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentBranchId, isSuperAdmin]);
 
   const loadData = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      const [regRes, expRes, historyRes] = await Promise.all([
-        supabase.from('cash_registers').select('*').eq('status', 'open').order('opened_at', { ascending: false }).limit(1),
-        supabase.from('expenses').select('*').gte('expense_date', today).order('created_at', { ascending: false }),
-        supabase.from('cash_registers').select('*').order('opened_at', { ascending: false }).limit(30),
-      ]);
+      let regQuery = supabase.from('cash_registers').select('*').eq('status', 'open').order('opened_at', { ascending: false }).limit(1);
+      let expQuery = supabase.from('expenses').select('*').gte('expense_date', today).order('created_at', { ascending: false });
+      let histQuery = supabase.from('cash_registers').select('*').order('opened_at', { ascending: false }).limit(30);
+
+      if (!isSuperAdmin && currentBranchId) {
+        regQuery = (regQuery as any).eq('branch_id', currentBranchId);
+        expQuery = (expQuery as any).eq('branch_id', currentBranchId);
+        histQuery = (histQuery as any).eq('branch_id', currentBranchId);
+      }
+
+      const [regRes, expRes, historyRes] = await Promise.all([regQuery, expQuery, histQuery]);
 
       if (expRes.data) setExpenses(expRes.data as any[]);
       if (historyRes.data) setRegisters(historyRes.data as any[]);
@@ -129,11 +137,13 @@ export function CashRegister() {
   };
 
   const openRegister = async () => {
+    if (!currentBranchId && !isSuperAdmin) return;
     setSubmitting(true);
     const { error } = await supabase.from('cash_registers').insert({
       opening_balance: openingBalance,
       opened_by: user?.id,
       status: 'open',
+      branch_id: currentBranchId,
     });
     if (!error) {
       setShowOpenForm(false);
@@ -179,6 +189,7 @@ export function CashRegister() {
       payment_method: expensePayment,
       cash_register_id: activeRegister?.id || null,
       created_by: user?.id,
+      branch_id: currentBranchId,
     });
 
     if (!error) {

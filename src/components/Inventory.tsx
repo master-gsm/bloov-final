@@ -3,6 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { Warehouse, Search, AlertTriangle, Package, ArrowUpCircle, ArrowDownCircle, Trash2, ClipboardList, X, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranch } from '../contexts/BranchContext';
 
 interface InventoryItem {
   id: string;
@@ -34,6 +35,7 @@ interface Movement {
 export function Inventory() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
+  const { currentBranchId, isSuperAdmin } = useBranch();
   const isRTL = language === 'ar';
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -56,7 +58,7 @@ export function Inventory() {
   useEffect(() => {
     loadData();
     loadUserBranch();
-  }, []);
+  }, [currentBranchId, isSuperAdmin]);
 
   const loadUserBranch = async () => {
     if (!user) return;
@@ -76,17 +78,23 @@ export function Inventory() {
 
   const loadData = async () => {
     try {
-      const [inventoryRes, movementsRes] = await Promise.all([
-        supabase
-          .from('inventory')
-          .select('*, products(name, name_ar, sku, type, sale_price, purchase_price, min_stock_level)')
-          .order('quantity', { ascending: true }),
-        supabase
-          .from('inventory_movements')
-          .select('*, products(name, name_ar, sku)')
-          .order('created_at', { ascending: false })
-          .limit(50),
-      ]);
+      let invQuery = supabase
+        .from('inventory')
+        .select('*, products(name, name_ar, sku, type, sale_price, purchase_price, min_stock_level)')
+        .order('quantity', { ascending: true });
+
+      if (!isSuperAdmin && currentBranchId) {
+        invQuery = (invQuery as any).eq('branch_id', currentBranchId);
+      }
+
+      let movQuery = supabase
+        .from('inventory_movements')
+        .select('*, products(name, name_ar, sku)')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const [inventoryRes, movementsRes] = await Promise.all([invQuery, movQuery]);
+
       if (inventoryRes.data) setInventory(inventoryRes.data as any[]);
       if (movementsRes.data) setMovements(movementsRes.data as any[]);
     } catch (err) {

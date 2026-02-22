@@ -3,8 +3,9 @@ import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 interface UserProfile {
-  role: 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier';
+  role: 'super_admin' | 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier';
   permissions: Record<string, boolean>;
+  branch_id: string | null;
 }
 
 interface AuthContextType {
@@ -17,6 +18,8 @@ interface AuthContextType {
   hasPermission: (key: string) => boolean;
   isAdmin: boolean;
   isViewer: boolean;
+  isSuperAdmin: boolean;
+  branchId: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadProfile = async (userId: string) => {
     const { data } = await supabase
       .from('users')
-      .select('role, permissions')
+      .select('role, permissions, branch_id')
       .eq('id', userId)
       .maybeSingle();
 
@@ -37,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile({
         role: data.role as UserProfile['role'],
         permissions: (data.permissions || {}) as unknown as Record<string, boolean>,
+        branch_id: data.branch_id || null,
       });
     }
   };
@@ -82,14 +86,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = profile?.role === 'admin';
   const isViewer = profile?.role === 'viewer';
+  const isSuperAdmin = profile?.role === 'super_admin';
+  const branchId = profile?.branch_id ?? null;
 
   const hasPermission = (key: string): boolean => {
-    if (profile?.role === 'admin') return true;
+    if (profile?.role === 'admin' || profile?.role === 'super_admin') return true;
     return profile?.permissions?.[key] === true;
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, hasPermission, isAdmin, isViewer }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, hasPermission, isAdmin, isViewer, isSuperAdmin, branchId }}>
       {children}
     </AuthContext.Provider>
   );
