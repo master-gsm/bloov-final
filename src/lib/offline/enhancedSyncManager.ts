@@ -220,6 +220,19 @@ class EnhancedSyncManager {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`    [Operation] ❌ Error during sync:`, errorMessage);
 
+      // Check if this is a permanent failure that shouldn't be retried
+      const isPermanentFailure = this.isPermanentSyncError(errorMessage);
+
+      if (isPermanentFailure) {
+        console.error(`    [Operation] ❌ PERMANENT FAILURE - Not retrying: ${errorMessage}`);
+        await indexedDBManager.updateQueueItemStatus(operation.id, 'failed', {
+          error: errorMessage,
+          retries: operation.retries + 1,
+          permanentFailure: true,
+        });
+        throw new Error(`Permanent failure (not retrying): ${errorMessage}`);
+      }
+
       if (operation.retries >= (options.maxRetries ?? 3)) {
         console.error(`    [Operation] ❌ Max retries (${operation.retries}) reached. Marking as failed.`);
 
@@ -482,6 +495,29 @@ class EnhancedSyncManager {
         console.error('[EnhancedSyncManager] Error notifying error listener:', err);
       }
     });
+  }
+
+  private isPermanentSyncError(errorMessage: string): boolean {
+    const permanentErrorPatterns = [
+      /Insufficient stock/i,
+      /insufficient inventory/i,
+      /stock.*not.*available/i,
+      /inventory.*depleted/i,
+      /out of stock/i,
+      /product.*not found/i,
+      /customer.*not found/i,
+      /invalid.*reference/i,
+      /foreign key violation/i,
+    ];
+
+    for (const pattern of permanentErrorPatterns) {
+      if (pattern.test(errorMessage)) {
+        console.warn(`[EnhancedSyncManager] Detected permanent error pattern: ${pattern.source}`);
+        return true;
+      }
+    }
+
+    return false;
   }
 
   getIsSyncing(): boolean {
