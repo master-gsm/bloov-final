@@ -188,8 +188,8 @@ export function Reports() {
               purchase_price
             )
           `)
-          .gte('wastage_date', startDate)
-          .lte('wastage_date', endDate),
+          .gte('wastage_date', startDateObj.toISOString())
+          .lte('wastage_date', endDateObj.toISOString()),
 
         // Sale items for top products
         supabase
