@@ -171,7 +171,7 @@ function callAI(provider: string, apiKey: string, model: string, messages: any[]
 async function generateSalesForecast(supabase: any, userId: string, data: any) {
   const { data: sales, error } = await supabase
     .from('sales')
-    .select('sale_date, total, sale_items(quantity, product_id, products(name, name_ar, category))')
+    .select('sale_date, total, sale_items(quantity, product_id, products(name, name_ar, category_id))')
     .eq('status', 'confirmed')
     .order('sale_date', { ascending: true })
     .limit(500);
@@ -195,7 +195,7 @@ async function generateSalesForecast(supabase: any, userId: string, data: any) {
           if (!salesByProduct.has(item.product_id)) {
             salesByProduct.set(item.product_id, {
               name: item.products?.name || 'Unknown',
-              category: item.products?.category || 'general',
+              category: item.products?.category_id || 'general',
               totalQuantity: 0,
               totalRevenue: 0,
             });
@@ -284,7 +284,7 @@ async function analyzeNaturalQuery(supabase: any, query: string) {
   const [salesData, customersData, productsData, expensesData] = await Promise.all([
     supabase.from('sales').select('sale_date, total, payment_method, gross_profit').eq('status', 'confirmed').order('sale_date', { ascending: false }).limit(100),
     supabase.from('customers').select('name, total_spend, total_orders, tier, last_purchase_date').order('total_spend', { ascending: false }).limit(50),
-    supabase.from('products').select('name, name_ar, category, selling_price').limit(50),
+    supabase.from('products').select('name, name_ar, category_id, sale_price').limit(50),
     supabase.from('operating_expenses').select('amount, expense_type, expense_date, description').eq('is_deleted', false).order('expense_date', { ascending: false }).limit(50),
   ]);
 
