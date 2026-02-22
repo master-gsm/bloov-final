@@ -205,9 +205,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   };
 
   const clearAllPending = async (): Promise<number> => {
-    const pending = await indexedDBManager.getQueuedOperations('pending');
-    const failed = await indexedDBManager.getQueuedOperations('failed');
-    const allOps = [...pending, ...failed];
+    const allOps = await indexedDBManager.getQueuedOperations();
     for (const op of allOps) {
       await indexedDBManager.removeQueueItem(op.id);
     }

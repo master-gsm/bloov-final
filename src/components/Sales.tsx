@@ -749,9 +749,7 @@ export function Sales() {
 
   const clearPendingOfflineOperations = async () => {
     try {
-      const pending = await indexedDBManager.getQueuedOperations('pending');
-      const failed = await indexedDBManager.getQueuedOperations('failed');
-      const allOps = [...pending, ...failed];
+      const allOps = await indexedDBManager.getQueuedOperations();
 
       if (allOps.length === 0) {
         if (isRTL) alert('لا توجد عمليات معلقة');
@@ -761,8 +759,8 @@ export function Sales() {
 
       const confirmClear = window.confirm(
         isRTL
-          ? `هناك ${allOps.length} عملية معلقة (${pending.length} قيد الانتظار، ${failed.length} فاشلة). هل تريد حذفها؟`
-          : `You have ${allOps.length} operations (${pending.length} pending, ${failed.length} failed). Clear them all?`
+          ? `هناك ${allOps.length} عملية معلقة. هل تريد حذفها؟`
+          : `You have ${allOps.length} queued operations. Clear them all?`
       );
 
       if (!confirmClear) return;
@@ -771,8 +769,8 @@ export function Sales() {
         await indexedDBManager.removeQueueItem(op.id);
       }
 
-      if (isRTL) alert(`تم حذف ${allOps.length} عملية معلقة`);
-      else alert(`Cleared ${allOps.length} pending operations`);
+      if (isRTL) alert(`تم حذف ${allOps.length} عملية`);
+      else alert(`Cleared ${allOps.length} operations`);
     } catch (error: any) {
       console.error('Error clearing pending operations:', error);
       alert(error.message || (isRTL ? 'خطأ في حذف العمليات' : 'Error clearing operations'));
