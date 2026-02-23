@@ -12,7 +12,7 @@ interface PayrollRun {
   period_month: number;
   period_year: number;
   branch_id: string;
-  status: 'draft' | 'approved' | 'paid';
+  status: 'draft' | 'approved' | 'paid' | 'cancelled';
   total_base_salary: number;
   total_commissions: number;
   total_loan_deductions: number;
@@ -75,6 +75,7 @@ export function PayrollTab({ isRTL, userProfile, branches }: Props) {
     const { data } = await supabase
       .from('payroll_runs')
       .select('*, branches(name)')
+      .neq('status', 'cancelled')
       .order('period_year', { ascending: false })
       .order('period_month', { ascending: false });
     setRuns((data || []) as any[]);
@@ -155,7 +156,7 @@ export function PayrollTab({ isRTL, userProfile, branches }: Props) {
   };
 
   const handleDelete = async (runId: string) => {
-    if (!confirm(isRTL ? 'حذف هذا المسير؟' : 'Delete this payroll run?')) return;
+    if (!confirm(isRTL ? 'إلغاء هذا المسير؟' : 'Cancel this payroll run?')) return;
     setProcessing(runId);
     try {
       const { error: err } = await supabase.rpc('delete_draft_payroll_run', { p_run_id: runId });
@@ -188,9 +189,10 @@ export function PayrollTab({ isRTL, userProfile, branches }: Props) {
 
   const statusBadge = (status: string) => {
     const map: Record<string, { ar: string; en: string; cls: string }> = {
-      draft:    { ar: 'مسودة',  en: 'Draft',    cls: 'bg-gray-100 text-gray-700' },
-      approved: { ar: 'معتمد',  en: 'Approved', cls: 'bg-blue-100 text-blue-700' },
-      paid:     { ar: 'مدفوع', en: 'Paid',     cls: 'bg-green-100 text-green-700' },
+      draft:     { ar: 'مسودة',  en: 'Draft',     cls: 'bg-gray-100 text-gray-700' },
+      approved:  { ar: 'معتمد',  en: 'Approved',  cls: 'bg-blue-100 text-blue-700' },
+      paid:      { ar: 'مدفوع', en: 'Paid',      cls: 'bg-green-100 text-green-700' },
+      cancelled: { ar: 'ملغى',  en: 'Cancelled', cls: 'bg-red-100 text-red-700' },
     };
     const s = map[status] || map['draft'];
     return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${s.cls}`}>{isRTL ? s.ar : s.en}</span>;

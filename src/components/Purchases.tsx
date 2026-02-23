@@ -758,14 +758,16 @@ export function Purchases() {
                 </div>
               )}
 
-              {canEdit && viewingPurchase.status === 'confirmed' && (
+              {canEdit && (viewingPurchase.status === 'confirmed' || viewingPurchase.status === 'draft') && (
                 <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => updatePurchaseStatus(viewingPurchase.id, 'received')}
-                    className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition font-medium"
-                  >
-                    <Check className="w-4 h-4" /> {isRTL ? 'تم الاستلام' : 'Mark Received'}
-                  </button>
+                  {viewingPurchase.status === 'confirmed' && (
+                    <button
+                      onClick={() => updatePurchaseStatus(viewingPurchase.id, 'received')}
+                      className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition font-medium"
+                    >
+                      <Check className="w-4 h-4" /> {isRTL ? 'تم الاستلام' : 'Mark Received'}
+                    </button>
+                  )}
                   <button
                     onClick={() => updatePurchaseStatus(viewingPurchase.id, 'cancelled')}
                     className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 transition font-medium"
