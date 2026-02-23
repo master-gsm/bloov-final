@@ -59,8 +59,13 @@ export default function Backup() {
   const [showRestoreSection, setShowRestoreSection] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [alertModal, setAlertModal] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const showAlert = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setAlertModal({ message, type });
+  };
 
   useEffect(() => {
     loadBackupHistory();
@@ -122,7 +127,7 @@ export default function Backup() {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
-        alert(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Please login first');
+        showAlert(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Please login first', 'error');
         return;
       }
 
@@ -144,7 +149,7 @@ export default function Backup() {
       if (!result.success || !response.ok) {
         const errorMsg = result.error || (language === 'ar' ? 'فشل في الحصول على رابط المصادقة' : 'Failed to get auth URL');
         console.error('Failed to get auth URL:', errorMsg);
-        alert(errorMsg);
+        showAlert(errorMsg, 'error');
         return;
       }
 
@@ -166,10 +171,10 @@ export default function Backup() {
 
         if (event.data.success) {
           setGoogleDrive(prev => ({ ...prev, connected: true }));
-          alert(language === 'ar' ? 'تم الربط بنجاح مع Google Drive' : 'Successfully connected to Google Drive');
+          showAlert(language === 'ar' ? 'تم الربط بنجاح مع Google Drive' : 'Successfully connected to Google Drive', 'success');
           loadGoogleDriveSettings();
         } else if (event.data.error) {
-          alert((language === 'ar' ? 'فشل الربط: ' : 'Connection failed: ') + event.data.error);
+          showAlert((language === 'ar' ? 'فشل الربط: ' : 'Connection failed: ') + event.data.error, 'error');
         }
 
         window.removeEventListener('message', messageHandler);
@@ -185,7 +190,7 @@ export default function Backup() {
       }, 500);
     } catch (err) {
       console.error('Error connecting Google Drive:', err);
-      alert(language === 'ar' ? 'حدث خطأ أثناء الربط' : 'Error during connection');
+      showAlert(language === 'ar' ? 'حدث خطأ أثناء الربط' : 'Error during connection', 'error');
     }
   };
 
@@ -202,7 +207,7 @@ export default function Backup() {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
-        alert(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Please login first');
+        showAlert(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Please login first', 'error');
         return;
       }
 
@@ -222,20 +227,20 @@ export default function Backup() {
 
       if (result.success) {
         setGoogleDrive(prev => ({ ...prev, enabled: false, connected: false }));
-        alert(language === 'ar' ? 'تم فصل الاتصال بنجاح' : 'Disconnected successfully');
+        showAlert(language === 'ar' ? 'تم فصل الاتصال بنجاح' : 'Disconnected successfully', 'success');
         loadGoogleDriveSettings();
       } else {
-        alert(result.error || (language === 'ar' ? 'فشل فصل الاتصال' : 'Failed to disconnect'));
+        showAlert(result.error || (language === 'ar' ? 'فشل فصل الاتصال' : 'Failed to disconnect'), 'error');
       }
     } catch (err) {
       console.error('Error disconnecting:', err);
-      alert(language === 'ar' ? 'حدث خطأ أثناء فصل الاتصال' : 'Error during disconnection');
+      showAlert(language === 'ar' ? 'حدث خطأ أثناء فصل الاتصال' : 'Error during disconnection', 'error');
     }
   };
 
   const saveGoogleDriveSettings = async () => {
     if (!googleDrive.clientId || !googleDrive.clientSecret) {
-      alert(language === 'ar' ? 'يرجى إدخال Client ID و Client Secret' : 'Please enter Client ID and Client Secret');
+      showAlert(language === 'ar' ? 'يرجى إدخال Client ID و Client Secret' : 'Please enter Client ID and Client Secret', 'error');
       return;
     }
 
@@ -251,10 +256,10 @@ export default function Backup() {
 
       if (error) throw error;
 
-      alert(language === 'ar' ? 'تم حفظ معلومات OAuth بنجاح. يمكنك الآن ربط حسابك' : 'OAuth credentials saved successfully. You can now connect your account');
+      showAlert(language === 'ar' ? 'تم حفظ معلومات OAuth بنجاح. يمكنك الآن ربط حسابك' : 'OAuth credentials saved successfully. You can now connect your account', 'success');
     } catch (err) {
       console.error('Error saving settings:', err);
-      alert(language === 'ar' ? 'فشل حفظ الإعدادات' : 'Failed to save settings');
+      showAlert(language === 'ar' ? 'فشل حفظ الإعدادات' : 'Failed to save settings', 'error');
     } finally {
       setSavingSettings(false);
     }
@@ -273,10 +278,10 @@ export default function Backup() {
 
       if (error) throw error;
 
-      alert(language === 'ar' ? 'تم حفظ إعدادات النسخ الاحتياطي' : 'Backup settings saved');
+      showAlert(language === 'ar' ? 'تم حفظ إعدادات النسخ الاحتياطي' : 'Backup settings saved', 'success');
     } catch (err) {
       console.error('Error saving backup settings:', err);
-      alert(language === 'ar' ? 'فشل حفظ الإعدادات' : 'Failed to save settings');
+      showAlert(language === 'ar' ? 'فشل حفظ الإعدادات' : 'Failed to save settings', 'error');
     } finally {
       setSavingSettings(false);
     }
@@ -284,7 +289,7 @@ export default function Backup() {
 
   const uploadToGoogleDrive = async () => {
     if (!googleDrive.connected) {
-      alert(language === 'ar' ? 'يجب ربط حساب Google Drive أولاً' : 'Please connect Google Drive first');
+      showAlert(language === 'ar' ? 'يجب ربط حساب Google Drive أولاً' : 'Please connect Google Drive first', 'error');
       return;
     }
 
@@ -507,15 +512,17 @@ export default function Backup() {
         : `Backup uploaded successfully to Google Drive! (${filename})`
       );
 
-      alert(language === 'ar'
-        ? `☁️ تم رفع النسخة الاحتياطية بنجاح إلى Google Drive!\n\n📁 الملف: ${filename}\n📊 عدد السجلات: ${totalRecords.toLocaleString()}\n📦 عدد الجداول: ${successfulTables}\n💾 الحجم: ${(backupSize / (1024 * 1024)).toFixed(2)} MB\n🆔 File ID: ${uploadResult.id.substring(0, 20)}...`
-        : `☁️ Backup uploaded successfully to Google Drive!\n\n📁 File: ${filename}\n📊 Total Records: ${totalRecords.toLocaleString()}\n📦 Tables: ${successfulTables}\n💾 Size: ${(backupSize / (1024 * 1024)).toFixed(2)} MB\n🆔 File ID: ${uploadResult.id.substring(0, 20)}...`
+      showAlert(
+        language === 'ar'
+          ? `تم رفع النسخة الاحتياطية بنجاح إلى Google Drive!\n\nالملف: ${filename}\nعدد السجلات: ${totalRecords.toLocaleString()}\nعدد الجداول: ${successfulTables}\nالحجم: ${(backupSize / (1024 * 1024)).toFixed(2)} MB`
+          : `Backup uploaded successfully to Google Drive!\n\nFile: ${filename}\nTotal Records: ${totalRecords.toLocaleString()}\nTables: ${successfulTables}\nSize: ${(backupSize / (1024 * 1024)).toFixed(2)} MB`,
+        'success'
       );
     } catch (err) {
       console.error('Google Drive upload error:', err);
       const errorMessage = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء رفع النسخة إلى Google Drive' : 'Error uploading to Google Drive');
       setError(errorMessage);
-      alert(language === 'ar' ? `❌ فشل رفع النسخة إلى Google Drive\n\n${errorMessage}` : `❌ Google Drive Upload Failed\n\n${errorMessage}`);
+      showAlert(language === 'ar' ? `فشل رفع النسخة إلى Google Drive\n\n${errorMessage}` : `Google Drive Upload Failed\n\n${errorMessage}`, 'error');
     } finally {
       setGoogleDriveLoading(false);
     }
@@ -592,15 +599,17 @@ export default function Backup() {
         backup_data: backupData,
       });
 
-      alert(language === 'ar'
-        ? `تم تنزيل النسخة الاحتياطية بنجاح على جهازك!\n\n📁 الملف: ${filename}\n📊 عدد السجلات: ${totalRecords.toLocaleString()}\n💾 الحجم: ${(backupSize / (1024 * 1024)).toFixed(2)} MB`
-        : `Backup downloaded successfully to your computer!\n\n📁 File: ${filename}\n📊 Total Records: ${totalRecords.toLocaleString()}\n💾 Size: ${(backupSize / (1024 * 1024)).toFixed(2)} MB`
+      showAlert(
+        language === 'ar'
+          ? `تم تنزيل النسخة الاحتياطية بنجاح!\n\nالملف: ${filename}\nعدد السجلات: ${totalRecords.toLocaleString()}\nالحجم: ${(backupSize / (1024 * 1024)).toFixed(2)} MB`
+          : `Backup downloaded successfully!\n\nFile: ${filename}\nTotal Records: ${totalRecords.toLocaleString()}\nSize: ${(backupSize / (1024 * 1024)).toFixed(2)} MB`,
+        'success'
       );
     } catch (err) {
       console.error('Backup error:', err);
       const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup');
       setError(errorMsg);
-      alert(language === 'ar' ? `❌ فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `❌ Backup Failed\n\n${errorMsg}`);
+      showAlert(language === 'ar' ? `فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `Backup Failed\n\n${errorMsg}`, 'error');
     } finally {
       setLocalLoading(false);
     }
@@ -645,15 +654,17 @@ export default function Backup() {
       setBackupResult(result.data);
       await loadBackupHistory();
 
-      alert(language === 'ar'
-        ? `تم إنشاء النسخة الاحتياطية بنجاح!\n\n📁 الملف: ${result.data.filename}\n📊 عدد السجلات: ${result.data.total_records.toLocaleString()}\n⏱️ وقت التنفيذ: ${result.data.execution_time}${result.data.google_drive_upload?.success ? '\n\n☁️ تم رفع النسخة إلى Google Drive بنجاح' : ''}`
-        : `Backup created successfully!\n\n📁 File: ${result.data.filename}\n📊 Total Records: ${result.data.total_records.toLocaleString()}\n⏱️ Execution Time: ${result.data.execution_time}${result.data.google_drive_upload?.success ? '\n\n☁️ Successfully uploaded to Google Drive' : ''}`
+      showAlert(
+        language === 'ar'
+          ? `تم إنشاء النسخة الاحتياطية بنجاح!\n\nالملف: ${result.data.filename}\nعدد السجلات: ${result.data.total_records.toLocaleString()}\nوقت التنفيذ: ${result.data.execution_time}${result.data.google_drive_upload?.success ? '\n\nتم رفع النسخة إلى Google Drive بنجاح' : ''}`
+          : `Backup created successfully!\n\nFile: ${result.data.filename}\nTotal Records: ${result.data.total_records.toLocaleString()}\nExecution Time: ${result.data.execution_time}${result.data.google_drive_upload?.success ? '\n\nSuccessfully uploaded to Google Drive' : ''}`,
+        'success'
       );
     } catch (err) {
       console.error('Backup error:', err);
       const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup');
       setError(errorMsg);
-      alert(language === 'ar' ? `❌ فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `❌ Backup Failed\n\n${errorMsg}`);
+      showAlert(language === 'ar' ? `فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `Backup Failed\n\n${errorMsg}`, 'error');
     } finally {
       setServerLoading(false);
     }
@@ -687,7 +698,7 @@ export default function Backup() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download error:', err);
-      alert('فشل تحميل النسخة الاحتياطية');
+      showAlert(language === 'ar' ? 'فشل تحميل النسخة الاحتياطية' : 'Failed to download backup', 'error');
     }
   };
 
@@ -797,7 +808,7 @@ export default function Backup() {
         errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'فشل استعادة النسخة الاحتياطية' : 'Restore failed');
       }
       setError(errorMsg);
-      alert(language === 'ar' ? `❌ فشل استعادة النسخة الاحتياطية\n\n${errorMsg}` : `❌ Restore Failed\n\n${errorMsg}`);
+      showAlert(language === 'ar' ? `فشل استعادة النسخة الاحتياطية\n\n${errorMsg}` : `Restore Failed\n\n${errorMsg}`, 'error');
     } finally {
       setRestoreLoading(false);
       setRestoreProgress('');
@@ -841,7 +852,7 @@ export default function Backup() {
       console.error('Restore from Drive error:', err);
       const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'فشل استعادة النسخة' : 'Restore failed');
       setError(errorMsg);
-      alert(language === 'ar' ? `❌ فشل استعادة النسخة من Google Drive\n\n${errorMsg}` : `❌ Google Drive Restore Failed\n\n${errorMsg}`);
+      showAlert(language === 'ar' ? `فشل استعادة النسخة من Google Drive\n\n${errorMsg}` : `Google Drive Restore Failed\n\n${errorMsg}`, 'error');
     } finally {
       setRestoreLoading(false);
       setRestoreProgress('');
@@ -949,9 +960,11 @@ export default function Backup() {
     setSuccessMessage(successMsg);
     setSuccess(true);
 
-    alert(language === 'ar'
-      ? `✅ نجحت الاستعادة الذرية!\n\n📊 عدد السجلات: ${restoreResult.restored_records.toLocaleString()}\n📦 عدد الجداول: ${restoreResult.restored_tables}\n🔒 الاستعادة كانت 100% أو 0% — لا استعادة جزئية`
-      : `✅ Atomic restore succeeded!\n\n📊 Records Restored: ${restoreResult.restored_records.toLocaleString()}\n📦 Tables Restored: ${restoreResult.restored_tables}\n🔒 Restore was 100% or 0% — no partial restore`
+    showAlert(
+      language === 'ar'
+        ? `نجحت الاستعادة الذرية!\n\nعدد السجلات: ${restoreResult.restored_records.toLocaleString()}\nعدد الجداول: ${restoreResult.restored_tables}\nالاستعادة كانت 100% أو 0% — لا استعادة جزئية`
+        : `Atomic restore succeeded!\n\nRecords Restored: ${restoreResult.restored_records.toLocaleString()}\nTables Restored: ${restoreResult.restored_tables}\nRestore was 100% or 0% — no partial restore`,
+      'success'
     );
   };
 
@@ -968,6 +981,32 @@ export default function Backup() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      {alertModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3 mb-6">
+              {alertModal.type === 'success' && <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />}
+              {alertModal.type === 'error' && <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />}
+              {alertModal.type === 'info' && <AlertCircle className="w-6 h-6 text-blue-500 flex-shrink-0 mt-0.5" />}
+              <p className="text-gray-900 font-medium leading-relaxed whitespace-pre-line">{alertModal.message}</p>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAlertModal(null)}
+                className={`px-5 py-2.5 text-white rounded-lg transition font-medium ${
+                  alertModal.type === 'success' ? 'bg-green-600 hover:bg-green-700' :
+                  alertModal.type === 'error' ? 'bg-red-600 hover:bg-red-700' :
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {language === 'ar' ? 'موافق' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
