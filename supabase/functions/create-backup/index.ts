@@ -67,15 +67,20 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    console.log("[create-backup] Initializing service client...");
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false },
+    });
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
+    console.log("[create-backup] Verifying user token...");
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
-      throw new Error("Unauthorized - Please login again");
+      console.error("[create-backup] Auth error:", userError?.message);
+      throw new Error(`Unauthorized: ${userError?.message ?? "invalid token"}`);
     }
 
+    console.log("[create-backup] Checking admin role for user:", user.id);
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
       .select("role")
@@ -90,6 +95,7 @@ Deno.serve(async (req: Request) => {
       throw new Error("Only admins can create backups");
     }
 
+    console.log("[create-backup] Starting data collection...");
     const backupData: BackupData = {
       metadata: {
         created_at: new Date().toISOString(),
@@ -108,6 +114,7 @@ Deno.serve(async (req: Request) => {
       try {
         const { data, error } = await supabase.from(table).select("*");
         if (error) {
+          console.warn(`[create-backup] Table ${table} error: ${error.message}`);
           errors.push(`${table}: ${error.message}`);
           continue;
         }
@@ -115,42 +122,52 @@ Deno.serve(async (req: Request) => {
           backupData.data[table] = data;
           totalRecords += data.length;
           successfulTables++;
+          console.log(`[create-backup] ${table}: ${data.length} records`);
         }
       } catch (err) {
-        errors.push(`${table}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        console.warn(`[create-backup] Table ${table} exception: ${msg}`);
+        errors.push(`${table}: ${msg}`);
       }
     }
 
     backupData.metadata.total_records = totalRecords;
     backupData.metadata.tables_count = successfulTables;
 
+    console.log(`[create-backup] Collected ${totalRecords} records from ${successfulTables} tables`);
+
     const backupJson = JSON.stringify(backupData, null, 2);
     const backupSize = new Blob([backupJson]).size;
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `backup_${timestamp}.json`;
 
-    const { data: bucketData, error: bucketError } = await supabase.storage.getBucket('backups');
-    if (bucketError || !bucketData) {
-      throw new Error(`Storage bucket "backups" does not exist.`);
-    }
+    console.log(`[create-backup] Uploading ${filename} (${(backupSize / 1024 / 1024).toFixed(2)} MB) to storage...`);
 
     const { error: uploadError } = await supabase.storage
-      .from('backups')
+      .from("backups")
       .upload(filename, backupJson, {
-        contentType: 'application/json',
+        contentType: "application/json",
         upsert: false,
       });
 
     if (uploadError) {
-      throw new Error(`Upload failed: ${uploadError.message} (status: ${uploadError.statusCode ?? 'unknown'})`);
+      console.error("[create-backup] Upload error:", JSON.stringify(uploadError));
+      throw new Error(
+        `Upload to storage failed: ${uploadError.message}` +
+        (uploadError.statusCode ? ` (HTTP ${uploadError.statusCode})` : "") +
+        (uploadError.error ? ` — ${uploadError.error}` : "")
+      );
     }
 
-    await supabase
-      .from('settings')
-      .update({ last_backup_date: new Date().toISOString() })
-      .eq('id', 1);
+    console.log("[create-backup] Upload successful. Updating last_backup_date...");
 
-    const executionTime = (((Date.now() - startTime)) / 1000).toFixed(2);
+    await supabase
+      .from("settings")
+      .update({ last_backup_date: new Date().toISOString() })
+      .eq("id", 1);
+
+    const executionTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`[create-backup] Done in ${executionTime}s`);
 
     return new Response(
       JSON.stringify({
@@ -172,11 +189,11 @@ Deno.serve(async (req: Request) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("[create-backup] Error:", err);
+    console.error("[create-backup] Fatal error:", err);
     return new Response(
       JSON.stringify({
         success: false,
-        error: err instanceof Error ? err.message : "Failed to create backup",
+        error: err instanceof Error ? err.message : String(err),
       }),
       {
         status: 500,
