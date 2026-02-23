@@ -31,6 +31,7 @@ import Backup from './components/Backup';
 import FixedAssets from './components/FixedAssets';
 import { SyncQueue } from './components/SyncQueue';
 import JournalEntries from './components/JournalEntries';
+import SystemHealth from './components/SystemHealth';
 import { supabase } from './lib/supabase';
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
@@ -53,6 +54,7 @@ const SECTION_PERMISSIONS: Record<string, string[]> = {
   journal: ['admin', 'accountant', 'viewer'],
   aianalysis: ['admin', 'accountant', 'viewer'],
   backup: ['admin'],
+  systemhealth: ['admin'],
   users: ['admin'],
   settings: ['admin'],
   syncqueue: ['admin', 'accountant', 'salesperson', 'viewer'],
@@ -145,6 +147,7 @@ function AppContent() {
       case 'journal': return <JournalEntries />;
       case 'aianalysis': return <AIAnalysis />;
       case 'backup': return <Backup />;
+      case 'systemhealth': return <SystemHealth />;
       case 'users': return <UserManagement />;
       case 'settings': return <Settings />;
       case 'syncqueue': return <SyncQueue />;

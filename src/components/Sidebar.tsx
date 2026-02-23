@@ -22,6 +22,7 @@ import {
   Landmark,
   RefreshCw,
   BookOpen,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -48,6 +49,7 @@ const MENU_ACCESS: Record<string, string[]> = {
   journal: ['admin', 'accountant', 'viewer'],
   aianalysis: ['admin', 'accountant', 'viewer'],
   backup: ['admin'],
+  systemhealth: ['admin'],
   users: ['admin'],
   settings: ['admin'],
   syncqueue: ['admin', 'accountant', 'salesperson', 'viewer'],
@@ -77,6 +79,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'aianalysis', icon: Brain, label: isRTL ? 'التحليل الذكي' : 'AI Analysis' },
     { id: 'syncqueue', icon: RefreshCw, label: isRTL ? 'قائمة المزامنة' : 'Sync Queue' },
     { id: 'backup', icon: Database, label: isRTL ? 'النسخ الاحتياطي' : 'Backup' },
+    { id: 'systemhealth', icon: ShieldCheck, label: isRTL ? 'صحة النظام' : 'System Health' },
     { id: 'users', icon: UserCog, label: t('nav.users') },
     { id: 'settings', icon: Settings, label: t('nav.settings') },
   ];
