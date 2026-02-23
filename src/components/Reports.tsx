@@ -111,11 +111,10 @@ export function Reports() {
   const [vatMonth, setVatMonth] = useState(() => new Date().getMonth() + 1);
   const [vatYear, setVatYear] = useState(() => new Date().getFullYear());
 
-  // Date filter state
+  // Date filter state — defaults to current month (1st → today)
   const [dateFrom, setDateFrom] = useState(() => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - 1);
-    return date.toISOString().split('T')[0];
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
 
@@ -139,6 +138,9 @@ export function Reports() {
   useEffect(() => {
     if (isAdmin) {
       loadReportData();
+      if (activeTab === 'trial_balance') loadTrialBalance();
+      else if (activeTab === 'income_statement') loadIncomeStatement();
+      else if (activeTab === 'balance_sheet') loadBalanceSheet();
     }
   }, [dateFrom, dateTo, isAdmin]);
 
@@ -497,7 +499,7 @@ export function Reports() {
     else if (tab === 'vat_summary') loadVatSummary();
   };
 
-  const handleQuickDateRange = (range: 'today' | 'week' | 'month' | 'quarter' | 'year') => {
+  const handleQuickDateRange = (range: 'today' | 'this_month' | 'this_year') => {
     const today = new Date();
     const to = today.toISOString().split('T')[0];
     let from = new Date();
@@ -506,17 +508,11 @@ export function Reports() {
       case 'today':
         from = today;
         break;
-      case 'week':
-        from.setDate(today.getDate() - 7);
+      case 'this_month':
+        from = new Date(today.getFullYear(), today.getMonth(), 1);
         break;
-      case 'month':
-        from.setMonth(today.getMonth() - 1);
-        break;
-      case 'quarter':
-        from.setMonth(today.getMonth() - 3);
-        break;
-      case 'year':
-        from.setFullYear(today.getFullYear() - 1);
+      case 'this_year':
+        from = new Date(today.getFullYear(), 0, 1);
         break;
     }
 
@@ -691,10 +687,8 @@ export function Reports() {
           <div className="flex flex-wrap items-center gap-2 ml-auto">
             {[
               { key: 'today', label: isRTL ? 'اليوم' : 'Today' },
-              { key: 'week', label: isRTL ? 'أسبوع' : 'Week' },
-              { key: 'month', label: isRTL ? 'شهر' : 'Month' },
-              { key: 'quarter', label: isRTL ? '3 أشهر' : 'Quarter' },
-              { key: 'year', label: isRTL ? 'سنة' : 'Year' }
+              { key: 'this_month', label: isRTL ? 'هذا الشهر' : 'This Month' },
+              { key: 'this_year', label: isRTL ? 'هذا العام' : 'This Year' },
             ].map((period) => (
               <button
                 key={period.key}
@@ -786,7 +780,7 @@ export function Reports() {
               <Scale className="w-5 h-5 text-teal-600" />
               {isRTL ? 'ميزان المراجعة' : 'Trial Balance'}
             </h3>
-            <span className="text-sm text-gray-500">{isRTL ? `${dateFrom} — ${dateTo}` : `${dateFrom} — ${dateTo}`}</span>
+            <span className="text-sm text-gray-500" dir="ltr">{dateFrom} — {dateTo}</span>
           </div>
           {trialBalance.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
@@ -864,7 +858,7 @@ export function Reports() {
               <BookOpen className="w-5 h-5 text-teal-600" />
               {isRTL ? 'قائمة الدخل' : 'Income Statement'}
             </h3>
-            <span className="text-sm text-gray-500">{dateFrom} — {dateTo}</span>
+            <span className="text-sm text-gray-500" dir="ltr">{dateFrom} — {dateTo}</span>
           </div>
           {!incomeStatement ? (
             <div className="text-center py-12 text-gray-400">
