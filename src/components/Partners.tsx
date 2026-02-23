@@ -69,9 +69,10 @@ interface SetupExpense {
 }
 
 const EXPENSE_TYPES = {
-  capital: { ar: 'رأس مال', en: 'Capital' },
+  capital: { ar: 'رأس مال نقدي', en: 'Cash Capital' },
+  inventory: { ar: 'مخزون', en: 'Inventory' },
   asset: { ar: 'أصول ثابتة', en: 'Fixed Assets' },
-  operational: { ar: 'تشغيلي', en: 'Operational' }
+  operational: { ar: 'مصروف تشغيلي', en: 'Operational Expense' }
 };
 
 export function Partners() {
@@ -438,7 +439,9 @@ export function Partners() {
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
   const capitalExpenses = expenses.filter(e => e.expense_type === 'capital').reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const inventoryExpenses = expenses.filter(e => e.expense_type === 'inventory').reduce((sum, exp) => sum + Number(exp.amount), 0);
   const assetExpenses = expenses.filter(e => e.expense_type === 'asset').reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const operationalExpenses = expenses.filter(e => e.expense_type === 'operational').reduce((sum, exp) => sum + Number(exp.amount), 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -640,41 +643,57 @@ export function Partners() {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="bg-teal-50 p-2.5 rounded-lg">
-              <DollarSign className="w-5 h-5 text-teal-600" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="bg-teal-50 p-2 rounded-lg">
+              <DollarSign className="w-4 h-4 text-teal-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'إجمالي المصاريف' : 'Total Expenses'}</p>
+            <p className="text-xs text-gray-500">{isRTL ? 'رأس المال النقدي' : 'Cash Capital'}</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(totalExpenses)} <span className="text-sm font-normal text-gray-500">{isRTL ? 'ر.س' : 'SAR'}</span>
+          <p className="text-xl font-bold text-gray-900">
+            {formatCurrency(capitalExpenses)}
           </p>
+          <p className="text-xs text-gray-400 mt-0.5">{isRTL ? 'ح/ 1110 نقدية' : 'Acc 1110 Cash'}</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="bg-blue-50 p-2.5 rounded-lg">
-              <DollarSign className="w-5 h-5 text-blue-600" />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="bg-green-50 p-2 rounded-lg">
+              <DollarSign className="w-4 h-4 text-green-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'رأس المال' : 'Capital'}</p>
+            <p className="text-xs text-gray-500">{isRTL ? 'مخزون' : 'Inventory'}</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(capitalExpenses)} <span className="text-sm font-normal text-gray-500">{isRTL ? 'ر.س' : 'SAR'}</span>
+          <p className="text-xl font-bold text-gray-900">
+            {formatCurrency(inventoryExpenses)}
           </p>
+          <p className="text-xs text-gray-400 mt-0.5">{isRTL ? 'ح/ 1132 بضاعة' : 'Acc 1132 Stock'}</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="bg-purple-50 p-2.5 rounded-lg">
-              <DollarSign className="w-5 h-5 text-purple-600" />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="bg-blue-50 p-2 rounded-lg">
+              <DollarSign className="w-4 h-4 text-blue-600" />
             </div>
-            <p className="text-sm text-gray-500">{isRTL ? 'الأصول الثابتة' : 'Fixed Assets'}</p>
+            <p className="text-xs text-gray-500">{isRTL ? 'أصول ثابتة' : 'Fixed Assets'}</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(assetExpenses)} <span className="text-sm font-normal text-gray-500">{isRTL ? 'ر.س' : 'SAR'}</span>
+          <p className="text-xl font-bold text-gray-900">
+            {formatCurrency(assetExpenses)}
           </p>
+          <p className="text-xs text-gray-400 mt-0.5">{isRTL ? 'ح/ 1213 معدات' : 'Acc 1213 Equip'}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="bg-orange-50 p-2 rounded-lg">
+              <DollarSign className="w-4 h-4 text-orange-600" />
+            </div>
+            <p className="text-xs text-gray-500">{isRTL ? 'مصاريف تشغيلية' : 'Operational'}</p>
+          </div>
+          <p className="text-xl font-bold text-gray-900">
+            {formatCurrency(operationalExpenses)}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">{isRTL ? 'ح/ 6000 مصاريف' : 'Acc 6000 Exp'}</p>
         </div>
       </div>
 
@@ -717,7 +736,13 @@ export function Partners() {
               ) : (
                 expenses.map((expense) => {
                   const partner = partners.find(p => p.id === expense.partner_id);
-                  const typeColor = expense.expense_type === 'capital' ? 'blue' : expense.expense_type === 'asset' ? 'purple' : 'green';
+                  const typeColorMap: Record<string, string> = {
+                    capital: 'teal',
+                    inventory: 'green',
+                    asset: 'blue',
+                    operational: 'orange',
+                  };
+                  const typeColor = typeColorMap[expense.expense_type] || 'gray';
 
                   return (
                     <tr key={expense.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
