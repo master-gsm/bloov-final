@@ -156,9 +156,17 @@ export default function Backup() {
     setBackupResult(null);
 
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw new Error(`Session error: ${sessionError.message}`);
-      if (!session) throw new Error(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Not authenticated');
+      const { data: refreshData } = await supabase.auth.refreshSession();
+      let activeSession = refreshData?.session;
+      if (!activeSession) {
+        const { data: { session: existingSession }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw new Error(`Session error: ${sessionError.message}`);
+        if (!existingSession) throw new Error(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Not authenticated');
+        activeSession = existingSession;
+        console.log('[Backup] Using existing session (refresh not needed)');
+      } else {
+        console.log('[Backup] Session refreshed successfully');
+      }
 
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-backup`;
       console.log('[Backup] Calling:', url);
@@ -169,7 +177,7 @@ export default function Backup() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${activeSession.access_token}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
         });
