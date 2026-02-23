@@ -302,12 +302,33 @@ export function Purchases() {
 
   const updatePurchaseStatus = async (purchaseId: string, status: string) => {
     try {
-      const { data, error } = await supabase.rpc('update_purchase_status', {
-        p_purchase_id: purchaseId,
-        p_new_status: status,
-        p_reason: `Status changed to ${status} via UI`,
-      });
-      if (error) throw error;
+      if (status === 'received') {
+        const { data, error } = await supabase.rpc('process_purchase_receipt_atomic', {
+          p_purchase_id: purchaseId,
+        });
+        if (error) throw error;
+        const result = data as any;
+        if (!result?.success) {
+          throw new Error(result?.message || (isRTL ? 'فشل في معالجة الاستلام' : 'Failed to process receipt'));
+        }
+        if (result?.duplicate) {
+          console.log('[Purchases] Receipt already processed (idempotent):', result.message);
+        } else {
+          console.log('[Purchases] Receipt processed:', {
+            movements: result.movements_created,
+            vatRecorded: result.vat_recorded,
+            vatAmount: result.vat_amount,
+            journalEntry: result.journal_entry_id,
+          });
+        }
+      } else {
+        const { data, error } = await supabase.rpc('update_purchase_status', {
+          p_purchase_id: purchaseId,
+          p_new_status: status,
+          p_reason: `Status changed to ${status} via UI`,
+        });
+        if (error) throw error;
+      }
       loadData();
       setViewingPurchase(null);
     } catch (error: any) {
