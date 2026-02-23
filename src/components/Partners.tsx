@@ -101,6 +101,9 @@ export function Partners() {
   const [description, setDescription] = useState('');
   const [descriptionAr, setDescriptionAr] = useState('');
   const [amount, setAmount] = useState('');
+  const [vatAmount, setVatAmount] = useState('');
+  const [vatCategory, setVatCategory] = useState<'standard' | 'zero_rated' | 'exempt'>('exempt');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -151,7 +154,7 @@ export function Partners() {
         supabase.from('setup_expenses').select(`
           *,
           partner:partners(name, name_ar)
-        `).order('expense_date', { ascending: false })
+        `).eq('is_deleted', false).order('expense_date', { ascending: false })
       ]);
 
       if (partnersRes.data) setPartners(partnersRes.data as any[]);
@@ -189,16 +192,23 @@ export function Partners() {
         }
       }
 
+      const parsedAmount = parseFloat(amount);
+      const parsedVat = vatCategory === 'standard' && vatAmount ? parseFloat(vatAmount) : 0;
+
       const expenseData = {
         partner_id: partnerId,
         expense_type: expenseType,
         category: category || expenseType,
         description,
         description_ar: descriptionAr || description,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
+        vat_amount: parsedVat,
+        vat_category: vatCategory,
+        payment_method: paymentMethod,
         expense_date: expenseDate,
         attachment: attachmentPath,
         notes,
+        created_by: user?.id,
       };
 
       const { error } = await supabase.from('setup_expenses').insert([expenseData]);
@@ -222,11 +232,15 @@ export function Partners() {
     }
 
     try {
-      const { data, error } = await supabase.rpc('void_setup_expense' as any, {
+      const { data, error } = await supabase.rpc('void_partner_operation_atomic' as any, {
         p_expense_id: id,
         p_reason: 'Voided via Partners UI',
       } as any);
       if (error) throw error;
+      const result = data as any;
+      if (!result?.success) {
+        throw new Error(result?.message || (isRTL ? 'فشل إلغاء المصروف' : 'Failed to void expense'));
+      }
       setDeleteConfirm(null);
       await loadData();
     } catch (err: any) {
@@ -311,6 +325,9 @@ export function Partners() {
     setDescription('');
     setDescriptionAr('');
     setAmount('');
+    setVatAmount('');
+    setVatCategory('exempt');
+    setPaymentMethod('cash');
     setExpenseDate(new Date().toISOString().split('T')[0]);
     setNotes('');
     setAttachmentFile(null);
@@ -867,7 +884,7 @@ export function Partners() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {isRTL ? 'المبلغ (ر.س) *' : 'Amount (SAR) *'}
+                    {isRTL ? 'المبلغ الإجمالي (ر.س) *' : 'Total Amount (SAR) *'}
                   </label>
                   <input
                     type="number"
@@ -891,6 +908,57 @@ export function Partners() {
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {isRTL ? 'فئة الضريبة' : 'VAT Category'}
+                  </label>
+                  <select
+                    value={vatCategory}
+                    onChange={(e) => {
+                      setVatCategory(e.target.value as 'standard' | 'zero_rated' | 'exempt');
+                      if (e.target.value !== 'standard') setVatAmount('');
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  >
+                    <option value="exempt">{isRTL ? 'معفى' : 'Exempt'}</option>
+                    <option value="standard">{isRTL ? 'ضريبة 15%' : 'Standard 15%'}</option>
+                    <option value="zero_rated">{isRTL ? 'صفر %' : 'Zero Rated'}</option>
+                  </select>
+                </div>
+
+                {vatCategory === 'standard' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {isRTL ? 'مبلغ الضريبة (ر.س)' : 'VAT Amount (SAR)'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={vatAmount}
+                      onChange={(e) => setVatAmount(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      placeholder="0.00"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {isRTL ? 'طريقة الدفع' : 'Payment Method'}
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  >
+                    <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
+                    <option value="partner">{isRTL ? 'من الشريك' : 'From Partner'}</option>
+                    <option value="bank_transfer">{isRTL ? 'تحويل بنكي' : 'Bank Transfer'}</option>
+                  </select>
                 </div>
               </div>
 
