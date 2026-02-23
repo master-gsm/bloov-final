@@ -156,25 +156,41 @@ export default function Backup() {
     setBackupResult(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(`Session error: ${sessionError.message}`);
       if (!session) throw new Error(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Not authenticated');
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-backup`,
-        {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-backup`;
+      console.log('[Backup] Calling:', url);
+
+      let response: Response;
+      try {
+        response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
-        }
-      );
+        });
+      } catch (fetchErr) {
+        throw new Error(`Network error: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`);
+      }
 
-      const result = await response.json();
+      console.log('[Backup] Response status:', response.status);
+
+      const rawText = await response.text();
+      console.log('[Backup] Raw response:', rawText.slice(0, 500));
+
+      let result: any;
+      try {
+        result = JSON.parse(rawText);
+      } catch {
+        throw new Error(`HTTP ${response.status} — ${rawText.slice(0, 300)}`);
+      }
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || (language === 'ar' ? 'فشل إنشاء النسخة الاحتياطية' : 'Failed to create backup'));
+        throw new Error(result.error || `HTTP ${response.status}: ${language === 'ar' ? 'فشل إنشاء النسخة الاحتياطية' : 'Failed to create backup'}`);
       }
 
       setSuccess(true);
@@ -188,7 +204,7 @@ export default function Backup() {
         'success'
       );
     } catch (err) {
-      console.error('Backup error:', err);
+      console.error('[Backup] Error:', err);
       const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup');
       setError(errorMsg);
       showAlert(language === 'ar' ? `فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `Backup Failed\n\n${errorMsg}`, 'error');
