@@ -860,57 +860,99 @@ export default function Backup() {
       'loyalty_transactions', 'audit_logs'
     ];
 
-    let restoredTables = 0;
-    let restoredRecords = 0;
-    const errors: string[] = [];
+    setRestoreProgress(language === 'ar'
+      ? 'جاري التحقق من صحة البيانات...'
+      : 'Validating backup data...'
+    );
+
+    const validationErrors: Array<{ table: string; message: string }> = [];
+    let totalRecordsToRestore = 0;
 
     for (const table of RESTORE_ORDER) {
       const tableData = backupData.data[table];
-      if (!tableData || !Array.isArray(tableData) || tableData.length === 0) continue;
-
-      setRestoreProgress(language === 'ar'
-        ? `جاري استعادة جدول ${table} (${tableData.length} سجل)...`
-        : `Restoring ${table} (${tableData.length} records)...`
-      );
-
-      try {
-        const { error: upsertError } = await supabase
-          .from(table as any)
-          .upsert(tableData as any, { onConflict: 'id', ignoreDuplicates: false });
-
-        if (upsertError) {
-          console.warn(`Error restoring ${table}:`, upsertError);
-          errors.push(`${table}: ${upsertError.message}`);
-          continue;
-        }
-
-        restoredTables++;
-        restoredRecords += tableData.length;
-      } catch (err) {
-        console.warn(`Error restoring ${table}:`, err);
-        errors.push(`${table}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      if (!tableData) continue;
+      if (!Array.isArray(tableData)) {
+        validationErrors.push({ table, message: language === 'ar' ? 'البيانات ليست مصفوفة' : 'Data is not an array' });
+        continue;
       }
+      totalRecordsToRestore += tableData.length;
     }
 
-    if (restoredTables === 0) {
-      throw new Error(language === 'ar' ? 'لم يتم استعادة أي بيانات' : 'No data was restored');
+    if (validationErrors.length > 0) {
+      const details = validationErrors.map(e => `• ${e.table}: ${e.message}`).join('\n');
+      throw new Error(
+        (language === 'ar'
+          ? `فشل التحقق من صحة النسخة الاحتياطية — لم يتم استعادة أي بيانات:\n\n`
+          : `Backup validation failed — nothing was restored:\n\n`) + details
+      );
     }
 
-    const msg = language === 'ar'
-      ? `تم استعادة ${restoredRecords} سجل من ${restoredTables} جدول بنجاح!${errors.length > 0 ? `\n\nتحذير: فشل استعادة ${errors.length} جدول` : ''}`
-      : `Successfully restored ${restoredRecords} records from ${restoredTables} tables!${errors.length > 0 ? `\n\nWarning: ${errors.length} tables failed` : ''}`;
+    if (totalRecordsToRestore === 0) {
+      throw new Error(language === 'ar' ? 'النسخة الاحتياطية لا تحتوي على بيانات' : 'Backup contains no data to restore');
+    }
 
-    setSuccessMessage(msg);
+    setRestoreProgress(language === 'ar'
+      ? `جاري تنفيذ الاستعادة الذرية (${totalRecordsToRestore.toLocaleString()} سجل)...`
+      : `Executing atomic restore (${totalRecordsToRestore.toLocaleString()} records)...`
+    );
+
+    const { data: result, error: rpcError } = await (supabase.rpc as any)('perform_atomic_restore', {
+      p_backup: backupData,
+    });
+
+    if (rpcError) {
+      console.error('Atomic restore RPC error:', rpcError);
+      throw new Error(
+        (language === 'ar'
+          ? 'فشلت الاستعادة الذرية — تم التراجع عن جميع التغييرات:\n\n'
+          : 'Atomic restore failed — all changes have been rolled back:\n\n')
+        + rpcError.message
+      );
+    }
+
+    const restoreResult = result as {
+      success: boolean;
+      restored_tables: number;
+      restored_records: number;
+      failed_tables: string[];
+      errors: Array<{ table: string; message: string; detail?: string; hint?: string; sqlstate?: string; rows_attempted?: number }>;
+      rolled_back: boolean;
+    };
+
+    if (!restoreResult.success) {
+      const failedTables = Array.isArray(restoreResult.failed_tables) ? restoreResult.failed_tables : [];
+      const errors = Array.isArray(restoreResult.errors) ? restoreResult.errors : [];
+
+      const errorLines = errors.map(e => {
+        let line = `• ${e.table}: ${e.message}`;
+        if (e.detail) line += `\n  ${e.detail}`;
+        if (e.hint) line += `\n  ${e.hint}`;
+        return line;
+      }).join('\n\n');
+
+      console.error('Atomic restore failed. Failed tables:', failedTables);
+      console.error('Error details:', errors);
+
+      throw new Error(
+        (language === 'ar'
+          ? `فشلت الاستعادة الذرية — تم التراجع عن جميع التغييرات\n\nالجداول التي فشلت (${failedTables.length}):\n`
+          : `Atomic restore failed — all changes rolled back\n\nFailed tables (${failedTables.length}):\n`)
+        + (failedTables.length > 0 ? failedTables.map(t => `• ${t}`).join('\n') : '')
+        + (errorLines ? `\n\n${language === 'ar' ? 'تفاصيل الأخطاء:' : 'Error details:'}\n${errorLines}` : '')
+      );
+    }
+
+    const successMsg = language === 'ar'
+      ? `تم استعادة النسخة الاحتياطية بالكامل بنجاح!\n\n📊 السجلات: ${restoreResult.restored_records.toLocaleString()}\n📦 الجداول: ${restoreResult.restored_tables}`
+      : `Backup restored completely!\n\n📊 Records: ${restoreResult.restored_records.toLocaleString()}\n📦 Tables: ${restoreResult.restored_tables}`;
+
+    setSuccessMessage(successMsg);
     setSuccess(true);
 
     alert(language === 'ar'
-      ? `✅ تم استعادة النسخة الاحتياطية بنجاح!\n\n📊 عدد السجلات: ${restoredRecords.toLocaleString()}\n📦 عدد الجداول: ${restoredTables}${errors.length > 0 ? `\n\n⚠️ تحذير: فشل استعادة ${errors.length} جدول` : ''}`
-      : `✅ Backup restored successfully!\n\n📊 Records Restored: ${restoredRecords.toLocaleString()}\n📦 Tables Restored: ${restoredTables}${errors.length > 0 ? `\n\n⚠️ Warning: ${errors.length} tables failed` : ''}`
+      ? `✅ نجحت الاستعادة الذرية!\n\n📊 عدد السجلات: ${restoreResult.restored_records.toLocaleString()}\n📦 عدد الجداول: ${restoreResult.restored_tables}\n🔒 الاستعادة كانت 100% أو 0% — لا استعادة جزئية`
+      : `✅ Atomic restore succeeded!\n\n📊 Records Restored: ${restoreResult.restored_records.toLocaleString()}\n📦 Tables Restored: ${restoreResult.restored_tables}\n🔒 Restore was 100% or 0% — no partial restore`
     );
-
-    if (errors.length > 0) {
-      console.warn('Restore errors:', errors);
-    }
   };
 
   const formatDate = (dateString: string): string => {
@@ -1285,11 +1327,16 @@ export default function Backup() {
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-amber-900">
-                  {language === 'ar'
-                    ? 'تحذير: استعادة نسخة احتياطية ستقوم بتحديث البيانات الحالية بالبيانات الموجودة في النسخة. تأكد من أنك تريد المتابعة.'
-                    : 'Warning: Restoring a backup will update current data with the backup data. Make sure you want to proceed.'}
-                </p>
+                <div className="text-sm text-amber-900 space-y-1">
+                  <p className="font-semibold">
+                    {language === 'ar' ? 'وضع الاستعادة الذرية' : 'Atomic Restore Mode'}
+                  </p>
+                  <p>
+                    {language === 'ar'
+                      ? 'الاستعادة تعمل بمبدأ الكل أو لا شيء — إذا فشل أي جدول، يتم التراجع عن جميع التغييرات تلقائياً. لا يمكن حدوث استعادة جزئية.'
+                      : 'Restore operates on an all-or-nothing basis — if any table fails, all changes are automatically rolled back. Partial restore is impossible.'}
+                  </p>
+                </div>
               </div>
             </div>
 
