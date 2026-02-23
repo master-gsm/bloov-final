@@ -242,7 +242,7 @@ SELECT id INTO v_ar_account_id      FROM accounts WHERE code = '1120' LIMIT 1;
 SELECT id INTO v_revenue_account_id FROM accounts WHERE code = '4100' LIMIT 1;
 SELECT id INTO v_cogs_account_id    FROM accounts WHERE code = '5100' LIMIT 1;
 SELECT id INTO v_inv_account_id     FROM accounts WHERE code = '1130' LIMIT 1;
-SELECT id INTO v_vat_account_id     FROM accounts WHERE code = '2200' LIMIT 1;
+SELECT id INTO v_vat_account_id     FROM accounts WHERE code = '2130' LIMIT 1;
 
 IF v_cash_account_id IS NOT NULL AND v_revenue_account_id IS NOT NULL THEN
 v_je_id     := gen_random_uuid();
