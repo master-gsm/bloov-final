@@ -138,16 +138,65 @@ export function SystemHealth() {
     setError(null);
     setChecks(Array(6).fill(LOADING_CHECK));
 
+    // Step 1: verify the DB is actually reachable with SELECT 1
+    let dbReachable = false;
+    try {
+      const { error: pingError } = await supabase.from('settings').select('id').limit(1);
+      if (pingError) {
+        console.error('[SystemHealth] DB ping failed:', pingError);
+      } else {
+        dbReachable = true;
+      }
+    } catch (pingErr) {
+      console.error('[SystemHealth] DB ping exception:', pingErr);
+    }
+
+    setDbOnline(dbReachable);
+
+    if (!dbReachable) {
+      const msg = isRTL ? 'تعذّر الاتصال بقاعدة البيانات' : 'Database connection failed';
+      setError(msg);
+      setChecks([
+        {
+          id: 'connection',
+          label: 'Database Connection',
+          labelAr: 'اتصال قاعدة البيانات',
+          status: 'error',
+          value: isRTL ? 'تعذّر الاتصال' : 'Connection failed',
+          detail: msg,
+        },
+        ...Array(5).fill({ id: '', label: '—', labelAr: '—', status: 'error' as CheckStatus, value: '—' }),
+      ]);
+      setLoading(false);
+      return;
+    }
+
+    // Step 2: run health report RPC
     try {
       const { data, error: rpcError } = await supabase
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .rpc('get_db_health_report' as any);
 
-      if (rpcError) throw rpcError;
+      if (rpcError) {
+        console.error('[SystemHealth] get_db_health_report RPC error:', rpcError);
+        const msg = rpcError.message || JSON.stringify(rpcError);
+        setError(msg);
+        setChecks([
+          {
+            id: 'connection',
+            label: 'Database Connection',
+            labelAr: 'اتصال قاعدة البيانات',
+            status: 'warn',
+            value: isRTL ? 'متصل — خطأ في الدالة' : 'Connected — function error',
+            detail: msg,
+          },
+          ...Array(5).fill({ id: '', label: '—', labelAr: '—', status: 'loading' as CheckStatus, value: '—' }),
+        ]);
+        return;
+      }
 
       const r = data as unknown as HealthReport;
       setReport(r);
-      setDbOnline(true);
 
       const diff = Number(r.trial_balance_difference ?? 0);
       const absDiff = Math.abs(diff);
@@ -225,19 +274,19 @@ export function SystemHealth() {
 
       setChecks(built);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[SystemHealth] Unexpected error in health check:', err);
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
       setError(msg);
-      setDbOnline(false);
       setChecks([
         {
           id: 'connection',
           label: 'Database Connection',
           labelAr: 'اتصال قاعدة البيانات',
-          status: 'error',
-          value: isRTL ? 'تعذّر الاتصال' : 'Connection failed',
+          status: 'warn',
+          value: isRTL ? 'متصل — خطأ غير متوقع' : 'Connected — unexpected error',
           detail: msg,
         },
-        ...Array(5).fill({ id: '', label: '—', labelAr: '—', status: 'error' as CheckStatus, value: '—' }),
+        ...Array(5).fill({ id: '', label: '—', labelAr: '—', status: 'loading' as CheckStatus, value: '—' }),
       ]);
     } finally {
       setLoading(false);
@@ -251,11 +300,12 @@ export function SystemHealth() {
       const { data, error: rpcError } = await supabase
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .rpc('validate_restore_readiness' as any);
-      if (rpcError) throw rpcError;
+      if (rpcError) throw new Error(rpcError.message || JSON.stringify(rpcError));
       setRestoreReport(data as unknown as RestoreReport);
       setRestoreExpanded(true);
     } catch (err: unknown) {
-      setRestoreError(err instanceof Error ? err.message : String(err));
+      console.error('[SystemHealth] validate_restore_readiness error:', err);
+      setRestoreError(err instanceof Error ? err.message : JSON.stringify(err));
     } finally {
       setRestoreLoading(false);
     }
