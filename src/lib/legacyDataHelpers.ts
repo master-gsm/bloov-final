@@ -44,7 +44,6 @@ export const isLegacyRecord = (
 export interface Branch {
   id: string;
   name: string;
-  name_ar: string;
   isLegacy?: boolean;
 }
 
@@ -56,8 +55,7 @@ export const getLegacyBranch = (
   if (!branchId) {
     return {
       id: 'legacy',
-      name: 'Main Branch',
-      name_ar: 'الفرع الرئيسي',
+      name: language === 'ar' ? 'الفرع الرئيسي' : 'Main Branch',
       isLegacy: true
     };
   }
@@ -65,8 +63,7 @@ export const getLegacyBranch = (
   const branch = branches.find(b => b.id === branchId);
   return branch || {
     id: 'unknown',
-    name: 'Unknown Branch',
-    name_ar: 'فرع غير معروف',
+    name: language === 'ar' ? 'فرع غير معروف' : 'Unknown Branch',
     isLegacy: true
   };
 };

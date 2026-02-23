@@ -6,7 +6,6 @@ import { AlertTriangle } from 'lucide-react';
 interface Branch {
   id: string;
   name: string;
-  name_ar?: string;
   code: string;
   location?: string;
   city?: string;
@@ -79,7 +78,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       if (admin) {
         const { data: branches, error: branchError } = await supabase
           .from('branches')
-          .select('id, name, name_ar, code, location, city, is_active')
+          .select('id, name, code, location, city, is_active')
           .eq('is_active', true)
           .order('name');
 
