@@ -21,6 +21,7 @@ import {
   Database,
   Landmark,
   RefreshCw,
+  BookOpen,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -44,6 +45,7 @@ const MENU_ACCESS: Record<string, string[]> = {
   salla: ['admin', 'accountant'],
   cashregister: ['admin', 'accountant', 'viewer'],
   reports: ['admin', 'accountant', 'viewer'],
+  journal: ['admin', 'accountant', 'viewer'],
   aianalysis: ['admin', 'accountant', 'viewer'],
   backup: ['admin'],
   users: ['admin'],
@@ -71,6 +73,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'salla', icon: Store, label: isRTL ? 'سلة' : 'Salla' },
     { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
     { id: 'reports', icon: FileText, label: t('nav.reports') },
+    { id: 'journal', icon: BookOpen, label: isRTL ? 'القيود اليومية' : 'Journal Entries' },
     { id: 'aianalysis', icon: Brain, label: isRTL ? 'التحليل الذكي' : 'AI Analysis' },
     { id: 'syncqueue', icon: RefreshCw, label: isRTL ? 'قائمة المزامنة' : 'Sync Queue' },
     { id: 'backup', icon: Database, label: isRTL ? 'النسخ الاحتياطي' : 'Backup' },

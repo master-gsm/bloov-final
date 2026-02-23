@@ -30,6 +30,7 @@ import Branches from './components/Branches';
 import Backup from './components/Backup';
 import FixedAssets from './components/FixedAssets';
 import { SyncQueue } from './components/SyncQueue';
+import JournalEntries from './components/JournalEntries';
 import { supabase } from './lib/supabase';
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
@@ -49,6 +50,7 @@ const SECTION_PERMISSIONS: Record<string, string[]> = {
   salla: ['admin', 'accountant'],
   cashregister: ['admin', 'accountant', 'viewer'],
   reports: ['admin', 'accountant', 'viewer'],
+  journal: ['admin', 'accountant', 'viewer'],
   aianalysis: ['admin', 'accountant', 'viewer'],
   backup: ['admin'],
   users: ['admin'],
@@ -140,6 +142,7 @@ function AppContent() {
       case 'salla': return <SallaOrders />;
       case 'cashregister': return <CashRegister />;
       case 'reports': return <Reports />;
+      case 'journal': return <JournalEntries />;
       case 'aianalysis': return <AIAnalysis />;
       case 'backup': return <Backup />;
       case 'users': return <UserManagement />;
