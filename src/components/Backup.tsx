@@ -164,6 +164,20 @@ export default function Backup() {
     try {
       const startTime = Date.now();
 
+      console.log('[ServerBackup] === START ===');
+
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('[ServerBackup] session:', session?.user?.email, 'error:', sessionError?.message);
+      if (!session) throw new Error(language === 'ar' ? 'غير مسجل الدخول' : 'Not authenticated');
+
+      const testBlob = new Blob(['test'], { type: 'text/plain' });
+      const testResult = await supabase.storage.from('backups').upload('test.txt', testBlob, { upsert: true });
+      console.log('[ServerBackup] test upload result:', JSON.stringify(testResult));
+      if (testResult.error) {
+        throw new Error(`Storage test failed: ${testResult.error.message} (status: ${(testResult.error as any).statusCode})`);
+      }
+      console.log('[ServerBackup] test upload OK - Storage is working');
+
       const backupData: any = {
         metadata: {
           created_at: new Date().toISOString(),
@@ -193,22 +207,30 @@ export default function Backup() {
 
       backupData.metadata.total_records = totalRecords;
       backupData.metadata.tables_count = successfulTables;
+      console.log(`[ServerBackup] collected ${totalRecords} records from ${successfulTables} tables`);
 
       const backupJson = JSON.stringify(backupData, null, 2);
-      const backupSize = new Blob([backupJson]).size;
+      const backupBlob = new Blob([backupJson], { type: 'application/json' });
+      const backupSize = backupBlob.size;
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `backup_${timestamp}.json`;
 
-      const { error: uploadError } = await supabase.storage
+      console.log(`[ServerBackup] uploading ${filename} (${(backupSize / 1024).toFixed(1)} KB)...`);
+
+      const uploadResult = await supabase.storage
         .from('backups')
-        .upload(filename, new Blob([backupJson], { type: 'application/json' }), {
+        .upload(filename, backupBlob, {
           contentType: 'application/json',
           upsert: false,
         });
 
-      if (uploadError) {
-        throw new Error(language === 'ar' ? `فشل رفع النسخة على السيرفر: ${uploadError.message}` : `Upload failed: ${uploadError.message}`);
+      console.log('[ServerBackup] upload result:', JSON.stringify(uploadResult));
+
+      if (uploadResult.error) {
+        throw new Error(`${uploadResult.error.message} (status: ${(uploadResult.error as any).statusCode})`);
       }
+
+      console.log('[ServerBackup] upload SUCCESS - path:', uploadResult.data?.path);
 
       await supabase.from('settings').update({ last_backup_date: new Date().toISOString() }).eq('id', 1);
 
@@ -223,7 +245,7 @@ export default function Backup() {
         tables_count: successfulTables,
         execution_time: `${executionTime} seconds`,
         created_at: backupData.metadata.created_at,
-        download_url: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/backups/${filename}`,
+        download_url: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/backups/${filename}`,
         backup_data: backupData,
       });
 
@@ -231,15 +253,15 @@ export default function Backup() {
 
       showAlert(
         language === 'ar'
-          ? `تم إنشاء النسخة الاحتياطية بنجاح!\n\nالملف: ${filename}\nعدد السجلات: ${totalRecords.toLocaleString()}\nوقت التنفيذ: ${executionTime} ثانية`
-          : `Backup created successfully!\n\nFile: ${filename}\nTotal Records: ${totalRecords.toLocaleString()}\nExecution Time: ${executionTime}s`,
+          ? `تم رفع النسخة الاحتياطية بنجاح!\n\nالملف: ${filename}\nعدد السجلات: ${totalRecords.toLocaleString()}\nوقت التنفيذ: ${executionTime} ثانية`
+          : `Backup uploaded successfully!\n\nFile: ${filename}\nTotal Records: ${totalRecords.toLocaleString()}\nExecution Time: ${executionTime}s`,
         'success'
       );
     } catch (err) {
-      console.error('[ServerBackup] Error:', err);
+      console.error('[ServerBackup] FAILED:', err);
       const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup');
       setError(errorMsg);
-      showAlert(language === 'ar' ? `فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `Backup Failed\n\n${errorMsg}`, 'error');
+      showAlert(language === 'ar' ? `فشل رفع النسخة الاحتياطية\n\n${errorMsg}` : `Backup Failed\n\n${errorMsg}`, 'error');
     } finally {
       setServerLoading(false);
     }
