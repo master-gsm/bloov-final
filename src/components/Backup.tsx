@@ -49,39 +49,23 @@ export default function Backup() {
 
   const loadBackupHistory = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const { data: files, error } = await supabase.storage
+        .from('backups')
+        .list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/list/backups`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          prefix: '',
-          limit: 200,
-          offset: 0,
-          sortBy: { column: 'created_at', order: 'desc' },
-        }),
-      });
-
-      if (!res.ok) {
-        console.error('[Backup] list failed:', res.status, await res.text());
+      if (error) {
+        console.error('[Backup] list error:', error.message);
         return;
       }
 
-      const files: any[] = await res.json();
-      const history = files
+      const history = (files || [])
         .filter((f: any) => f.name && f.name.endsWith('.json'))
         .map((f: any) => ({
           name: f.name,
           created_at: f.created_at,
           size: f.metadata?.size || 0,
         }))
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setBackupHistory(history);
     } catch (err) {
