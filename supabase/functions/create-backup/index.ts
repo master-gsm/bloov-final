@@ -65,19 +65,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
     if (userError || !user) {
       throw new Error("Unauthorized - Please login again");
     }
 
-    const { data: userProfile, error: profileError } = await userSupabase
+    const { data: userProfile, error: profileError } = await supabase
       .from("users")
       .select("role")
       .eq("id", user.id)
@@ -90,8 +89,6 @@ Deno.serve(async (req: Request) => {
     if (!userProfile || userProfile.role !== "admin") {
       throw new Error("Only admins can create backups");
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const backupData: BackupData = {
       metadata: {
@@ -145,7 +142,7 @@ Deno.serve(async (req: Request) => {
       });
 
     if (uploadError) {
-      throw new Error(`Failed to save backup to server: ${uploadError.message}`);
+      throw new Error(`Upload failed: ${uploadError.message} (status: ${uploadError.statusCode ?? 'unknown'})`);
     }
 
     await supabase
