@@ -49,19 +49,41 @@ export default function Backup() {
 
   const loadBackupHistory = async () => {
     try {
-      const { data, error } = await supabase.storage.from('backups').list();
-      if (error) throw error;
-      if (data) {
-        const history = data
-          .filter(file => file.name.endsWith('.json'))
-          .map(file => ({
-            name: file.name,
-            created_at: file.created_at,
-            size: file.metadata?.size || 0,
-          }))
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        setBackupHistory(history);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/list/backups`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          prefix: '',
+          limit: 200,
+          offset: 0,
+          sortBy: { column: 'created_at', order: 'desc' },
+        }),
+      });
+
+      if (!res.ok) {
+        console.error('[Backup] list failed:', res.status, await res.text());
+        return;
       }
+
+      const files: any[] = await res.json();
+      const history = files
+        .filter((f: any) => f.name && f.name.endsWith('.json'))
+        .map((f: any) => ({
+          name: f.name,
+          created_at: f.created_at,
+          size: f.metadata?.size || 0,
+        }))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setBackupHistory(history);
     } catch (err) {
       console.error('Error loading backup history:', err);
     }
