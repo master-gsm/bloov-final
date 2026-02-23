@@ -340,19 +340,31 @@ Deno.serve(async (req: Request) => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `backup_${timestamp}.json`;
 
+    const bucketName = 'backups';
     console.log("[create-backup] Step 7: Uploading backup to storage bucket");
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('backups')
+    console.log("Uploading to bucket:", bucketName);
+
+    const { data: bucketData, error: bucketError } = await supabase.storage.getBucket(bucketName);
+    if (bucketError || !bucketData) {
+      console.error("[create-backup] Bucket not found:", bucketError?.message);
+      throw new Error(`Storage bucket "${bucketName}" does not exist. Please create it first.`);
+    }
+
+    const uploadResult = await supabase.storage
+      .from(bucketName)
       .upload(filename, backupJson, {
         contentType: 'application/json',
         upsert: false,
       });
 
-    if (uploadError) {
-      console.error("[create-backup] Upload error:", uploadError);
-      throw new Error(`Failed to save backup to server: ${uploadError.message}`);
+    console.log("Upload result:", uploadResult);
+
+    if (uploadResult.error) {
+      console.error("[create-backup] Upload error:", uploadResult.error);
+      throw new Error(`Failed to save backup to server: ${uploadResult.error.message}`);
     }
 
+    const uploadData = uploadResult.data;
     console.log("[create-backup] Step 8: Backup uploaded successfully:", uploadData);
 
     const { data: settings } = await supabase
