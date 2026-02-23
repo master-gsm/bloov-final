@@ -160,6 +160,7 @@ Deno.serve(async (req: Request) => {
       role: role,
       is_active: true,
       permissions: userPermissions,
+      branch_id: userProfile.branch_id,
     });
 
     if (insertError) {
