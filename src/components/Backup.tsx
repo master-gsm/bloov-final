@@ -223,7 +223,7 @@ export default function Backup() {
         });
 
       if (uploadError) {
-        throw new Error(language === 'ar' ? `فشل رفع النسخة: ${uploadError.message}` : `Upload failed: ${uploadError.message}`);
+        throw new Error(language === 'ar' ? `فشل رفع النسخة على السيرفر: ${uploadError.message}` : `Upload failed: ${uploadError.message}`);
       }
 
       await supabase.from('settings').update({ last_backup_date: new Date().toISOString() }).eq('id', 1);
