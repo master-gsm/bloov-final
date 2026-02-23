@@ -178,63 +178,81 @@ export default function Backup() {
     setBackupResult(null);
 
     try {
-      const { data: refreshData } = await supabase.auth.refreshSession();
-      let activeSession = refreshData?.session;
-      if (!activeSession) {
-        const { data: { session: existingSession }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw new Error(`Session error: ${sessionError.message}`);
-        if (!existingSession) throw new Error(language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Not authenticated');
-        activeSession = existingSession;
-        console.log('[Backup] Using existing session (refresh not needed)');
-      } else {
-        console.log('[Backup] Session refreshed successfully');
+      const startTime = Date.now();
+
+      const backupData: any = {
+        metadata: {
+          created_at: new Date().toISOString(),
+          version: '1.0',
+          total_records: 0,
+          tables_count: 0,
+        },
+        data: {},
+      };
+
+      let totalRecords = 0;
+      let successfulTables = 0;
+
+      for (const table of TABLES_TO_BACKUP) {
+        try {
+          const { data, error } = await supabase.from(table as any).select('*');
+          if (error) { console.warn(`[ServerBackup] ${table}:`, error.message); continue; }
+          if (data && data.length > 0) {
+            backupData.data[table] = data;
+            totalRecords += data.length;
+            successfulTables++;
+          }
+        } catch (err) {
+          console.warn(`[ServerBackup] ${table}:`, err);
+        }
       }
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-backup`;
-      console.log('[Backup] Calling:', url);
+      backupData.metadata.total_records = totalRecords;
+      backupData.metadata.tables_count = successfulTables;
 
-      let response: Response;
-      try {
-        response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${activeSession.access_token}`,
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
+      const backupJson = JSON.stringify(backupData, null, 2);
+      const backupSize = new Blob([backupJson]).size;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `backup_${timestamp}.json`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('backups')
+        .upload(filename, new Blob([backupJson], { type: 'application/json' }), {
+          contentType: 'application/json',
+          upsert: false,
         });
-      } catch (fetchErr) {
-        throw new Error(`Network error: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`);
+
+      if (uploadError) {
+        throw new Error(language === 'ar' ? `فشل رفع النسخة: ${uploadError.message}` : `Upload failed: ${uploadError.message}`);
       }
 
-      console.log('[Backup] Response status:', response.status);
+      await supabase.from('settings').update({ last_backup_date: new Date().toISOString() }).eq('id', 1);
 
-      const rawText = await response.text();
-      console.log('[Backup] Raw response:', rawText.slice(0, 500));
-
-      let result: any;
-      try {
-        result = JSON.parse(rawText);
-      } catch {
-        throw new Error(`HTTP ${response.status} — ${rawText.slice(0, 300)}`);
-      }
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || `HTTP ${response.status}: ${language === 'ar' ? 'فشل إنشاء النسخة الاحتياطية' : 'Failed to create backup'}`);
-      }
+      const executionTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
       setSuccess(true);
-      setBackupResult(result.data);
+      setBackupResult({
+        filename,
+        size: backupSize,
+        size_mb: (backupSize / (1024 * 1024)).toFixed(2),
+        total_records: totalRecords,
+        tables_count: successfulTables,
+        execution_time: `${executionTime} seconds`,
+        created_at: backupData.metadata.created_at,
+        download_url: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/backups/${filename}`,
+        backup_data: backupData,
+      });
+
       await loadBackupHistory();
 
       showAlert(
         language === 'ar'
-          ? `تم إنشاء النسخة الاحتياطية بنجاح!\n\nالملف: ${result.data.filename}\nعدد السجلات: ${result.data.total_records.toLocaleString()}\nوقت التنفيذ: ${result.data.execution_time}`
-          : `Backup created successfully!\n\nFile: ${result.data.filename}\nTotal Records: ${result.data.total_records.toLocaleString()}\nExecution Time: ${result.data.execution_time}`,
+          ? `تم إنشاء النسخة الاحتياطية بنجاح!\n\nالملف: ${filename}\nعدد السجلات: ${totalRecords.toLocaleString()}\nوقت التنفيذ: ${executionTime} ثانية`
+          : `Backup created successfully!\n\nFile: ${filename}\nTotal Records: ${totalRecords.toLocaleString()}\nExecution Time: ${executionTime}s`,
         'success'
       );
     } catch (err) {
-      console.error('[Backup] Error:', err);
+      console.error('[ServerBackup] Error:', err);
       const errorMsg = err instanceof Error ? err.message : (language === 'ar' ? 'حدث خطأ أثناء إنشاء النسخة الاحتياطية' : 'Error creating backup');
       setError(errorMsg);
       showAlert(language === 'ar' ? `فشل إنشاء النسخة الاحتياطية\n\n${errorMsg}` : `Backup Failed\n\n${errorMsg}`, 'error');
