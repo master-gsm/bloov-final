@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BranchProvider } from './contexts/BranchContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
@@ -68,6 +68,8 @@ function AppContent() {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
+  const profileSetRef = useRef(false);
+
   useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const type = hashParams.get('type');
@@ -75,16 +77,22 @@ function AppContent() {
       setIsPasswordRecovery(true);
     }
 
-    supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true);
       }
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (profile && !isAdmin) {
+    if (profile && !isAdmin && !profileSetRef.current) {
+      profileSetRef.current = true;
       setActiveSection('sales');
+    }
+    if (!profile) {
+      profileSetRef.current = false;
     }
   }, [profile, isAdmin]);
 
@@ -122,11 +130,6 @@ function AppContent() {
 
   const renderSection = () => {
     if (!canAccessSection(activeSection)) {
-      // إذا لم يكن لديه صلاحية للقسم الحالي، اعرض أول قسم متاح
-      const firstAvailableSection = Object.keys(SECTION_PERMISSIONS).find(s => canAccessSection(s));
-      if (firstAvailableSection && firstAvailableSection !== activeSection) {
-        setActiveSection(firstAvailableSection);
-      }
       return <Sales />;
     }
 

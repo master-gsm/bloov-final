@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { AlertTriangle } from 'lucide-react';
@@ -127,9 +127,11 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const userId = user?.id ?? null;
+
   useEffect(() => {
     loadBranchData();
-  }, [user]);
+  }, [userId]);
 
   const handleSetSelectedBranchFilter = (id: string | null) => {
     setSelectedBranchFilter(id);
@@ -160,17 +162,19 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const contextValue = useMemo(() => ({
+    currentBranch,
+    currentBranchId: currentBranchId as string,
+    isAdmin,
+    allBranches,
+    selectedBranchFilter,
+    setSelectedBranchFilter: handleSetSelectedBranchFilter,
+    loading,
+    refetch: loadBranchData,
+  }), [currentBranch, currentBranchId, isAdmin, allBranches, selectedBranchFilter, loading]);
+
   return (
-    <BranchContext.Provider value={{
-      currentBranch,
-      currentBranchId: currentBranchId as string,
-      isAdmin,
-      allBranches,
-      selectedBranchFilter,
-      setSelectedBranchFilter: handleSetSelectedBranchFilter,
-      loading,
-      refetch: loadBranchData,
-    }}>
+    <BranchContext.Provider value={contextValue}>
       {children}
     </BranchContext.Provider>
   );

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
@@ -27,23 +27,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadingProfileRef = useRef<string | null>(null);
 
   const loadProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('users')
-      .select('role, permissions, branch_id')
-      .eq('id', userId)
-      .maybeSingle();
+    if (loadingProfileRef.current === userId) return;
+    loadingProfileRef.current = userId;
 
-    if (data) {
-      setProfile({
-        role: data.role as UserProfile['role'],
-        permissions: (data.permissions || {}) as unknown as Record<string, boolean>,
-        branch_id: data.branch_id || null,
-      });
-      console.log('[AuthContext] Profile loaded → userId:', userId, '| role:', data.role, '| branch_id:', data.branch_id);
-    } else {
-      console.warn('[AuthContext] No profile found in users table for userId:', userId);
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('role, permissions, branch_id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (data) {
+        setProfile({
+          role: data.role as UserProfile['role'],
+          permissions: (data.permissions || {}) as unknown as Record<string, boolean>,
+          branch_id: data.branch_id || null,
+        });
+      }
+    } finally {
+      loadingProfileRef.current = null;
     }
   };
 
@@ -59,9 +64,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await loadProfile(session.user.id);
+        const newUser = session?.user ?? null;
+        setUser(newUser);
+        if (newUser) {
+          await loadProfile(newUser.id);
         } else {
           setProfile(null);
         }
@@ -95,8 +101,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return profile?.permissions?.[key] === true;
   };
 
+  const value = useMemo(() => ({
+    user,
+    profile,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    hasPermission,
+    isAdmin,
+    isViewer,
+    branchId,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [user, profile, loading]);
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, hasPermission, isAdmin, isViewer, branchId }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

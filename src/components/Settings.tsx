@@ -7,13 +7,13 @@ import { supabase } from '../lib/supabase';
 import {
   Settings as SettingsIcon, Globe, Building2, Shield, Save, Receipt,
   Truck, Heart, Bell, Package, CreditCard, FileText, QrCode, CheckCircle, Loader2,
-  AlertCircle, MessageSquare, Brain, Sparkles, TestTube
+  AlertCircle, MessageSquare, Brain, Sparkles, TestTube, Info, Code2, User
 } from 'lucide-react';
 import { ResetTestDatabaseButton } from './ResetTestDatabaseButton';
 
 type SettingsMap = Record<string, string>;
 
-const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'ai', 'testing', 'language'] as const;
+const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'ai', 'testing', 'language', 'about'] as const;
 type Tab = typeof TABS[number];
 
 export function Settings() {
@@ -119,6 +119,7 @@ export function Settings() {
     ai: { icon: Brain, label: 'AI Analysis', labelAr: 'التحليل الذكي' },
     testing: { icon: TestTube, label: 'Test Mode & Reset', labelAr: 'وضع التجربة والتنظيف' },
     language: { icon: Globe, label: 'Language', labelAr: 'اللغة والعرض' },
+    about: { icon: Info, label: 'About', labelAr: 'نبذة عن البرنامج' },
   };
 
   const renderInput = (key: string, label: string, labelAr: string, opts?: { type?: string; placeholder?: string; dir?: string }) => (
@@ -765,6 +766,94 @@ export function Settings() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الإصدار' : 'Version'}</label>
                 <input type="text" value="1.0.0 - BLOOV Accounting System" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-gray-50" readOnly />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'about' && (
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="px-6 py-5 border-b bg-gradient-to-r from-teal-600 to-teal-700">
+              <h3 className="text-lg font-bold text-white">{isRTL ? 'نبذة عن البرنامج' : 'About the System'}</h3>
+              <p className="text-teal-100 text-sm mt-1">{isRTL ? 'معلومات النظام والمطوّر' : 'System & developer information'}</p>
+            </div>
+
+            <div className="p-6 space-y-8">
+              <div className="flex flex-col items-center text-center py-4">
+                <div className="w-20 h-20 rounded-2xl bg-teal-600 flex items-center justify-center shadow-lg mb-4">
+                  <SettingsIcon className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">Bloov Accounting</h2>
+                <p className="text-gray-500 text-sm mt-1">{isRTL ? 'نظام محاسبة متكامل للشركات الصغيرة والمتوسطة' : 'Integrated accounting system for SMEs'}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="px-3 py-1 bg-teal-100 text-teal-700 rounded-full text-xs font-semibold">v1.0.0</span>
+                  <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">ERP-Grade</span>
+                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">VAT Ready</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  { icon: Shield, label: isRTL ? 'أمان متكامل' : 'Full Security', desc: isRTL ? 'RLS وتشفير كامل' : 'RLS & full encryption', color: 'text-red-600 bg-red-50' },
+                  { icon: Globe, label: isRTL ? 'متعدد اللغات' : 'Multi-language', desc: isRTL ? 'عربي وإنجليزي' : 'Arabic & English', color: 'text-blue-600 bg-blue-50' },
+                  { icon: Code2, label: isRTL ? 'متعدد الفروع' : 'Multi-branch', desc: isRTL ? 'عزل تام بين الفروع' : 'Full branch isolation', color: 'text-teal-600 bg-teal-50' },
+                ].map((f, i) => (
+                  <div key={i} className="flex items-start gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50">
+                    <div className={`p-2.5 rounded-lg ${f.color}`}>
+                      <f.icon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{f.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t pt-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="p-2.5 rounded-xl bg-teal-50">
+                    <User className="w-5 h-5 text-teal-600" />
+                  </div>
+                  <h4 className="text-base font-bold text-gray-900">{isRTL ? 'المطوّر' : 'Developer'}</h4>
+                </div>
+
+                <div className="bg-gradient-to-br from-gray-50 to-teal-50/30 rounded-2xl border border-teal-100 p-6 text-center">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 shadow-md">
+                    س
+                  </div>
+                  <p className="text-xl font-bold text-gray-900">سامي الرفاعي</p>
+                  <p className="text-sm text-teal-600 font-medium mt-1">Sami Al-Rifai</p>
+                  <p className="text-sm text-gray-500 mt-3 max-w-sm mx-auto leading-relaxed">
+                    {isRTL
+                      ? 'تم تصميم وبرمجة هذا النظام بالكامل من قبل سامي الرفاعي. نظام محاسبة ERP متكامل مبني بتقنيات حديثة.'
+                      : 'This system was fully designed and developed by Sami Al-Rifai. A complete ERP-grade accounting system built with modern technologies.'}
+                  </p>
+                  <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
+                    {['React', 'TypeScript', 'Supabase', 'PostgreSQL', 'Tailwind CSS'].map(tech => (
+                      <span key={tech} className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-medium shadow-sm">
+                        {tech}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-6">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">{isRTL ? 'معلومات التقنية' : 'Technical Info'}</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: isRTL ? 'الإصدار' : 'Version', value: '1.0.0' },
+                    { label: isRTL ? 'البيئة' : 'Environment', value: 'Production' },
+                    { label: isRTL ? 'قاعدة البيانات' : 'Database', value: 'Supabase (PostgreSQL)' },
+                    { label: isRTL ? 'الواجهة' : 'Frontend', value: 'React 18 + Vite' },
+                  ].map((item, i) => (
+                    <div key={i} className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <p className="text-xs text-gray-500">{item.label}</p>
+                      <p className="text-sm font-semibold text-gray-800 mt-0.5" dir="ltr">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

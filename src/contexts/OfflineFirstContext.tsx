@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   indexedDBManager,
   enhancedSyncManager,
@@ -114,7 +114,7 @@ export const OfflineFirstProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const canWrite = isOnline || executorReady;
 
-  const performSync = async (): Promise<SyncResult> => {
+  const performSync = useCallback(async (): Promise<SyncResult> => {
     setSyncError(null);
     try {
       const result = await enhancedSyncManager.syncAll({
@@ -131,9 +131,11 @@ export const OfflineFirstProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setSyncError(errorMsg);
       throw error;
     }
-  };
+  }, []);
 
-  const value: OfflineContextType = {
+  const clearSyncError = useCallback(() => setSyncError(null), []);
+
+  const value: OfflineContextType = useMemo(() => ({
     isOnline,
     isHealthy,
     connectionQuality,
@@ -144,9 +146,9 @@ export const OfflineFirstProvider: React.FC<{ children: React.ReactNode }> = ({ 
     syncError,
     canWrite,
     performSync,
-    clearSyncError: () => setSyncError(null),
+    clearSyncError,
     executorReady,
-  };
+  }), [isOnline, isHealthy, connectionQuality, latency, isSyncing, pendingOperationsCount, lastSyncTime, syncError, canWrite, executorReady, performSync, clearSyncError]);
 
   return (
     <OfflineFirstContext.Provider value={value}>
