@@ -45,31 +45,40 @@ export default function Backup() {
 
   useEffect(() => {
     loadBackupHistory();
+    const interval = setInterval(loadBackupHistory, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadBackupHistory = async () => {
     try {
+      console.log('[Backup] Loading backup history...');
       const { data: files, error } = await supabase.storage
         .from('backups')
         .list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
 
       if (error) {
-        console.error('[Backup] list error:', error.message);
+        console.error('[Backup] Storage list error:', error.message, error);
         return;
       }
 
+      console.log('[Backup] Total files in storage:', files?.length || 0);
+
       const history = (files || [])
         .filter((f: any) => f.name && f.name.endsWith('.json'))
-        .map((f: any) => ({
-          name: f.name,
-          created_at: f.created_at,
-          size: f.metadata?.size || 0,
-        }))
+        .map((f: any) => {
+          console.log('[Backup] Found backup file:', f.name, 'size:', f.metadata?.size);
+          return {
+            name: f.name,
+            created_at: f.created_at,
+            size: f.metadata?.size || 0,
+          };
+        })
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+      console.log('[Backup] Loaded', history.length, 'backup files');
       setBackupHistory(history);
     } catch (err) {
-      console.error('Error loading backup history:', err);
+      console.error('[Backup] Error loading history:', err);
     }
   };
 
