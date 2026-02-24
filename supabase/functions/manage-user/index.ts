@@ -157,14 +157,55 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const tables = [
-        "inventory", "inventory_movements", "customers", "sales",
-        "invoices", "suppliers", "purchases", "transactions", "partner_distributions",
+      const nullableCreatedByTables = [
+        "inventory",
+        "inventory_movements",
+        "customers",
+        "sales",
+        "invoices",
+        "suppliers",
+        "purchases",
+        "transactions",
+        "partner_distributions",
+        "purchase_receipts",
+        "setup_expenses",
+        "employee_loans",
+        "compensation_plans",
+        "journal_entries",
+        "salary_payments",
+        "employee_leaves",
+        "employee_settlements",
+        "payroll_runs",
+        "audit_logs",
       ];
-      for (const table of tables) {
-        await supabaseAdmin.from(table).update({ created_by: null }).eq("created_by", userId);
+
+      for (const table of nullableCreatedByTables) {
+        try {
+          await supabaseAdmin.from(table).update({ created_by: null }).eq("created_by", userId);
+        } catch (_) {}
       }
-      await supabaseAdmin.from("inventory").update({ updated_by: null }).eq("updated_by", userId);
+
+      const nullableOtherColumns: Array<{ table: string; column: string }> = [
+        { table: "inventory", column: "updated_by" },
+        { table: "journal_entries", column: "posted_by" },
+        { table: "journal_entries", column: "voided_by" },
+        { table: "payroll_runs", column: "paid_by" },
+        { table: "payroll_runs", column: "approved_by" },
+        { table: "payroll_runs", column: "posted_by" },
+        { table: "employee_leaves", column: "approved_by" },
+        { table: "employee_settlements", column: "approved_by" },
+        { table: "accounting_periods", column: "closed_by" },
+        { table: "audit_logs", column: "user_id" },
+      ];
+
+      for (const { table, column } of nullableOtherColumns) {
+        try {
+          await supabaseAdmin.from(table).update({ [column]: null }).eq(column, userId);
+        } catch (_) {}
+      }
+
+      await supabaseAdmin.from("branches").update({ manager_id: null }).eq("manager_id", userId);
+      await supabaseAdmin.from("employees").update({ user_id: null }).eq("user_id", userId);
 
       const { error: deleteProfileError } = await supabaseAdmin
         .from("users")
