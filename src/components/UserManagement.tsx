@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
   UserPlus, Shield, Eye, Calculator, Ban, CheckCircle, X,
-  Pencil, Trash2, Key, Save, AlertTriangle
+  Pencil, Trash2, Key, Save, AlertTriangle, Building2
 } from 'lucide-react';
 
 interface User {
@@ -15,6 +15,12 @@ interface User {
   created_at: string;
   email: string | null;
   permissions: Record<string, boolean> | null;
+  branch_id: string | null;
+}
+
+interface Branch {
+  id: string;
+  name: string;
 }
 
 const PERMISSION_KEYS = [
@@ -59,6 +65,7 @@ export function UserManagement() {
   const isRTL = language === 'ar';
 
   const [users, setUsers] = useState<User[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -66,8 +73,8 @@ export function UserManagement() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  const [formData, setFormData] = useState({ username: '', password: '', role: 'viewer' as string });
-  const [editData, setEditData] = useState({ fullName: '', role: 'viewer' as string });
+  const [formData, setFormData] = useState({ username: '', password: '', role: 'viewer' as string, branch_id: '' });
+  const [editData, setEditData] = useState({ fullName: '', role: 'viewer' as string, branch_id: '' });
   const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({ ...DEFAULT_PERMISSIONS });
   const [newPassword, setNewPassword] = useState('');
   const [permissions, setPermissions] = useState<Record<string, boolean>>({ ...DEFAULT_PERMISSIONS });
@@ -76,7 +83,10 @@ export function UserManagement() {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => {
+    loadUsers();
+    loadBranches();
+  }, []);
 
   const loadUsers = async () => {
     try {
@@ -92,6 +102,15 @@ export function UserManagement() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadBranches = async () => {
+    const { data } = await supabase
+      .from('branches')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name');
+    setBranches(data || []);
   };
 
   const callManageUser = async (body: Record<string, unknown>) => {
@@ -124,13 +143,8 @@ export function UserManagement() {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      if (sessionError) {
-        throw new Error(isRTL ? 'خطأ في جلب معلومات الجلسة' : 'Error fetching session');
-      }
-
-      if (!session?.access_token) {
-        throw new Error(isRTL ? 'الرجاء تسجيل الدخول مرة أخرى' : 'Please log in again');
-      }
+      if (sessionError) throw new Error(isRTL ? 'خطأ في جلب معلومات الجلسة' : 'Error fetching session');
+      if (!session?.access_token) throw new Error(isRTL ? 'الرجاء تسجيل الدخول مرة أخرى' : 'Please log in again');
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
@@ -142,32 +156,31 @@ export function UserManagement() {
             'X-Client-Info': 'supabase-js-web',
             'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
-          body: JSON.stringify({ ...formData, fullName: formData.username, permissions }),
+          body: JSON.stringify({
+            ...formData,
+            fullName: formData.username,
+            permissions,
+            branch_id: formData.branch_id || undefined,
+          }),
         }
       );
 
       const result = await response.json();
-      console.log('Response status:', response.status);
-      console.log('Response result:', result);
 
       if (!response.ok) {
         const errorMsg = result.details
           ? `${result.error}: ${result.details}`
-          : result.error
-          ? result.error
-          : `${isRTL ? 'خطأ في الخادم' : 'Server error'} (${response.status})`;
+          : result.error || `${isRTL ? 'خطأ في الخادم' : 'Server error'} (${response.status})`;
         throw new Error(errorMsg);
       }
 
-      setSuccess(isRTL ? 'تم إنشاء المستخدم بنجاح' : 'User created successfully');
-      setFormData({ username: '', password: '', role: 'viewer' });
+      setSuccess(isRTL ? 'تم إنشاء المستخدم وسجل الموظف بنجاح' : 'User and employee record created successfully');
+      setFormData({ username: '', password: '', role: 'viewer', branch_id: '' });
       setPermissions({ ...DEFAULT_PERMISSIONS });
       setShowAddModal(false);
       loadUsers();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : (isRTL ? 'حدث خطأ غير متوقع' : 'An error occurred');
-      setError(errorMessage);
-      console.error('Create user error:', err);
+      setError(err instanceof Error ? err.message : (isRTL ? 'حدث خطأ غير متوقع' : 'An error occurred'));
     } finally {
       setSubmitting(false);
     }
@@ -201,7 +214,15 @@ export function UserManagement() {
         newRole: editData.role,
         permissions: editPermissions,
       });
-      setSuccess(isRTL ? 'تم تحديث بيانات المستخدم بنجاح' : 'User updated successfully');
+
+      if (editData.branch_id && editData.branch_id !== selectedUser.branch_id) {
+        await supabase
+          .from('users')
+          .update({ branch_id: editData.branch_id })
+          .eq('id', selectedUser.id);
+      }
+
+      setSuccess(isRTL ? 'تم تحديث بيانات المستخدم والموظف بنجاح' : 'User and employee record updated successfully');
       setShowEditModal(false);
       loadUsers();
     } catch (err) {
@@ -230,7 +251,10 @@ export function UserManagement() {
 
   const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase.from('users').update({ is_active: !currentStatus }).eq('id', userId);
+      const { error } = await supabase
+        .from('users')
+        .update({ is_active: !currentStatus })
+        .eq('id', userId);
       if (error) throw error;
       loadUsers();
     } catch (err) {
@@ -240,7 +264,7 @@ export function UserManagement() {
 
   const openEditModal = (user: User) => {
     setSelectedUser(user);
-    setEditData({ fullName: user.full_name, role: user.role });
+    setEditData({ fullName: user.full_name, role: user.role, branch_id: user.branch_id || '' });
     setEditPermissions(user.permissions ? { ...DEFAULT_PERMISSIONS, ...user.permissions } : { ...ROLE_TEMPLATES[user.role] || DEFAULT_PERMISSIONS });
     setError('');
     setShowEditModal(true);
@@ -257,6 +281,11 @@ export function UserManagement() {
     setSelectedUser(user);
     setError('');
     setShowDeleteConfirm(true);
+  };
+
+  const getBranchName = (branchId: string | null) => {
+    if (!branchId) return isRTL ? 'غير محدد' : 'Unassigned';
+    return branches.find(b => b.id === branchId)?.name || (isRTL ? 'غير معروف' : 'Unknown');
   };
 
   const getRoleIcon = (role: string) => {
@@ -357,6 +386,29 @@ export function UserManagement() {
     </div>
   );
 
+  const renderBranchSelect = (value: string, onChange: (v: string) => void, required = false) => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        <span className="flex items-center gap-1.5">
+          <Building2 className="w-4 h-4 text-gray-400" />
+          {isRTL ? 'الفرع' : 'Branch'}
+          {required && <span className="text-red-500">*</span>}
+        </span>
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+      >
+        <option value="">{isRTL ? '-- اختر الفرع --' : '-- Select Branch --'}</option>
+        {branches.map(b => (
+          <option key={b.id} value={b.id}>{b.name}</option>
+        ))}
+      </select>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -372,7 +424,11 @@ export function UserManagement() {
           <h2 className="text-2xl font-bold text-gray-900">
             {isRTL ? 'إدارة المستخدمين' : 'User Management'}
           </h2>
-          <p className="text-gray-500 mt-1">{isRTL ? 'إضافة وإدارة حسابات المستخدمين' : 'Add and manage user accounts'}</p>
+          <p className="text-gray-500 mt-1">
+            {isRTL
+              ? 'إضافة وإدارة حسابات المستخدمين — كل مستخدم مرتبط تلقائياً بسجل موظف'
+              : 'Add and manage user accounts — each user is automatically linked to an employee record'}
+          </p>
         </div>
         <button
           onClick={() => { setShowAddModal(true); setError(''); setSuccess(''); }}
@@ -389,12 +445,18 @@ export function UserManagement() {
         </div>
       )}
 
+      <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 text-sm text-teal-700">
+        {isRTL
+          ? 'عند إنشاء مستخدم جديد أو تعديل فرعه أو تعطيله، يتم تحديث سجل الموظف المرتبط به تلقائياً عبر قاعدة البيانات.'
+          : 'When a user is created, their branch changes, or they are deactivated — the linked employee record is automatically updated via database triggers.'}
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{isRTL ? 'الاسم' : 'Name'}</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{isRTL ? 'البريد' : 'Email'}</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{isRTL ? 'الفرع' : 'Branch'}</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{isRTL ? 'الصلاحية' : 'Role'}</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{isRTL ? 'الحالة' : 'Status'}</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{isRTL ? 'تاريخ الإنشاء' : 'Created'}</th>
@@ -412,7 +474,12 @@ export function UserManagement() {
                     <span className="text-sm font-medium text-gray-900">{user.full_name}</span>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500 font-mono text-xs">{user.email || '-'}</td>
+                <td className="px-6 py-4">
+                  <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+                    <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                    {getBranchName(user.branch_id)}
+                  </span>
+                </td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
                     {getRoleIcon(user.role)}
@@ -498,10 +565,16 @@ export function UserManagement() {
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="********" minLength={6} />
               </div>
+              {renderBranchSelect(formData.branch_id, (v) => setFormData({ ...formData, branch_id: v }))}
               {renderRoleButtons(formData.role, (r) => setFormData({ ...formData, role: r }), (r) => setPermissions({ ...ROLE_TEMPLATES[r] || DEFAULT_PERMISSIONS }))}
               <div className="border-t pt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-3">{isRTL ? 'الصلاحيات' : 'Permissions'}</label>
                 {renderPermissionsGrid(permissions, (key) => setPermissions({ ...permissions, [key]: !permissions[key] }))}
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-700">
+                {isRTL
+                  ? 'سيتم إنشاء سجل موظف تلقائياً مرتبط بهذا المستخدم والفرع المحدد.'
+                  : 'An employee record will be automatically created linked to this user and selected branch.'}
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={submitting} className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 font-medium">
@@ -533,10 +606,16 @@ export function UserManagement() {
                   onChange={(e) => setEditData({ ...editData, fullName: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
               </div>
+              {renderBranchSelect(editData.branch_id, (v) => setEditData({ ...editData, branch_id: v }))}
               {renderRoleButtons(editData.role, (r) => setEditData({ ...editData, role: r }), (r) => setEditPermissions({ ...ROLE_TEMPLATES[r] || DEFAULT_PERMISSIONS }))}
               <div className="border-t pt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-3">{isRTL ? 'الصلاحيات' : 'Permissions'}</label>
                 {renderPermissionsGrid(editPermissions, (key) => setEditPermissions({ ...editPermissions, [key]: !editPermissions[key] }))}
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-700">
+                {isRTL
+                  ? 'تغيير الفرع أو الاسم سينعكس تلقائياً على سجل الموظف المرتبط.'
+                  : 'Branch or name changes will automatically reflect in the linked employee record.'}
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={handleUpdateUser} disabled={submitting}

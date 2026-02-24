@@ -13,6 +13,7 @@ interface CreateUserRequest {
   fullName?: string;
   role: "admin" | "accountant" | "viewer" | "observer";
   permissions?: Record<string, boolean>;
+  branch_id?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -27,11 +28,6 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    console.log("Environment check:", {
-      hasUrl: !!supabaseUrl,
-      hasServiceKey: !!supabaseServiceKey,
-    });
-
     if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error("Missing environment variables");
     }
@@ -39,8 +35,6 @@ Deno.serve(async (req: Request) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const authHeader = req.headers.get("Authorization");
-    console.log("DEBUG: Authorization Header:", authHeader);
-
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
@@ -67,11 +61,7 @@ Deno.serve(async (req: Request) => {
       error: authError,
     } = await supabaseAdmin.auth.getUser(token);
 
-    console.log("DEBUG: User Object:", requestingUser);
-    console.log("DEBUG: Auth Error:", authError?.message);
-
     if (authError || !requestingUser) {
-      console.error("Auth error:", authError);
       return new Response(
         JSON.stringify({
           error: "Unauthorized: Invalid or expired session",
@@ -108,7 +98,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { username, password, fullName, role, permissions }: CreateUserRequest =
+    const { username, password, fullName, role, permissions, branch_id }: CreateUserRequest =
       await req.json();
 
     const displayName = fullName || username;
@@ -135,6 +125,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const targetBranchId = branch_id || userProfile.branch_id;
+
     const email = `${username.toLowerCase()}@bloov.local`;
 
     const { data: newUser, error: createError } =
@@ -160,7 +152,7 @@ Deno.serve(async (req: Request) => {
       role: role,
       is_active: true,
       permissions: userPermissions,
-      branch_id: userProfile.branch_id,
+      branch_id: targetBranchId,
     });
 
     if (insertError) {
@@ -178,22 +170,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const employeeCode = `EMP-${Date.now().toString(36).toUpperCase()}`;
-    const { error: employeeError } = await supabaseAdmin
-      .from("employees")
-      .insert({
-        user_id: newUser.user.id,
-        employee_code: employeeCode,
-        full_name: displayName,
-        position: role,
-        is_active: true,
-        branch_id: userProfile.branch_id,
-      });
-
-    if (employeeError) {
-      console.error("Failed to create employee record:", employeeError.message);
-    }
-
     return new Response(
       JSON.stringify({
         success: true,
@@ -202,6 +178,7 @@ Deno.serve(async (req: Request) => {
           email: newUser.user.email,
           fullName: displayName,
           role,
+          branch_id: targetBranchId,
         },
       }),
       {
