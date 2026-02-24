@@ -217,7 +217,14 @@ export default function Backup() {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `backup_${timestamp}.json`;
 
-      console.log(`[ServerBackup] uploading ${filename} (${(backupSize / 1024).toFixed(1)} KB)...`);
+      console.log('=== [ServerBackup] PRE-UPLOAD DIAGNOSTICS ===');
+      console.log('[ServerBackup] VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
+      console.log('[ServerBackup] bucket:', 'backups');
+      console.log('[ServerBackup] file path:', filename);
+      console.log('[ServerBackup] file size:', `${(backupSize / 1024).toFixed(1)} KB`);
+
+      const { data: bucketList, error: bucketListError } = await supabase.storage.listBuckets();
+      console.log('[ServerBackup] listBuckets() result:', JSON.stringify({ data: bucketList, error: bucketListError }));
 
       const uploadResult = await supabase.storage
         .from('backups')
@@ -226,13 +233,19 @@ export default function Backup() {
           upsert: false,
         });
 
-      console.log('[ServerBackup] upload result:', JSON.stringify(uploadResult));
+      console.log('=== [ServerBackup] UPLOAD RESULT ===');
+      console.log('[ServerBackup] data:', JSON.stringify(uploadResult.data));
+      console.log('[ServerBackup] error:', JSON.stringify(uploadResult.error));
+      console.log('[ServerBackup] error?.message:', uploadResult.error?.message ?? null);
+      console.log('[ServerBackup] error?.statusCode:', (uploadResult.error as any)?.statusCode ?? null);
 
       if (uploadResult.error) {
         throw new Error(`${uploadResult.error.message} (status: ${(uploadResult.error as any).statusCode})`);
       }
 
-      console.log('[ServerBackup] upload SUCCESS - path:', uploadResult.data?.path);
+      if (!uploadResult.error) {
+        console.log('[ServerBackup] upload SUCCESS - path:', uploadResult.data?.path);
+      }
 
       await supabase.from('settings').update({ last_backup_date: new Date().toISOString() }).eq('id', 1);
 
@@ -253,6 +266,7 @@ export default function Backup() {
 
       await loadBackupHistory();
 
+      console.log('[ServerBackup] Showing success alert — upload confirmed error === null');
       showAlert(
         language === 'ar'
           ? `تم رفع النسخة الاحتياطية بنجاح!\n\nالملف: ${filename}\nعدد السجلات: ${totalRecords.toLocaleString()}\nوقت التنفيذ: ${executionTime} ثانية`
