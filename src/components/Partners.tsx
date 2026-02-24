@@ -1,121 +1,115 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
+import { useBranch } from '../contexts/BranchContext';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getFileUrl } from '../lib/fileUpload';
 import { AttachmentPreviewModal } from './AttachmentPreviewModal';
+import { PartnerReports } from './partners/PartnerReports';
 import {
-  Users, Plus, DollarSign, X, ShieldAlert, Trash2, FileSpreadsheet,
+  Partner, PartnerAccount, PartnerWithdrawal, ProfitDistribution,
+  PartnerSettlement, SetupExpense, EXPENSE_TYPES, MONTH_NAMES_AR, MONTH_NAMES_EN,
+} from './partners/types';
+import {
+  Users, Plus, DollarSign, X, ShieldAlert, FileSpreadsheet,
   Camera, Eye, Paperclip, ArrowRightLeft, Ban, Edit3, Check, AlertTriangle,
-  PieChart, Percent, TrendingUp, UserPlus, Save,
+  PieChart, Percent, TrendingUp, UserPlus, Save, ChevronDown, ChevronUp,
+  ToggleLeft, ToggleRight, Landmark, Banknote, CalendarDays,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-interface Partner {
-  id: string;
-  name: string;
-  name_ar: string;
-  ownership_percentage: number;
-  profit_share_percentage: number;
-  capital_contribution: number;
-  share_percentage: number;
-  email: string | null;
-  phone: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+const PARTNER_COLORS = ['teal', 'sky', 'amber', 'rose', 'emerald'] as const;
+const BORDER_COLORS = ['border-l-teal-500', 'border-l-sky-500', 'border-l-amber-500', 'border-l-rose-500', 'border-l-emerald-500'];
+const BG_DOTS = ['bg-teal-500', 'bg-sky-500', 'bg-amber-500', 'bg-rose-500', 'bg-emerald-500'];
+const TEXT_COLORS = ['text-teal-600', 'text-sky-600', 'text-amber-600', 'text-rose-600', 'text-emerald-600'];
+const BAR_COLORS = ['bg-teal-500', 'bg-sky-500', 'bg-amber-500', 'bg-rose-500', 'bg-emerald-500'];
+
+function fmt(val: number) {
+  return new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 2 }).format(val);
+}
+function fmtDate(date: string, isRTL: boolean) {
+  return new Date(date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-interface PartnerBalance {
-  partner_id: string;
-  name: string;
-  name_ar: string;
-  share_percentage: number;
-  profit_share_percentage: number;
-  capital_contribution: number;
-  is_active: boolean;
-  total_paid: number;
-  fair_share: number;
-  settlements_paid: number;
-  settlements_received: number;
-  current_balance: number;
+function Section({
+  title, subtitle, icon: Icon, children, defaultOpen = true,
+}: {
+  title: string; subtitle?: string; icon: React.ComponentType<any>; children: React.ReactNode; defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition"
+      >
+        <div className="flex items-center gap-3">
+          <div className="bg-teal-50 p-2 rounded-lg">
+            <Icon className="w-5 h-5 text-teal-600" />
+          </div>
+          <div className="text-left">
+            <p className="font-bold text-gray-900 text-sm">{title}</p>
+            {subtitle && <p className="text-xs text-gray-400">{subtitle}</p>}
+          </div>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+      </button>
+      {open && <div className="border-t border-gray-100">{children}</div>}
+    </div>
+  );
 }
-
-interface PartnerSettlement {
-  id: string;
-  from_partner_id: string;
-  to_partner_id: string;
-  amount: number;
-  description: string;
-  description_ar: string | null;
-  settlement_date: string;
-  attachment_url: string | null;
-  status: string;
-  created_at: string;
-  from_partner?: { name: string; name_ar: string };
-  to_partner?: { name: string; name_ar: string };
-}
-
-interface SetupExpense {
-  id: string;
-  partner_id: string | null;
-  category: string;
-  description: string;
-  description_ar: string | null;
-  amount: number;
-  expense_date: string;
-  attachment: string | null;
-  expense_type: string;
-  notes: string | null;
-  created_at: string;
-  partner?: { name: string; name_ar: string };
-}
-
-const EXPENSE_TYPES = {
-  capital: { ar: 'رأس مال نقدي', en: 'Cash Capital' },
-  inventory: { ar: 'مخزون', en: 'Inventory' },
-  asset: { ar: 'أصول ثابتة', en: 'Fixed Assets' },
-  operational: { ar: 'مصروف تشغيلي', en: 'Operational Expense' },
-};
-
-type Tab = 'partners' | 'expenses' | 'settlements';
 
 export function Partners() {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const { user } = useAuth();
   const canEdit = useCanEdit();
+  const { currentBranchId } = useBranch();
   const isRTL = language === 'ar';
 
   const [partners, setPartners] = useState<Partner[]>([]);
-  const [partnerBalances, setPartnerBalances] = useState<PartnerBalance[]>([]);
+  const [accounts, setAccounts] = useState<PartnerAccount[]>([]);
   const [settlements, setSettlements] = useState<PartnerSettlement[]>([]);
   const [expenses, setExpenses] = useState<SetupExpense[]>([]);
+  const [withdrawals, setWithdrawals] = useState<PartnerWithdrawal[]>([]);
+  const [distributions, setDistributions] = useState<ProfitDistribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('partners');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [previewAttachment, setPreviewAttachment] = useState<{ url: string; type: string; name?: string; filePath?: string } | null>(null);
 
   const [showPartnerForm, setShowPartnerForm] = useState(false);
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showSettlementForm, setShowSettlementForm] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [voidConfirm, setVoidConfirm] = useState<string | null>(null);
-  const [previewAttachment, setPreviewAttachment] = useState<{ url: string; type: string; name?: string; filePath?: string } | null>(null);
+  const [showWithdrawalForm, setShowWithdrawalForm] = useState(false);
+  const [showDistributeModal, setShowDistributeModal] = useState(false);
+  const [deactivateConfirm, setDeactivateConfirm] = useState<string | null>(null);
+  const [deleteExpenseConfirm, setDeleteExpenseConfirm] = useState<string | null>(null);
+  const [voidSettlementConfirm, setVoidSettlementConfirm] = useState<string | null>(null);
 
   const [partnerName, setPartnerName] = useState('');
   const [partnerNameAr, setPartnerNameAr] = useState('');
   const [ownershipPct, setOwnershipPct] = useState('');
   const [profitSharePct, setProfitSharePct] = useState('');
-  const [capitalContribution, setCapitalContribution] = useState('');
+  const [capitalContribution, setCapitalContribution] = useState('0');
   const [partnerEmail, setPartnerEmail] = useState('');
   const [partnerPhone, setPartnerPhone] = useState('');
 
+  const [wPartnerId, setWPartnerId] = useState('');
+  const [wAmount, setWAmount] = useState('');
+  const [wMethod, setWMethod] = useState<'cash' | 'bank'>('cash');
+  const [wDescription, setWDescription] = useState('');
+  const [wDescriptionAr, setWDescriptionAr] = useState('');
+  const [wDate, setWDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const [distMonth, setDistMonth] = useState(String(new Date().getMonth() + 1));
+  const [distYear, setDistYear] = useState(String(new Date().getFullYear()));
+  const [distResult, setDistResult] = useState<any>(null);
+
   const [partnerId, setPartnerId] = useState('');
   const [expenseType, setExpenseType] = useState('capital');
-  const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [descriptionAr, setDescriptionAr] = useState('');
   const [amount, setAmount] = useState('');
@@ -140,55 +134,50 @@ export function Partners() {
   const settlementCameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    checkUserRole();
+    checkRole();
     loadData();
   }, [user]);
 
-  const checkUserRole = async () => {
+  const checkRole = async () => {
     if (!user) return;
-    try {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-      setIsAdmin(userData?.role === 'admin');
-    } catch (err) {
-      console.error('Error checking user role:', err);
-    }
+    const { data } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
+    setIsAdmin(data?.role === 'admin');
   };
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const [partnersRes, balancesRes, settlementsRes, expensesRes] = await Promise.all([
+      const [
+        partnersRes, accountsRes, settlementsRes, expensesRes, withdrawalsRes, distributionsRes,
+      ] = await Promise.all([
         supabase.from('partners').select('*').order('name'),
-        supabase.from('v_partner_balances' as any).select('*').order('name'),
+        supabase.from('v_partner_account' as any).select('*').order('name'),
         supabase.from('partner_settlements').select(`
-          *,
-          from_partner:partners!from_partner_id(name, name_ar),
-          to_partner:partners!to_partner_id(name, name_ar)
+          *, from_partner:partners!from_partner_id(name,name_ar),
+          to_partner:partners!to_partner_id(name,name_ar)
         `).order('settlement_date', { ascending: false }),
-        supabase.from('setup_expenses').select(`
-          *,
-          partner:partners(name, name_ar)
-        `).eq('is_deleted', false).order('expense_date', { ascending: false }),
+        supabase.from('setup_expenses').select(`*, partner:partners(name,name_ar)`)
+          .eq('is_deleted', false).order('expense_date', { ascending: false }),
+        supabase.from('partner_withdrawals').select(`*, partner:partners(name,name_ar)`)
+          .eq('is_voided', false).order('withdrawal_date', { ascending: false }),
+        supabase.from('profit_distributions').select(`*, partner:partners(name,name_ar)`)
+          .order('period_year', { ascending: false }).order('period_month', { ascending: false }),
       ]);
 
-      if (partnersRes.data) setPartners(partnersRes.data as any[]);
-      if (balancesRes.data) setPartnerBalances(balancesRes.data as any[]);
+      if (partnersRes.data) setPartners(partnersRes.data as Partner[]);
+      if (accountsRes.data) setAccounts(accountsRes.data as any[]);
       if (settlementsRes.data) setSettlements(settlementsRes.data as any[]);
       if (expensesRes.data) setExpenses(expensesRes.data as any[]);
+      if (withdrawalsRes.data) setWithdrawals(withdrawalsRes.data as any[]);
+      if (distributionsRes.data) setDistributions(distributionsRes.data as any[]);
     } catch (err) {
-      console.error('Error loading data:', err);
+      console.error('Partners loadData error:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const totalOwnership = partners
-    .filter(p => p.is_active)
-    .reduce((sum, p) => sum + Number(p.ownership_percentage || 0), 0);
-
+  const activePartners = partners.filter(p => p.is_active);
+  const totalOwnership = activePartners.reduce((s, p) => s + Number(p.ownership_percentage || 0), 0);
   const remainingOwnership = 100 - totalOwnership;
 
   const openPartnerForm = (partner?: Partner) => {
@@ -203,13 +192,10 @@ export function Partners() {
       setPartnerPhone(partner.phone || '');
     } else {
       setEditingPartner(null);
-      setPartnerName('');
-      setPartnerNameAr('');
-      setOwnershipPct('');
-      setProfitSharePct('');
+      setPartnerName(''); setPartnerNameAr('');
+      setOwnershipPct(''); setProfitSharePct('');
       setCapitalContribution('0');
-      setPartnerEmail('');
-      setPartnerPhone('');
+      setPartnerEmail(''); setPartnerPhone('');
     }
     setError('');
     setShowPartnerForm(true);
@@ -217,31 +203,25 @@ export function Partners() {
 
   const handlePartnerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!partnerName || !partnerNameAr || !ownershipPct) return;
-
     setSubmitting(true);
     setError('');
-
     try {
       const ownership = parseFloat(ownershipPct);
       const profitShare = profitSharePct ? parseFloat(profitSharePct) : ownership;
 
-      const otherPartnersTotal = partners
+      const otherTotal = partners
         .filter(p => p.is_active && (!editingPartner || p.id !== editingPartner.id))
-        .reduce((sum, p) => sum + Number(p.ownership_percentage || 0), 0);
+        .reduce((s, p) => s + Number(p.ownership_percentage || 0), 0);
 
-      if (otherPartnersTotal + ownership > 100) {
+      if (otherTotal + ownership > 100.001) {
         setError(isRTL
-          ? `المجموع سيكون ${(otherPartnersTotal + ownership).toFixed(2)}% وهو يتجاوز 100%. المتبقي المتاح: ${(100 - otherPartnersTotal).toFixed(2)}%`
-          : `Total would be ${(otherPartnersTotal + ownership).toFixed(2)}% which exceeds 100%. Available: ${(100 - otherPartnersTotal).toFixed(2)}%`
-        );
-        setSubmitting(false);
+          ? `المجموع سيكون ${(otherTotal + ownership).toFixed(2)}%. المتبقي: ${(100 - otherTotal).toFixed(2)}%`
+          : `Total would be ${(otherTotal + ownership).toFixed(2)}%. Available: ${(100 - otherTotal).toFixed(2)}%`);
         return;
       }
 
-      const partnerData = {
-        name: partnerName,
-        name_ar: partnerNameAr,
+      const data = {
+        name: partnerName, name_ar: partnerNameAr,
         ownership_percentage: ownership,
         profit_share_percentage: profitShare,
         capital_contribution: capitalContribution ? parseFloat(capitalContribution) : 0,
@@ -250,19 +230,84 @@ export function Partners() {
       };
 
       if (editingPartner) {
-        const { error: err } = await supabase
-          .from('partners')
-          .update(partnerData)
-          .eq('id', editingPartner.id);
+        const { error: err } = await supabase.from('partners').update(data).eq('id', editingPartner.id);
         if (err) throw err;
       } else {
-        const { error: err } = await supabase
-          .from('partners')
-          .insert([{ ...partnerData, is_active: true }]);
+        const { error: err } = await supabase.from('partners').insert([{ ...data, is_active: true }]);
         if (err) throw err;
       }
-
       setShowPartnerForm(false);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleActive = async (partner: Partner) => {
+    try {
+      const { error: err } = await supabase.from('partners')
+        .update({ is_active: !partner.is_active })
+        .eq('id', partner.id);
+      if (err) throw err;
+      setDeactivateConfirm(null);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleWithdrawalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wPartnerId || !wAmount || !wDescription) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const { data, error: err } = await supabase.rpc('fn_record_partner_withdrawal' as any, {
+        p_partner_id: wPartnerId,
+        p_amount: parseFloat(wAmount),
+        p_method: wMethod,
+        p_description: wDescription,
+        p_description_ar: wDescriptionAr || wDescription,
+        p_withdrawal_date: wDate,
+        p_branch_id: currentBranchId,
+      } as any);
+      if (err) throw err;
+      const result = data as any;
+      if (!result?.success) throw new Error(result?.message || 'Failed');
+      setShowWithdrawalForm(false);
+      resetWithdrawalForm();
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetWithdrawalForm = () => {
+    setWPartnerId(''); setWAmount(''); setWMethod('cash');
+    setWDescription(''); setWDescriptionAr('');
+    setWDate(new Date().toISOString().split('T')[0]);
+    setError('');
+  };
+
+  const handleDistributeProfit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+    setDistResult(null);
+    try {
+      const { data, error: err } = await supabase.rpc('fn_distribute_monthly_profit' as any, {
+        p_period_month: parseInt(distMonth),
+        p_period_year: parseInt(distYear),
+        p_branch_id: currentBranchId,
+      } as any);
+      if (err) throw err;
+      const result = data as any;
+      if (!result?.success) throw new Error(result?.message || 'Distribution failed');
+      setDistResult(result);
       await loadData();
     } catch (err: any) {
       setError(err.message);
@@ -278,28 +323,17 @@ export function Partners() {
     setError('');
     try {
       let attachmentPath = null;
-      if (attachmentFile) {
-        attachmentPath = await uploadFile(attachmentFile, 'setup_expenses');
-      }
+      if (attachmentFile) attachmentPath = await uploadFile(attachmentFile, 'setup_expenses');
       const parsedAmount = parseFloat(amount);
       const parsedVat = vatCategory === 'standard' && vatAmount ? parseFloat(vatAmount) : 0;
-      const expenseData = {
-        partner_id: partnerId,
-        expense_type: expenseType,
-        category: category || expenseType,
-        description,
-        description_ar: descriptionAr || description,
-        amount: parsedAmount,
-        vat_amount: parsedVat,
-        vat_category: vatCategory,
-        payment_method: paymentMethod,
-        expense_date: expenseDate,
-        attachment: attachmentPath,
-        notes,
-        created_by: user?.id,
-      };
-      const { error } = await supabase.from('setup_expenses').insert([expenseData]);
-      if (error) throw error;
+      const { error: err } = await supabase.from('setup_expenses').insert([{
+        partner_id: partnerId, expense_type: expenseType,
+        category: expenseType, description, description_ar: descriptionAr || description,
+        amount: parsedAmount, vat_amount: parsedVat, vat_category: vatCategory,
+        payment_method: paymentMethod, expense_date: expenseDate, attachment: attachmentPath,
+        notes, created_by: user?.id,
+      }]);
+      if (err) throw err;
       setShowExpenseForm(false);
       resetExpenseForm();
       await loadData();
@@ -310,23 +344,24 @@ export function Partners() {
     }
   };
 
+  const resetExpenseForm = () => {
+    setPartnerId(''); setExpenseType('capital'); setDescription(''); setDescriptionAr('');
+    setAmount(''); setVatAmount(''); setVatCategory('exempt'); setPaymentMethod('cash');
+    setExpenseDate(new Date().toISOString().split('T')[0]); setNotes('');
+    setAttachmentFile(null); setError('');
+  };
+
   const handleDeleteExpense = async (id: string) => {
-    if (!isAdmin) return;
     try {
-      const { data, error } = await supabase.rpc('void_partner_operation_atomic' as any, {
-        p_expense_id: id,
-        p_reason: 'Voided via Partners UI',
+      const { data, error: err } = await supabase.rpc('void_partner_operation_atomic' as any, {
+        p_expense_id: id, p_reason: 'Voided via Partners UI',
       } as any);
-      if (error) throw error;
+      if (err) throw err;
       const result = data as any;
-      if (!result?.success) {
-        throw new Error(result?.message || (isRTL ? 'فشل إلغاء المصروف' : 'Failed to void expense'));
-      }
-      setDeleteConfirm(null);
+      if (!result?.success) throw new Error(result?.message || 'Failed');
+      setDeleteExpenseConfirm(null);
       await loadData();
-    } catch (err: any) {
-      alert(err.message);
-    }
+    } catch (err: any) { alert(err.message); }
   };
 
   const handleSettlementSubmit = async (e: React.FormEvent) => {
@@ -336,20 +371,15 @@ export function Partners() {
     setError('');
     try {
       let attachmentPath = null;
-      if (settlementAttachmentFile) {
-        attachmentPath = await uploadFile(settlementAttachmentFile, 'receipts');
-      }
-      const { error } = await supabase.from('partner_settlements').insert([{
-        from_partner_id: fromPartnerId,
-        to_partner_id: toPartnerId,
-        amount: parseFloat(settlementAmount),
-        settlement_date: settlementDate,
+      if (settlementAttachmentFile) attachmentPath = await uploadFile(settlementAttachmentFile, 'receipts');
+      const { error: err } = await supabase.from('partner_settlements').insert([{
+        from_partner_id: fromPartnerId, to_partner_id: toPartnerId,
+        amount: parseFloat(settlementAmount), settlement_date: settlementDate,
         description: settlementDescription || 'Settlement payment',
-        description_ar: settlementDescriptionAr || settlementDescription || 'تسوية بين الشركاء',
-        attachment_url: attachmentPath,
-        status: 'active',
+        description_ar: settlementDescriptionAr || settlementDescription || 'تسوية',
+        attachment_url: attachmentPath, status: 'active',
       }]);
-      if (error) throw error;
+      if (err) throw err;
       setShowSettlementForm(false);
       resetSettlementForm();
       await loadData();
@@ -360,639 +390,521 @@ export function Partners() {
     }
   };
 
-  const handleVoidSettlement = async (id: string) => {
-    if (!isAdmin) return;
-    try {
-      const { error } = await supabase.rpc('void_partner_settlement' as any, {
-        p_settlement_id: id,
-        p_void_reason: 'Voided via Partners UI',
-      } as any);
-      if (error) throw error;
-      setVoidConfirm(null);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
-
-  const resetExpenseForm = () => {
-    setPartnerId('');
-    setExpenseType('capital');
-    setCategory('');
-    setDescription('');
-    setDescriptionAr('');
-    setAmount('');
-    setVatAmount('');
-    setVatCategory('exempt');
-    setPaymentMethod('cash');
-    setExpenseDate(new Date().toISOString().split('T')[0]);
-    setNotes('');
-    setAttachmentFile(null);
-    setError('');
-  };
-
   const resetSettlementForm = () => {
-    setFromPartnerId('');
-    setToPartnerId('');
-    setSettlementAmount('');
+    setFromPartnerId(''); setToPartnerId(''); setSettlementAmount('');
     setSettlementDate(new Date().toISOString().split('T')[0]);
-    setSettlementDescription('');
-    setSettlementDescriptionAr('');
-    setSettlementAttachmentFile(null);
-    setError('');
+    setSettlementDescription(''); setSettlementDescriptionAr('');
+    setSettlementAttachmentFile(null); setError('');
+  };
+
+  const handleVoidSettlement = async (id: string) => {
+    try {
+      const { error: err } = await supabase.rpc('void_partner_settlement' as any, {
+        p_settlement_id: id, p_void_reason: 'Voided via Partners UI',
+      } as any);
+      if (err) throw err;
+      setVoidSettlementConfirm(null);
+      await loadData();
+    } catch (err: any) { alert(err.message); }
   };
 
   const handleViewAttachment = (path: string) => {
     const url = getFileUrl(path);
-    setPreviewAttachment({
-      url,
-      type: path.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image',
-      name: path.split('/').pop(),
-      filePath: path,
-    });
+    setPreviewAttachment({ url, type: path.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image', name: path.split('/').pop(), filePath: path });
   };
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 2 }).format(val);
-
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
   const exportToExcel = () => {
-    const workbook = XLSX.utils.book_new();
-    const data = [
-      [isRTL ? 'تقرير مصاريف التأسيس ورأس المال' : 'Setup and Capital Expenses Report'],
-      [isRTL ? 'نظام بلوف المحاسبي' : 'BLOOV Accounting System'],
-      [isRTL ? `التاريخ: ${new Date().toLocaleDateString('ar-SA')}` : `Date: ${new Date().toLocaleDateString('en-US')}`],
+    const wb = XLSX.utils.book_new();
+    const data: any[][] = [
+      [isRTL ? 'تقرير مصاريف التأسيس' : 'Setup Expenses Report'],
       [],
-      [
-        isRTL ? 'التاريخ' : 'Date',
-        isRTL ? 'الشريك' : 'Partner',
-        isRTL ? 'نوع المصروف' : 'Type',
-        isRTL ? 'الوصف' : 'Description',
-        isRTL ? 'المبلغ' : 'Amount',
-      ],
+      [isRTL ? 'التاريخ' : 'Date', isRTL ? 'الشريك' : 'Partner', isRTL ? 'النوع' : 'Type', isRTL ? 'الوصف' : 'Description', isRTL ? 'المبلغ' : 'Amount'],
     ];
-    expenses.forEach((expense) => {
-      const partner = partners.find(p => p.id === expense.partner_id);
+    expenses.forEach(ex => {
+      const p = partners.find(p => p.id === ex.partner_id);
       data.push([
-        formatDate(expense.expense_date),
-        partner ? (isRTL ? partner.name_ar : partner.name) : (isRTL ? 'عام' : 'General'),
-        isRTL ? EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.en,
-        isRTL ? (expense.description_ar || expense.description) : expense.description,
-        Number(expense.amount).toFixed(2),
+        fmtDate(ex.expense_date, isRTL),
+        p ? (isRTL ? p.name_ar : p.name) : '-',
+        isRTL ? EXPENSE_TYPES[ex.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[ex.expense_type as keyof typeof EXPENSE_TYPES]?.en,
+        isRTL ? (ex.description_ar || ex.description) : ex.description,
+        Number(ex.amount).toFixed(2),
       ]);
     });
-    data.push([], [
-      isRTL ? 'الإجمالي' : 'Total', '', '', '',
-      expenses.reduce((sum, exp) => sum + Number(exp.amount), 0).toFixed(2),
-    ]);
     const ws = XLSX.utils.aoa_to_sheet(data);
     ws['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(workbook, ws, isRTL ? 'مصاريف التأسيس' : 'Setup Expenses');
-    XLSX.writeFile(workbook, `Setup_Expenses_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, isRTL ? 'المصاريف' : 'Expenses');
+    XLSX.writeFile(wb, `Partners_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <Users className="w-16 h-16 mx-auto text-gray-300 mb-4 animate-pulse" />
-          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
+  const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const MONTHS = isRTL ? MONTH_NAMES_AR : MONTH_NAMES_EN;
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-full">
+      <Users className="w-12 h-12 text-gray-300 animate-pulse" />
+    </div>
+  );
+
+  if (!isAdmin) return (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center">
+        <div className="bg-red-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <ShieldAlert className="w-10 h-10 text-red-500" />
         </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">{isRTL ? 'غير مصرح' : 'Access Restricted'}</h2>
+        <p className="text-gray-500">{isRTL ? 'هذا القسم للمدير فقط' : 'Admins only'}</p>
       </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center max-w-md">
-          <div className="bg-red-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <ShieldAlert className="w-10 h-10 text-red-500" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            {isRTL ? 'غير مصرح' : 'Access Restricted'}
-          </h2>
-          <p className="text-gray-500">
-            {isRTL ? 'هذا القسم متاح فقط للمدير' : 'This section is only available for administrators'}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
-  const capitalExpenses = expenses.filter(e => e.expense_type === 'capital').reduce((sum, exp) => sum + Number(exp.amount), 0);
-  const inventoryExpenses = expenses.filter(e => e.expense_type === 'inventory').reduce((sum, exp) => sum + Number(exp.amount), 0);
-  const assetExpenses = expenses.filter(e => e.expense_type === 'asset').reduce((sum, exp) => sum + Number(exp.amount), 0);
-  const operationalExpenses = expenses.filter(e => e.expense_type === 'operational').reduce((sum, exp) => sum + Number(exp.amount), 0);
-
-  const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: 'partners', label: isRTL ? 'الشركاء' : 'Partners', count: partners.length },
-    { id: 'expenses', label: isRTL ? 'المصاريف' : 'Expenses', count: expenses.length },
-    { id: 'settlements', label: isRTL ? 'التسويات' : 'Settlements', count: settlements.length },
-  ];
+    </div>
+  );
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">
-            {isRTL ? 'إدارة الشركاء' : 'Partner Management'}
-          </h2>
-          <p className="text-gray-500 mt-1">
-            {isRTL ? 'إدارة الملكية والنسب والمصاريف التأسيسية' : 'Manage ownership, shares, and setup expenses'}
-          </p>
+          <h2 className="text-2xl font-bold text-gray-900">{isRTL ? 'إدارة الشركاء' : 'Partner Management'}</h2>
+          <p className="text-gray-500 text-sm mt-0.5">{isRTL ? 'نظام شراكة ERP متكامل' : 'ERP-grade partnership management'}</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={exportToExcel}
-            disabled={expenses.length === 0}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileSpreadsheet className="w-5 h-5" />
-            <span className="hidden sm:inline">{isRTL ? 'تصدير Excel' : 'Export'}</span>
+          <button onClick={exportToExcel} className="flex items-center gap-2 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition text-sm font-medium">
+            <FileSpreadsheet className="w-4 h-4" />
+            <span className="hidden sm:inline">{isRTL ? 'تصدير' : 'Export'}</span>
           </button>
         </div>
       </div>
 
-      {/* Ownership Overview */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-teal-50 p-2.5 rounded-xl">
-              <PieChart className="w-5 h-5 text-teal-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-900">{isRTL ? 'توزيع الملكية' : 'Ownership Distribution'}</h3>
-              <p className="text-xs text-gray-500">
-                {isRTL ? `مستخدم ${totalOwnership.toFixed(1)}% من 100%` : `${totalOwnership.toFixed(1)}% of 100% allocated`}
-              </p>
-            </div>
-          </div>
-          {totalOwnership < 100 && (
-            <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg">
-              <AlertTriangle className="w-4 h-4" />
-              <span className="text-sm font-medium">
-                {isRTL ? `متبقي ${remainingOwnership.toFixed(1)}%` : `${remainingOwnership.toFixed(1)}% remaining`}
-              </span>
-            </div>
-          )}
-          {totalOwnership === 100 && (
-            <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">
-              <Check className="w-4 h-4" />
-              <span className="text-sm font-medium">
-                {isRTL ? 'مكتمل 100%' : '100% Allocated'}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-          <div className="flex h-full">
-            {partners.filter(p => p.is_active).map((p, i) => {
-              const colors = ['bg-teal-500', 'bg-sky-500', 'bg-amber-500', 'bg-rose-500', 'bg-emerald-500'];
-              return (
-                <div
-                  key={p.id}
-                  className={`${colors[i % colors.length]} h-full transition-all duration-500`}
-                  style={{ width: `${Number(p.ownership_percentage)}%` }}
-                  title={`${isRTL ? p.name_ar : p.name}: ${p.ownership_percentage}%`}
-                />
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-4 mt-3">
-          {partners.filter(p => p.is_active).map((p, i) => {
-            const colors = ['text-teal-600', 'text-sky-600', 'text-amber-600', 'text-rose-600', 'text-emerald-600'];
-            const bgColors = ['bg-teal-500', 'bg-sky-500', 'bg-amber-500', 'bg-rose-500', 'bg-emerald-500'];
-            return (
-              <div key={p.id} className="flex items-center gap-2 text-sm">
-                <div className={`w-3 h-3 rounded-full ${bgColors[i % bgColors.length]}`} />
-                <span className={`font-medium ${colors[i % colors.length]}`}>
-                  {isRTL ? p.name_ar : p.name}
-                </span>
-                <span className="text-gray-400">{Number(p.ownership_percentage).toFixed(1)}%</span>
+      {/* Ownership Distribution */}
+      <Section title={isRTL ? 'توزيع الملكية' : 'Ownership Distribution'} icon={PieChart}
+        subtitle={isRTL ? `${totalOwnership.toFixed(1)}% مخصص` : `${totalOwnership.toFixed(1)}% allocated`}
+      >
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+              <div className="flex h-full">
+                {activePartners.map((p, i) => (
+                  <div key={p.id} className={`${BAR_COLORS[i % BAR_COLORS.length]} h-full transition-all duration-500`}
+                    style={{ width: `${Number(p.ownership_percentage)}%` }}
+                    title={`${isRTL ? p.name_ar : p.name}: ${p.ownership_percentage}%`}
+                  />
+                ))}
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-            {tab.count !== undefined && tab.count > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                activeTab === tab.id ? 'bg-teal-100 text-teal-700' : 'bg-gray-200 text-gray-600'
-              }`}>
-                {tab.count}
-              </span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-wrap gap-4">
+              {activePartners.map((p, i) => (
+                <div key={p.id} className="flex items-center gap-1.5 text-sm">
+                  <div className={`w-2.5 h-2.5 rounded-full ${BG_DOTS[i % BG_DOTS.length]}`} />
+                  <span className={`font-medium ${TEXT_COLORS[i % TEXT_COLORS.length]}`}>{isRTL ? p.name_ar : p.name}</span>
+                  <span className="text-gray-400 text-xs">{Number(p.ownership_percentage).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+            {totalOwnership < 100 && (
+              <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg text-sm flex-shrink-0">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="font-medium">{isRTL ? `متبقي ${remainingOwnership.toFixed(1)}%` : `${remainingOwnership.toFixed(1)}% free`}</span>
+              </div>
             )}
-          </button>
-        ))}
-      </div>
+            {Math.abs(totalOwnership - 100) < 0.01 && (
+              <div className="flex items-center gap-1.5 text-green-600 bg-green-50 px-3 py-1.5 rounded-lg text-sm flex-shrink-0">
+                <Check className="w-4 h-4" />
+                <span className="font-medium">{isRTL ? 'مكتمل 100%' : '100% allocated'}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Section>
 
-      {/* Partners Tab */}
-      {activeTab === 'partners' && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            {canEdit && (
-              <button
-                onClick={() => openPartnerForm()}
-                className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
-              >
-                <UserPlus className="w-5 h-5" />
+      {/* Partners List */}
+      <Section title={isRTL ? 'قائمة الشركاء' : 'Partners'} icon={Users}
+        subtitle={`${partners.length} ${isRTL ? 'شريك' : 'partners'}`}
+      >
+        <div className="p-6 space-y-4">
+          {canEdit && (
+            <div className="flex gap-2">
+              <button onClick={() => openPartnerForm()}
+                className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition text-sm font-medium">
+                <UserPlus className="w-4 h-4" />
                 {isRTL ? 'إضافة شريك' : 'Add Partner'}
               </button>
-            )}
-          </div>
+              <button onClick={() => { setShowWithdrawalForm(true); setError(''); }}
+                className="flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition text-sm font-medium">
+                <Banknote className="w-4 h-4" />
+                {isRTL ? 'تسجيل سحب' : 'Record Withdrawal'}
+              </button>
+              <button onClick={() => { setShowDistributeModal(true); setDistResult(null); setError(''); }}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+                <TrendingUp className="w-4 h-4" />
+                {isRTL ? 'توزيع أرباح' : 'Distribute Profit'}
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {partners.map((partner, i) => {
-              const balance = partnerBalances.find(b => b.partner_id === partner.id);
-              const borderColors = ['border-l-teal-500', 'border-l-sky-500', 'border-l-amber-500', 'border-l-rose-500', 'border-l-emerald-500'];
-
+              const account = accounts.find(a => a.partner_id === partner.id);
               return (
-                <div
-                  key={partner.id}
-                  className={`bg-white rounded-xl shadow-sm border border-gray-100 border-l-4 ${borderColors[i % borderColors.length]} overflow-hidden`}
+                <div key={partner.id}
+                  className={`bg-white rounded-xl border border-gray-100 border-l-4 ${BORDER_COLORS[i % BORDER_COLORS.length]} overflow-hidden ${!partner.is_active ? 'opacity-60' : ''}`}
                 >
                   <div className="p-5">
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h4 className="text-lg font-bold text-gray-900">
-                          {isRTL ? partner.name_ar : partner.name}
-                        </h4>
-                        <p className="text-sm text-gray-500">{isRTL ? partner.name : partner.name_ar}</p>
-                      </div>
-                      {canEdit && (
-                        <button
-                          onClick={() => openPartnerForm(partner)}
-                          className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <Percent className="w-3.5 h-3.5 text-teal-500" />
-                          <span className="text-xs text-gray-500">{isRTL ? 'نسبة الملكية' : 'Ownership'}</span>
-                        </div>
-                        <p className="text-xl font-bold text-gray-900">{Number(partner.ownership_percentage).toFixed(1)}%</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <TrendingUp className="w-3.5 h-3.5 text-sky-500" />
-                          <span className="text-xs text-gray-500">{isRTL ? 'نسبة الأرباح' : 'Profit Share'}</span>
-                        </div>
-                        <p className="text-xl font-bold text-gray-900">{Number(partner.profit_share_percentage).toFixed(1)}%</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <DollarSign className="w-3.5 h-3.5 text-amber-500" />
-                          <span className="text-xs text-gray-500">{isRTL ? 'رأس المال' : 'Capital'}</span>
-                        </div>
-                        <p className="text-lg font-bold text-gray-900">
-                          {formatCurrency(Number(partner.capital_contribution))}
-                        </p>
-                      </div>
-                      {balance && (
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
-                            <span className="text-xs text-gray-500">{isRTL ? 'الرصيد' : 'Balance'}</span>
-                          </div>
-                          <p className={`text-lg font-bold ${balance.current_balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                            {balance.current_balance >= 0 ? '+' : ''}{formatCurrency(balance.current_balance)}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {balance.current_balance >= 0
-                              ? (isRTL ? 'له مستحق' : 'Owed to them')
-                              : (isRTL ? 'عليه مستحق' : 'They owe')}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {(partner.email || partner.phone) && (
-                      <div className="mt-3 pt-3 border-t border-gray-100 flex gap-4 text-sm text-gray-500">
-                        {partner.email && <span>{partner.email}</span>}
-                        {partner.phone && <span dir="ltr">{partner.phone}</span>}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {partners.length === 0 && (
-            <div className="text-center py-16 bg-white rounded-xl border border-gray-100">
-              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                {isRTL ? 'لا يوجد شركاء' : 'No Partners Yet'}
-              </h3>
-              <p className="text-gray-500 mb-4">
-                {isRTL ? 'ابدأ بإضافة شريك جديد' : 'Start by adding a new partner'}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Expenses Tab */}
-      {activeTab === 'expenses' && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            {canEdit && (
-              <button
-                onClick={() => { resetExpenseForm(); setShowExpenseForm(true); }}
-                className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium"
-              >
-                <Plus className="w-5 h-5" />
-                {isRTL ? 'إضافة مصروف' : 'Add Expense'}
-              </button>
-            )}
-          </div>
-
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: isRTL ? 'رأس المال' : 'Cash Capital', val: capitalExpenses, color: 'teal', acc: '1110' },
-              { label: isRTL ? 'مخزون' : 'Inventory', val: inventoryExpenses, color: 'green', acc: '1132' },
-              { label: isRTL ? 'أصول ثابتة' : 'Fixed Assets', val: assetExpenses, color: 'blue', acc: '1213' },
-              { label: isRTL ? 'تشغيلية' : 'Operational', val: operationalExpenses, color: 'orange', acc: '6000' },
-            ].map((item, idx) => (
-              <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`bg-${item.color}-50 p-2 rounded-lg`}>
-                    <DollarSign className={`w-4 h-4 text-${item.color}-600`} />
-                  </div>
-                  <p className="text-xs text-gray-500">{item.label}</p>
-                </div>
-                <p className="text-xl font-bold text-gray-900">{formatCurrency(item.val)}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{isRTL ? `ح/ ${item.acc}` : `Acc ${item.acc}`}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Expenses Table */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'التاريخ' : 'Date'}</th>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'الشريك' : 'Partner'}</th>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'النوع' : 'Type'}</th>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'الوصف' : 'Description'}</th>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'المبلغ' : 'Amount'}</th>
-                    <th className="py-3 px-6 text-center text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'المرفق' : 'Attach'}</th>
-                    <th className="py-3 px-6 text-center text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'إجراء' : 'Action'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expenses.length === 0 ? (
-                    <tr><td colSpan={7} className="py-12 text-center text-gray-500">{isRTL ? 'لا توجد مصاريف' : 'No expenses'}</td></tr>
-                  ) : expenses.map(expense => {
-                    const partner = partners.find(p => p.id === expense.partner_id);
-                    const typeColor: Record<string, string> = { capital: 'teal', inventory: 'green', asset: 'blue', operational: 'orange' };
-                    const c = typeColor[expense.expense_type] || 'gray';
-                    return (
-                      <tr key={expense.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
-                        <td className="py-3 px-6 text-sm text-gray-600">{formatDate(expense.expense_date)}</td>
-                        <td className="py-3 px-6 text-sm text-gray-900 font-medium">
-                          {partner ? (isRTL ? partner.name_ar : partner.name) : (isRTL ? 'عام' : 'General')}
-                        </td>
-                        <td className="py-3 px-6 text-sm">
-                          <span className={`px-2 py-1 bg-${c}-100 text-${c}-800 rounded-full text-xs font-medium`}>
-                            {isRTL ? EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.en}
-                          </span>
-                        </td>
-                        <td className="py-3 px-6 text-sm text-gray-900">
-                          {isRTL ? (expense.description_ar || expense.description) : expense.description}
-                          {expense.notes && <p className="text-xs text-gray-500 mt-1">{expense.notes}</p>}
-                        </td>
-                        <td className="py-3 px-6 text-sm font-bold text-teal-900">{formatCurrency(Number(expense.amount))} {isRTL ? 'ر.س' : 'SAR'}</td>
-                        <td className="py-3 px-6 text-center">
-                          {expense.attachment ? (
-                            <button onClick={() => handleViewAttachment(expense.attachment!)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition">
-                              <Eye className="w-4 h-4" />
-                            </button>
-                          ) : <span className="text-gray-400 text-xs">-</span>}
-                        </td>
-                        <td className="py-3 px-6 text-center">
-                          {deleteConfirm === expense.id ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => handleDeleteExpense(expense.id)} className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">
-                                {isRTL ? 'تأكيد' : 'Confirm'}
-                              </button>
-                              <button onClick={() => setDeleteConfirm(null)} className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300">
-                                {isRTL ? 'إلغاء' : 'Cancel'}
-                              </button>
-                            </div>
-                          ) : (
-                            <button onClick={() => setDeleteConfirm(expense.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-base font-bold text-gray-900">{isRTL ? partner.name_ar : partner.name}</h4>
+                          {!partner.is_active && (
+                            <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{isRTL ? 'موقوف' : 'Inactive'}</span>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Settlements Tab */}
-      {activeTab === 'settlements' && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            {canEdit && (
-              <button
-                onClick={() => { resetSettlementForm(); setShowSettlementForm(true); }}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium"
-              >
-                <ArrowRightLeft className="w-5 h-5" />
-                {isRTL ? 'دفعة من شريك' : 'Partner Payment'}
-              </button>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'التاريخ' : 'Date'}</th>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'من' : 'From'}</th>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'إلى' : 'To'}</th>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'المبلغ' : 'Amount'}</th>
-                    <th className="py-3 px-6 text-left text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'الحالة' : 'Status'}</th>
-                    <th className="py-3 px-6 text-center text-xs font-semibold text-gray-700 uppercase">{isRTL ? 'إجراء' : 'Action'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {settlements.length === 0 ? (
-                    <tr><td colSpan={6} className="py-12 text-center text-gray-500">{isRTL ? 'لا توجد تسويات' : 'No settlements'}</td></tr>
-                  ) : settlements.map(settlement => {
-                    const isVoided = settlement.status === 'voided';
-                    return (
-                      <tr key={settlement.id} className={`border-b border-gray-50 hover:bg-gray-50/50 transition ${isVoided ? 'opacity-50' : ''}`}>
-                        <td className="py-3 px-6 text-sm text-gray-600">{formatDate(settlement.settlement_date)}</td>
-                        <td className="py-3 px-6 text-sm text-gray-900 font-medium">
-                          {settlement.from_partner ? (isRTL ? settlement.from_partner.name_ar : settlement.from_partner.name) : '-'}
-                        </td>
-                        <td className="py-3 px-6 text-sm text-gray-900 font-medium">
-                          {settlement.to_partner ? (isRTL ? settlement.to_partner.name_ar : settlement.to_partner.name) : '-'}
-                        </td>
-                        <td className="py-3 px-6 text-sm font-bold text-blue-900">{formatCurrency(Number(settlement.amount))} {isRTL ? 'ر.س' : 'SAR'}</td>
-                        <td className="py-3 px-6 text-sm">
-                          {isVoided ? (
-                            <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">{isRTL ? 'ملغى' : 'Voided'}</span>
-                          ) : (
-                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{isRTL ? 'نشط' : 'Active'}</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-6 text-center">
-                          {!isVoided && (
-                            voidConfirm === settlement.id ? (
-                              <div className="flex items-center justify-center gap-2">
-                                <button onClick={() => handleVoidSettlement(settlement.id)} className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">
+                        </div>
+                        <p className="text-xs text-gray-400">{isRTL ? partner.name : partner.name_ar}</p>
+                        {(partner.email || partner.phone) && (
+                          <p className="text-xs text-gray-400 mt-1">{partner.email}{partner.phone ? ` · ${partner.phone}` : ''}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {canEdit && (
+                          <>
+                            <button onClick={() => openPartnerForm(partner)}
+                              className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition">
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            {deactivateConfirm === partner.id ? (
+                              <div className="flex gap-1">
+                                <button onClick={() => handleToggleActive(partner)}
+                                  className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700">
                                   {isRTL ? 'تأكيد' : 'Confirm'}
                                 </button>
-                                <button onClick={() => setVoidConfirm(null)} className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300">
+                                <button onClick={() => setDeactivateConfirm(null)}
+                                  className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded">
                                   {isRTL ? 'إلغاء' : 'Cancel'}
                                 </button>
                               </div>
                             ) : (
-                              <button onClick={() => setVoidConfirm(settlement.id)} className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg transition">
-                                <Ban className="w-4 h-4" />
+                              <button onClick={() => setDeactivateConfirm(partner.id)}
+                                className="p-1.5 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition"
+                                title={partner.is_active ? (isRTL ? 'تعطيل' : 'Deactivate') : (isRTL ? 'تفعيل' : 'Activate')}
+                              >
+                                {partner.is_active ? <ToggleRight className="w-4 h-4 text-green-500" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-gray-50 rounded-lg p-2.5">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Percent className="w-3 h-3 text-teal-500" />
+                          <span className="text-xs text-gray-400">{isRTL ? 'الملكية' : 'Ownership'}</span>
+                        </div>
+                        <p className="text-lg font-bold text-gray-900">{Number(partner.ownership_percentage).toFixed(1)}%</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-2.5">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <TrendingUp className="w-3 h-3 text-sky-500" />
+                          <span className="text-xs text-gray-400">{isRTL ? 'نسبة الأرباح' : 'Profit Share'}</span>
+                        </div>
+                        <p className="text-lg font-bold text-gray-900">{Number(partner.profit_share_percentage).toFixed(1)}%</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-2.5">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Landmark className="w-3 h-3 text-amber-500" />
+                          <span className="text-xs text-gray-400">{isRTL ? 'رأس المال' : 'Capital'}</span>
+                        </div>
+                        <p className="text-sm font-bold text-gray-900">{fmt(Number(partner.capital_contribution))}</p>
+                      </div>
+                      {account && (
+                        <div className="bg-gray-50 rounded-lg p-2.5">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <DollarSign className="w-3 h-3 text-emerald-500" />
+                            <span className="text-xs text-gray-400">{isRTL ? 'الحساب الجاري' : 'Current Acc.'}</span>
+                          </div>
+                          <p className={`text-sm font-bold ${Number(account.current_account_balance) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                            {Number(account.current_account_balance) >= 0 ? '+' : ''}{fmt(Number(account.current_account_balance))}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {partners.length === 0 && (
+              <div className="col-span-2 text-center py-12 text-gray-400">
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">{isRTL ? 'لا يوجد شركاء. أضف شريكاً جديداً.' : 'No partners yet. Add one to get started.'}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Withdrawals Mini-Table */}
+          {withdrawals.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">{isRTL ? 'المسحوبات الأخيرة' : 'Recent Withdrawals'}</p>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-gray-500">{isRTL ? 'التاريخ' : 'Date'}</th>
+                      <th className="px-3 py-2 text-left text-gray-500">{isRTL ? 'الشريك' : 'Partner'}</th>
+                      <th className="px-3 py-2 text-left text-gray-500">{isRTL ? 'الطريقة' : 'Method'}</th>
+                      <th className="px-3 py-2 text-right text-gray-500">{isRTL ? 'المبلغ' : 'Amount'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {withdrawals.slice(0, 5).map(w => (
+                      <tr key={w.id} className="border-t border-gray-100">
+                        <td className="px-3 py-2 text-gray-600">{fmtDate(w.withdrawal_date, isRTL)}</td>
+                        <td className="px-3 py-2 font-medium text-gray-900">
+                          {w.partner ? (isRTL ? w.partner.name_ar : w.partner.name) : '-'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${w.method === 'bank' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                            {w.method === 'bank' ? (isRTL ? 'بنك' : 'Bank') : (isRTL ? 'نقدي' : 'Cash')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold text-orange-700">{fmt(Number(w.amount))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* Expenses Section */}
+      <Section title={isRTL ? 'مصاريف التأسيس' : 'Setup Expenses'} icon={DollarSign}
+        subtitle={`${expenses.length} ${isRTL ? 'مصروف' : 'expenses'} · ${fmt(totalExpenses)} ${isRTL ? 'ر.س' : 'SAR'}`}
+        defaultOpen={false}
+      >
+        <div className="p-6 space-y-4">
+          {canEdit && (
+            <button onClick={() => { resetExpenseForm(); setShowExpenseForm(true); }}
+              className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition text-sm font-medium">
+              <Plus className="w-4 h-4" />
+              {isRTL ? 'إضافة مصروف' : 'Add Expense'}
+            </button>
+          )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { key: 'capital', color: 'teal' }, { key: 'inventory', color: 'green' },
+              { key: 'asset', color: 'blue' }, { key: 'operational', color: 'orange' },
+            ].map(({ key, color }) => {
+              const val = expenses.filter(e => e.expense_type === key).reduce((s, e) => s + Number(e.amount), 0);
+              return (
+                <div key={key} className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">
+                    {isRTL ? EXPENSE_TYPES[key as keyof typeof EXPENSE_TYPES].ar : EXPENSE_TYPES[key as keyof typeof EXPENSE_TYPES].en}
+                  </p>
+                  <p className="text-base font-bold text-gray-900">{fmt(val)}</p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'التاريخ' : 'Date'}</th>
+                  <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'الشريك' : 'Partner'}</th>
+                  <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'النوع' : 'Type'}</th>
+                  <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'الوصف' : 'Desc.'}</th>
+                  <th className="px-4 py-2.5 text-right text-xs text-gray-500">{isRTL ? 'المبلغ' : 'Amount'}</th>
+                  <th className="px-4 py-2.5 text-center text-xs text-gray-500">{isRTL ? 'إجراء' : 'Act.'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expenses.length === 0 ? (
+                  <tr><td colSpan={6} className="py-8 text-center text-gray-400 text-sm">{isRTL ? 'لا توجد مصاريف' : 'No expenses'}</td></tr>
+                ) : expenses.map(expense => {
+                  const p = partners.find(pp => pp.id === expense.partner_id);
+                  return (
+                    <tr key={expense.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-4 py-2.5 text-xs text-gray-600">{fmtDate(expense.expense_date, isRTL)}</td>
+                      <td className="px-4 py-2.5 text-sm font-medium">{p ? (isRTL ? p.name_ar : p.name) : '-'}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">
+                          {isRTL ? EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.en}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-sm text-gray-700">
+                        {isRTL ? (expense.description_ar || expense.description) : expense.description}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-bold text-teal-800 text-sm">{fmt(Number(expense.amount))}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {expense.attachment && (
+                            <button onClick={() => handleViewAttachment(expense.attachment!)} className="p-1 text-blue-500 hover:bg-blue-50 rounded">
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {canEdit && (
+                            deleteExpenseConfirm === expense.id ? (
+                              <div className="flex gap-1">
+                                <button onClick={() => handleDeleteExpense(expense.id)} className="px-2 py-0.5 text-xs bg-red-600 text-white rounded">
+                                  {isRTL ? 'تأكيد' : 'OK'}
+                                </button>
+                                <button onClick={() => setDeleteExpenseConfirm(null)} className="px-2 py-0.5 text-xs bg-gray-200 rounded">
+                                  {isRTL ? 'إلغاء' : 'No'}
+                                </button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setDeleteExpenseConfirm(expense.id)} className="p-1 text-red-400 hover:bg-red-50 rounded">
+                                <X className="w-3.5 h-3.5" />
                               </button>
                             )
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
-      )}
+      </Section>
+
+      {/* Settlements Section */}
+      <Section title={isRTL ? 'التسويات بين الشركاء' : 'Partner Settlements'} icon={ArrowRightLeft}
+        subtitle={`${settlements.filter(s => s.status === 'active').length} ${isRTL ? 'تسوية نشطة' : 'active settlements'}`}
+        defaultOpen={false}
+      >
+        <div className="p-6 space-y-4">
+          {canEdit && (
+            <button onClick={() => { resetSettlementForm(); setShowSettlementForm(true); }}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+              <ArrowRightLeft className="w-4 h-4" />
+              {isRTL ? 'دفعة بين الشركاء' : 'Partner Payment'}
+            </button>
+          )}
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'التاريخ' : 'Date'}</th>
+                  <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'من' : 'From'}</th>
+                  <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'إلى' : 'To'}</th>
+                  <th className="px-4 py-2.5 text-right text-xs text-gray-500">{isRTL ? 'المبلغ' : 'Amount'}</th>
+                  <th className="px-4 py-2.5 text-center text-xs text-gray-500">{isRTL ? 'الحالة' : 'Status'}</th>
+                  <th className="px-4 py-2.5 text-center text-xs text-gray-500">{isRTL ? 'إجراء' : 'Act.'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {settlements.length === 0 ? (
+                  <tr><td colSpan={6} className="py-8 text-center text-gray-400">{isRTL ? 'لا توجد تسويات' : 'No settlements'}</td></tr>
+                ) : settlements.map(s => (
+                  <tr key={s.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${s.status === 'voided' ? 'opacity-50' : ''}`}>
+                    <td className="px-4 py-2.5 text-xs text-gray-600">{fmtDate(s.settlement_date, isRTL)}</td>
+                    <td className="px-4 py-2.5 font-medium">{s.from_partner ? (isRTL ? s.from_partner.name_ar : s.from_partner.name) : '-'}</td>
+                    <td className="px-4 py-2.5 font-medium">{s.to_partner ? (isRTL ? s.to_partner.name_ar : s.to_partner.name) : '-'}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-blue-800">{fmt(Number(s.amount))}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.status === 'voided' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        {s.status === 'voided' ? (isRTL ? 'ملغى' : 'Voided') : (isRTL ? 'نشط' : 'Active')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {s.status !== 'voided' && canEdit && (
+                        voidSettlementConfirm === s.id ? (
+                          <div className="flex justify-center gap-1">
+                            <button onClick={() => handleVoidSettlement(s.id)} className="px-2 py-0.5 text-xs bg-red-600 text-white rounded">{isRTL ? 'تأكيد' : 'OK'}</button>
+                            <button onClick={() => setVoidSettlementConfirm(null)} className="px-2 py-0.5 text-xs bg-gray-200 rounded">{isRTL ? 'إلغاء' : 'No'}</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setVoidSettlementConfirm(s.id)} className="p-1 text-orange-400 hover:bg-orange-50 rounded">
+                            <Ban className="w-3.5 h-3.5" />
+                          </button>
+                        )
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Section>
+
+      {/* Reports */}
+      <PartnerReports accounts={accounts} distributions={distributions} withdrawals={withdrawals} isRTL={isRTL} language={language} />
 
       {/* Partner Form Modal */}
       {showPartnerForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-gray-900">
-                {editingPartner
-                  ? (isRTL ? 'تعديل الشريك' : 'Edit Partner')
-                  : (isRTL ? 'إضافة شريك جديد' : 'Add New Partner')}
+                {editingPartner ? (isRTL ? 'تعديل الشريك' : 'Edit Partner') : (isRTL ? 'إضافة شريك' : 'Add Partner')}
               </h3>
-              <button onClick={() => setShowPartnerForm(false)} className="p-2 hover:bg-gray-100 rounded-lg transition">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setShowPartnerForm(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handlePartnerSubmit} className="p-6 space-y-4">
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  {error}
-                </div>
-              )}
+              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex gap-2"><AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />{error}</div>}
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-                {isRTL
-                  ? `الملكية الحالية المخصصة: ${totalOwnership.toFixed(1)}% — المتبقي: ${editingPartner
-                      ? (100 - totalOwnership + Number(editingPartner.ownership_percentage)).toFixed(1)
-                      : remainingOwnership.toFixed(1)}%`
-                  : `Current allocated: ${totalOwnership.toFixed(1)}% — Available: ${editingPartner
-                      ? (100 - totalOwnership + Number(editingPartner.ownership_percentage)).toFixed(1)
-                      : remainingOwnership.toFixed(1)}%`}
+                {(() => {
+                  const available = editingPartner
+                    ? (100 - totalOwnership + Number(editingPartner.ownership_percentage)).toFixed(1)
+                    : remainingOwnership.toFixed(1);
+                  const current = ownershipPct ? parseFloat(ownershipPct) : 0;
+                  const otherTotal = partners.filter(p => p.is_active && (!editingPartner || p.id !== editingPartner.id))
+                    .reduce((s, p) => s + Number(p.ownership_percentage || 0), 0);
+                  const projectedTotal = otherTotal + current;
+                  return isRTL
+                    ? `المتبقي المتاح: ${available}% · المجموع الحالي: ${projectedTotal.toFixed(1)}%`
+                    : `Available: ${available}% · Projected total: ${projectedTotal.toFixed(1)}%`;
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{isRTL ? 'الاسم (إنجليزي) *' : 'Name (English) *'}</label>
-                  <input type="text" value={partnerName} onChange={e => setPartnerName(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الاسم (إنجليزي) *' : 'Name (EN) *'}</label>
+                  <input type="text" value={partnerName} onChange={e => setPartnerName(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{isRTL ? 'الاسم (عربي) *' : 'Name (Arabic) *'}</label>
-                  <input type="text" value={partnerNameAr} onChange={e => setPartnerNameAr(e.target.value)} required dir="rtl"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الاسم (عربي) *' : 'Name (AR) *'}</label>
+                  <input type="text" value={partnerNameAr} onChange={e => setPartnerNameAr(e.target.value)} required dir="rtl" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{isRTL ? 'نسبة الملكية % *' : 'Ownership % *'}</label>
-                  <input type="number" step="0.01" min="0" max="100" value={ownershipPct} onChange={e => {
-                    setOwnershipPct(e.target.value);
-                    if (!profitSharePct || profitSharePct === ownershipPct) setProfitSharePct(e.target.value);
-                  }} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="0.00" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'نسبة الملكية % *' : 'Ownership % *'}</label>
+                  <input type="number" step="0.01" min="0" max="100" value={ownershipPct}
+                    onChange={e => { setOwnershipPct(e.target.value); if (!profitSharePct || profitSharePct === ownershipPct) setProfitSharePct(e.target.value); }}
+                    required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{isRTL ? 'نسبة الأرباح %' : 'Profit Share %'}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'نسبة الأرباح %' : 'Profit Share %'}</label>
                   <input type="number" step="0.01" min="0" max="100" value={profitSharePct} onChange={e => setProfitSharePct(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="0.00" />
-                  <p className="text-xs text-gray-400 mt-1">{isRTL ? 'تلقائياً = نسبة الملكية' : 'Defaults to ownership %'}</p>
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" placeholder="0.00" />
+                  <p className="text-xs text-gray-400 mt-0.5">{isRTL ? 'افتراضي = نسبة الملكية' : 'Defaults to ownership %'}</p>
                 </div>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{isRTL ? 'رأس المال المساهم (ر.س)' : 'Capital Contribution (SAR)'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'رأس المال (ر.س)' : 'Capital (SAR)'}</label>
                 <input type="number" step="0.01" min="0" value={capitalContribution} onChange={e => setCapitalContribution(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="0.00" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" placeholder="0.00" />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{isRTL ? 'البريد الإلكتروني' : 'Email'}</label>
-                  <input type="email" value={partnerEmail} onChange={e => setPartnerEmail(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'البريد' : 'Email'}</label>
+                  <input type="email" value={partnerEmail} onChange={e => setPartnerEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{isRTL ? 'رقم الهاتف' : 'Phone'}</label>
-                  <input type="tel" value={partnerPhone} onChange={e => setPartnerPhone(e.target.value)} dir="ltr"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الهاتف' : 'Phone'}</label>
+                  <input type="tel" value={partnerPhone} onChange={e => setPartnerPhone(e.target.value)} dir="ltr" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm" />
                 </div>
               </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button type="button" onClick={() => setShowPartnerForm(false)}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">
-                  {isRTL ? 'إلغاء' : 'Cancel'}
-                </button>
-                <button type="submit" disabled={submitting}
-                  className="flex items-center gap-2 px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-medium disabled:opacity-50">
+              <div className="flex justify-end gap-3 pt-2 border-t">
+                <button type="button" onClick={() => setShowPartnerForm(false)} className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">{isRTL ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" disabled={submitting} className="flex items-center gap-2 px-5 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm font-medium disabled:opacity-50">
                   <Save className="w-4 h-4" />
-                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
+                  {submitting ? (isRTL ? 'حفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
                 </button>
               </div>
             </form>
@@ -1000,111 +912,208 @@ export function Partners() {
         </div>
       )}
 
-      {/* Add Expense Form Modal */}
+      {/* Withdrawal Form Modal */}
+      {showWithdrawalForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'تسجيل سحب شريك' : 'Record Partner Withdrawal'}</h3>
+              <button onClick={() => { setShowWithdrawalForm(false); resetWithdrawalForm(); }} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleWithdrawalSubmit} className="p-6 space-y-4">
+              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                {isRTL ? 'يُنشئ قيداً: مدين ح/الشريك الجاري — دائن ح/النقدية أو البنك' : 'Creates GL: Dr Partner Current Account — Cr Cash/Bank'}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الشريك *' : 'Partner *'}</label>
+                <select value={wPartnerId} onChange={e => setWPartnerId(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                  <option value="">{isRTL ? 'اختر الشريك' : 'Select Partner'}</option>
+                  {partners.filter(p => p.is_active).map(p => <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'المبلغ (ر.س) *' : 'Amount (SAR) *'}</label>
+                  <input type="number" step="0.01" min="0.01" value={wAmount} onChange={e => setWAmount(e.target.value)} required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الطريقة *' : 'Method *'}</label>
+                  <select value={wMethod} onChange={e => setWMethod(e.target.value as 'cash' | 'bank')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
+                    <option value="bank">{isRTL ? 'بنك' : 'Bank'}</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'التاريخ *' : 'Date *'}</label>
+                <input type="date" value={wDate} onChange={e => setWDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الوصف *' : 'Description *'}</label>
+                <input type="text" value={wDescription} onChange={e => setWDescription(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2 border-t">
+                <button type="button" onClick={() => { setShowWithdrawalForm(false); resetWithdrawalForm(); }} className="px-5 py-2 border border-gray-300 rounded-lg text-sm">{isRTL ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" disabled={submitting} className="flex items-center gap-2 px-5 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-medium disabled:opacity-50">
+                  <Banknote className="w-4 h-4" />
+                  {submitting ? (isRTL ? 'جاري...' : 'Saving...') : (isRTL ? 'تسجيل' : 'Record')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Profit Distribution Modal */}
+      {showDistributeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'توزيع أرباح شهري' : 'Monthly Profit Distribution'}</h3>
+              <button onClick={() => setShowDistributeModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleDistributeProfit} className="p-6 space-y-4">
+              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+              {distResult && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+                  <p className="font-semibold text-green-800 text-sm">{isRTL ? 'تم التوزيع بنجاح' : 'Distribution posted successfully'}</p>
+                  <div className="text-xs text-green-700 space-y-1">
+                    <p>{isRTL ? `صافي الربح: ${fmt(distResult.net_profit)} ر.س` : `Net profit: ${fmt(distResult.net_profit)} SAR`}</p>
+                    <p>{isRTL ? `إجمالي موزع: ${fmt(distResult.total_distributed)} ر.س` : `Total distributed: ${fmt(distResult.total_distributed)} SAR`}</p>
+                    <p>{isRTL ? `القيد: ${distResult.entry_number}` : `Entry: ${distResult.entry_number}`}</p>
+                  </div>
+                </div>
+              )}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+                {isRTL
+                  ? 'يُنشئ قيداً: مدين ح/الأرباح المحتجزة — دائن ح/الحساب الجاري للشركاء (بحسب نسبة الأرباح)'
+                  : 'Creates GL: Dr Retained Earnings — Cr Partner Current Accounts (per profit share %)'}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الشهر' : 'Month'}</label>
+                  <select value={distMonth} onChange={e => setDistMonth(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                      <option key={m} value={m}>{isRTL ? MONTH_NAMES_AR[m] : MONTH_NAMES_EN[m]}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'السنة' : 'Year'}</label>
+                  <input type="number" value={distYear} onChange={e => setDistYear(e.target.value)} min="2020" max="2099"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-gray-500">{isRTL ? 'الشريك' : 'Partner'}</th>
+                      <th className="px-3 py-2 text-right text-gray-500">{isRTL ? 'نسبة الأرباح' : 'Profit %'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {partners.filter(p => p.is_active).map(p => (
+                      <tr key={p.id} className="border-t border-gray-100">
+                        <td className="px-3 py-2 font-medium">{isRTL ? p.name_ar : p.name}</td>
+                        <td className="px-3 py-2 text-right">{p.profit_share_percentage}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end gap-3 pt-2 border-t">
+                <button type="button" onClick={() => setShowDistributeModal(false)} className="px-5 py-2 border border-gray-300 rounded-lg text-sm">{isRTL ? 'إغلاق' : 'Close'}</button>
+                {!distResult && (
+                  <button type="submit" disabled={submitting} className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
+                    <CalendarDays className="w-4 h-4" />
+                    {submitting ? (isRTL ? 'جاري...' : 'Processing...') : (isRTL ? 'توزيع الأرباح' : 'Distribute')}
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Expense Modal */}
       {showExpenseForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'إضافة مصروف تأسيسي' : 'Add Setup Expense'}</h3>
-              <button onClick={() => { setShowExpenseForm(false); resetExpenseForm(); }} className="p-2 hover:bg-gray-100 rounded-lg transition">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => { setShowExpenseForm(false); resetExpenseForm(); }} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleExpenseSubmit} className="p-6 space-y-4">
               {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'الشريك *' : 'Partner *'}</label>
-                  <select value={partnerId} onChange={e => setPartnerId(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
-                    <option value="">{isRTL ? 'اختر شريك' : 'Select Partner'}</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الشريك *' : 'Partner *'}</label>
+                  <select value={partnerId} onChange={e => setPartnerId(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="">{isRTL ? 'اختر شريك' : 'Select'}</option>
                     {partners.map(p => <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'نوع المصروف *' : 'Expense Type *'}</label>
-                  <select value={expenseType} onChange={e => setExpenseType(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'نوع المصروف *' : 'Expense Type *'}</label>
+                  <select value={expenseType} onChange={e => setExpenseType(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     {Object.entries(EXPENSE_TYPES).map(([key, val]) => <option key={key} value={key}>{isRTL ? val.ar : val.en}</option>)}
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'الوصف *' : 'Description *'}</label>
-                <input type="text" value={description} onChange={e => setDescription(e.target.value)} required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'الوصف بالعربي' : 'Arabic Description'}</label>
-                <input type="text" value={descriptionAr} onChange={e => setDescriptionAr(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'المبلغ (ر.س) *' : 'Amount (SAR) *'}</label>
-                  <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="0.00" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الوصف *' : 'Description *'}</label>
+                  <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'التاريخ *' : 'Date *'}</label>
-                  <input type="date" value={expenseDate} onChange={e => setExpenseDate(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الوصف (عربي)' : 'Arabic Desc.'}</label>
+                  <input type="text" value={descriptionAr} onChange={e => setDescriptionAr(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'فئة الضريبة' : 'VAT Category'}</label>
-                  <select value={vatCategory} onChange={e => { setVatCategory(e.target.value as any); if (e.target.value !== 'standard') setVatAmount(''); }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
-                    <option value="exempt">{isRTL ? 'معفى' : 'Exempt'}</option>
-                    <option value="standard">{isRTL ? 'ضريبة 15%' : 'Standard 15%'}</option>
-                    <option value="zero_rated">{isRTL ? 'صفر %' : 'Zero Rated'}</option>
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'المبلغ *' : 'Amount *'}</label>
+                  <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
                 </div>
-                {vatCategory === 'standard' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'مبلغ الضريبة' : 'VAT Amount'}</label>
-                    <input type="number" step="0.01" value={vatAmount} onChange={e => setVatAmount(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="0.00" />
-                  </div>
-                )}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'طريقة الدفع' : 'Payment Method'}</label>
-                  <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'التاريخ *' : 'Date *'}</label>
+                  <input type="date" value={expenseDate} onChange={e => setExpenseDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الدفع' : 'Payment'}</label>
+                  <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
-                    <option value="partner">{isRTL ? 'من الشريك' : 'From Partner'}</option>
-                    <option value="bank_transfer">{isRTL ? 'تحويل بنكي' : 'Bank Transfer'}</option>
+                    <option value="partner">{isRTL ? 'من الشريك' : 'Partner'}</option>
+                    <option value="bank_transfer">{isRTL ? 'تحويل' : 'Bank'}</option>
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'ملاحظات' : 'Notes'}</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'ملاحظات' : 'Notes'}</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'المرفق' : 'Attachment'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'مرفق' : 'Attachment'}</label>
                 <div className="flex gap-2">
                   <input type="file" ref={fileInputRef} onChange={e => setAttachmentFile(e.target.files?.[0] || null)} accept="image/*,application/pdf" className="hidden" />
                   <input type="file" ref={cameraInputRef} onChange={e => setAttachmentFile(e.target.files?.[0] || null)} accept="image/*" capture="environment" className="hidden" />
                   <button type="button" onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-teal-500 hover:bg-teal-50 transition">
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-teal-400 text-sm text-gray-500">
                     <Paperclip className="w-4 h-4" />{attachmentFile ? attachmentFile.name : (isRTL ? 'اختر ملف' : 'Choose File')}
                   </button>
                   <button type="button" onClick={() => cameraInputRef.current?.click()}
-                    className="px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-teal-500 hover:bg-teal-50 transition">
+                    className="px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-teal-400 text-gray-500">
                     <Camera className="w-4 h-4" />
                   </button>
                 </div>
-                {attachmentFile && <button type="button" onClick={() => setAttachmentFile(null)} className="mt-2 text-sm text-red-600 hover:underline">{isRTL ? 'إزالة المرفق' : 'Remove'}</button>}
               </div>
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button type="button" onClick={() => { setShowExpenseForm(false); resetExpenseForm(); }}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">{isRTL ? 'إلغاء' : 'Cancel'}</button>
-                <button type="submit" disabled={submitting}
-                  className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-medium disabled:opacity-50">
-                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
+              <div className="flex justify-end gap-3 pt-2 border-t">
+                <button type="button" onClick={() => { setShowExpenseForm(false); resetExpenseForm(); }} className="px-5 py-2 border border-gray-300 rounded-lg text-sm">{isRTL ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" disabled={submitting} className="px-5 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm font-medium disabled:opacity-50">
+                  {submitting ? (isRTL ? 'حفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
                 </button>
               </div>
             </form>
@@ -1115,77 +1124,62 @@ export function Partners() {
       {/* Settlement Form Modal */}
       {showSettlementForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'إضافة دفعة من شريك' : 'Add Partner Payment'}</h3>
-              <button onClick={() => { setShowSettlementForm(false); resetSettlementForm(); }} className="p-2 hover:bg-gray-100 rounded-lg transition">
-                <X className="w-5 h-5" />
-              </button>
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white z-10">
+              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'إضافة دفعة تسوية' : 'Add Settlement Payment'}</h3>
+              <button onClick={() => { setShowSettlementForm(false); resetSettlementForm(); }} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleSettlementSubmit} className="p-6 space-y-4">
               {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'من (الدافع) *' : 'From (Payer) *'}</label>
-                  <select value={fromPartnerId} onChange={e => setFromPartnerId(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option value="">{isRTL ? 'اختر الشريك' : 'Select partner'}</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'من *' : 'From *'}</label>
+                  <select value={fromPartnerId} onChange={e => setFromPartnerId(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="">{isRTL ? 'اختر' : 'Select'}</option>
                     {partners.map(p => <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'إلى (المستلم) *' : 'To (Receiver) *'}</label>
-                  <select value={toPartnerId} onChange={e => setToPartnerId(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option value="">{isRTL ? 'اختر الشريك' : 'Select partner'}</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'إلى *' : 'To *'}</label>
+                  <select value={toPartnerId} onChange={e => setToPartnerId(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="">{isRTL ? 'اختر' : 'Select'}</option>
                     {partners.map(p => <option key={p.id} value={p.id}>{isRTL ? p.name_ar : p.name}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'المبلغ (ر.س) *' : 'Amount (SAR) *'}</label>
-                  <input type="number" step="0.01" value={settlementAmount} onChange={e => setSettlementAmount(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="0.00" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'المبلغ *' : 'Amount *'}</label>
+                  <input type="number" step="0.01" value={settlementAmount} onChange={e => setSettlementAmount(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'التاريخ *' : 'Date *'}</label>
-                  <input type="date" value={settlementDate} onChange={e => setSettlementDate(e.target.value)} required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'التاريخ *' : 'Date *'}</label>
+                  <input type="date" value={settlementDate} onChange={e => setSettlementDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'الوصف' : 'Description'}</label>
-                <input type="text" value={settlementDescription} onChange={e => setSettlementDescription(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الوصف' : 'Description'}</label>
+                <input type="text" value={settlementDescription} onChange={e => setSettlementDescription(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'الوصف بالعربي' : 'Arabic Description'}</label>
-                <input type="text" value={settlementDescriptionAr} onChange={e => setSettlementDescriptionAr(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'المرفق' : 'Attachment'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'مرفق' : 'Attachment'}</label>
                 <div className="flex gap-2">
                   <input type="file" ref={settlementFileInputRef} onChange={e => setSettlementAttachmentFile(e.target.files?.[0] || null)} accept="image/*,application/pdf" className="hidden" />
                   <input type="file" ref={settlementCameraInputRef} onChange={e => setSettlementAttachmentFile(e.target.files?.[0] || null)} accept="image/*" capture="environment" className="hidden" />
                   <button type="button" onClick={() => settlementFileInputRef.current?.click()}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition">
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 text-sm text-gray-500">
                     <Paperclip className="w-4 h-4" />{settlementAttachmentFile ? settlementAttachmentFile.name : (isRTL ? 'اختر ملف' : 'Choose File')}
                   </button>
                   <button type="button" onClick={() => settlementCameraInputRef.current?.click()}
-                    className="px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition">
+                    className="px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 text-gray-500">
                     <Camera className="w-4 h-4" />
                   </button>
                 </div>
-                {settlementAttachmentFile && <button type="button" onClick={() => setSettlementAttachmentFile(null)} className="mt-2 text-sm text-red-600 hover:underline">{isRTL ? 'إزالة المرفق' : 'Remove'}</button>}
               </div>
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button type="button" onClick={() => { setShowSettlementForm(false); resetSettlementForm(); }}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">{isRTL ? 'إلغاء' : 'Cancel'}</button>
-                <button type="submit" disabled={submitting}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50">
-                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
+              <div className="flex justify-end gap-3 pt-2 border-t">
+                <button type="button" onClick={() => { setShowSettlementForm(false); resetSettlementForm(); }} className="px-5 py-2 border border-gray-300 rounded-lg text-sm">{isRTL ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" disabled={submitting} className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
+                  {submitting ? (isRTL ? 'حفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
                 </button>
               </div>
             </form>
