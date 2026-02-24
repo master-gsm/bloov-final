@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bloov-accounting-v1';
+const CACHE_NAME = 'bloov-accounting-v3';
 const urlsToCache = [
   '/',
   '/index.html',
