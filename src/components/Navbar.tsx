@@ -16,35 +16,17 @@ export function Navbar() {
   const [actualOnline, setActualOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    const handleOnline = () => {
-      console.log('[Navbar] Connection restored detected');
-      setActualOnline(true);
-    };
-
-    const handleOffline = () => {
-      console.log('[Navbar] Connection lost detected');
-      setActualOnline(false);
-    };
+    const handleOnline = () => setActualOnline(true);
+    const handleOffline = () => setActualOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    const checkConnection = setInterval(() => {
-      const wasOnline = actualOnline;
-      const isNowOnline = navigator.onLine;
-
-      if (wasOnline !== isNowOnline) {
-        console.log(`[Navbar] Connection status changed: ${wasOnline} -> ${isNowOnline}`);
-        setActualOnline(isNowOnline);
-      }
-    }, 1000);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      clearInterval(checkConnection);
     };
-  }, [actualOnline]);
+  }, []);
 
   const toggleLanguage = () => {
     setLanguage(language === 'en' ? 'ar' : 'en');
@@ -105,7 +87,7 @@ export function Navbar() {
             <div className="relative">
               <button
                 onClick={() => setShowConnectionMenu(!showConnectionMenu)}
-                className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border transition ${getConnectionColor()}`}
+                className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${getConnectionColor()} min-w-[100px]`}
                 title={getConnectionLabel()}
               >
                 {state === 'offline' ? (
