@@ -34,6 +34,8 @@ import JournalEntries from './components/JournalEntries';
 import SystemHealth from './components/SystemHealth';
 import { supabase } from './lib/supabase';
 
+console.log("ACTIVE PROJECT:", import.meta.env.VITE_SUPABASE_URL);
+
 const SECTION_PERMISSIONS: Record<string, string[]> = {
   dashboard: ['admin', 'viewer'],
   sales: ['admin', 'accountant', 'salesperson', 'viewer'],
