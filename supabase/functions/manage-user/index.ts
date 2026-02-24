@@ -7,45 +7,41 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+function jsonResponse(body: Record<string, unknown>, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("Missing environment variables");
+    if (!supabaseUrl || !serviceRoleKey) {
+      return jsonResponse({ error: "Server misconfiguration" }, 500);
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
-      global: {
-        headers: { Authorization: `Bearer ${supabaseServiceKey}` },
-      },
     });
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Missing authorization header" }, 401);
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user: requestingUser },
-      error: authError,
-    } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user: requestingUser }, error: authError } =
+      await supabaseAdmin.auth.getUser(token);
 
     if (authError || !requestingUser) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const { data: adminProfile, error: profileError } = await supabaseAdmin
@@ -55,58 +51,63 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (profileError) {
-      return new Response(
-        JSON.stringify({ error: `Profile check failed: ${profileError.message}` }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      return jsonResponse(
+        { error: `Profile lookup failed: ${profileError.message}` },
+        500
       );
     }
 
-    if (!adminProfile || adminProfile.role !== "admin" || !adminProfile.is_active) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden: Admin access required" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (
+      !adminProfile ||
+      adminProfile.role !== "admin" ||
+      !adminProfile.is_active
+    ) {
+      return jsonResponse({ error: "Forbidden: Admin access required" }, 403);
     }
 
-    const { action, userId, newPassword, newName, newRole, permissions } = await req.json();
+    const body = await req.json();
+    const { action, userId } = body;
 
     if (!action || !userId) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: action, userId" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      return jsonResponse(
+        { error: "Missing required fields: action, userId" },
+        400
       );
     }
 
     if (action === "update_password") {
+      const { newPassword } = body;
       if (!newPassword || newPassword.length < 6) {
-        return new Response(
-          JSON.stringify({ error: "Password must be at least 6 characters" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        return jsonResponse(
+          { error: "Password must be at least 6 characters" },
+          400
         );
       }
 
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        userId,
-        { password: newPassword }
-      );
+      const { error: updateError } =
+        await supabaseAdmin.auth.admin.updateUserById(userId, {
+          password: newPassword,
+        });
 
       if (updateError) {
-        return new Response(
-          JSON.stringify({ error: updateError.message }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: updateError.message }, 400);
       }
 
-      return new Response(
-        JSON.stringify({ success: true, message: "Password updated" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      return jsonResponse(
+        { success: true, message: "Password updated" },
+        200
       );
     }
 
     if (action === "update_user") {
+      const { newName, newRole, permissions } = body;
       const updates: Record<string, unknown> = {};
       if (newName) updates.full_name = newName;
-      if (newRole && ["admin", "accountant", "viewer", "observer"].includes(newRole)) updates.role = newRole;
+      if (
+        newRole &&
+        ["admin", "accountant", "viewer", "observer"].includes(newRole)
+      )
+        updates.role = newRole;
       if (permissions !== undefined) updates.permissions = permissions;
       updates.updated_at = new Date().toISOString();
 
@@ -116,60 +117,47 @@ Deno.serve(async (req: Request) => {
         .eq("id", userId);
 
       if (updateError) {
-        return new Response(
-          JSON.stringify({ error: updateError.message }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: updateError.message }, 400);
       }
 
-      return new Response(
-        JSON.stringify({ success: true, message: "User updated" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ success: true, message: "User updated" }, 200);
     }
 
     if (action === "delete_user") {
       if (userId === requestingUser.id) {
-        return new Response(
-          JSON.stringify({ error: "Cannot delete your own account" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        return jsonResponse(
+          { error: "Cannot delete your own account" },
+          400
         );
       }
 
-      const { error: deleteProfileError } = await supabaseAdmin.rpc("safe_delete_user", {
+      const { error: rpcError } = await supabaseAdmin.rpc("safe_delete_user", {
         p_user_id: userId,
       });
 
-      if (deleteProfileError) {
-        return new Response(
-          JSON.stringify({ error: `safe_delete_user failed: ${deleteProfileError.message}` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      if (rpcError) {
+        return jsonResponse(
+          { error: `Delete profile failed: ${rpcError.message}` },
+          400
         );
       }
 
-      const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      const { error: authDelError } =
+        await supabaseAdmin.auth.admin.deleteUser(userId);
 
-      if (deleteAuthError) {
-        return new Response(
-          JSON.stringify({ error: `auth.deleteUser failed: ${deleteAuthError.message}` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      if (authDelError) {
+        return jsonResponse(
+          { error: `Delete auth failed: ${authDelError.message}` },
+          400
         );
       }
 
-      return new Response(
-        JSON.stringify({ success: true, message: "User deleted" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ success: true, message: "User deleted" }, 200);
     }
 
-    return new Response(
-      JSON.stringify({ error: "Invalid action" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Invalid action" }, 400);
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const msg = error instanceof Error ? error.message : "Internal server error";
+    return jsonResponse({ error: msg }, 500);
   }
 });
