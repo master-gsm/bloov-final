@@ -227,10 +227,10 @@ export default function Backup() {
       const filename = `backup_${timestamp}.json`;
 
       console.log('=== [ServerBackup] PRE-UPLOAD DIAGNOSTICS ===');
-      console.log('[ServerBackup] VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
       console.log('[ServerBackup] bucket:', 'backups');
-      console.log('[ServerBackup] file path:', filename);
-      console.log('[ServerBackup] file size:', `${(backupSize / 1024).toFixed(1)} KB`);
+      console.log('[ServerBackup] upload path:', filename);
+      console.log('[ServerBackup] file size (bytes):', backupSize, `(${(backupSize / 1024).toFixed(1)} KB)`);
+      console.log('[ServerBackup] blob type:', backupBlob.type);
 
       const { data: bucketList, error: bucketListError } = await supabase.storage.listBuckets();
       console.log('[ServerBackup] listBuckets() result:', JSON.stringify({ data: bucketList, error: bucketListError }));
@@ -242,19 +242,26 @@ export default function Backup() {
           upsert: false,
         });
 
-      console.log('=== [ServerBackup] UPLOAD RESULT ===');
-      console.log('[ServerBackup] data:', JSON.stringify(uploadResult.data));
-      console.log('[ServerBackup] error:', JSON.stringify(uploadResult.error));
-      console.log('[ServerBackup] error?.message:', uploadResult.error?.message ?? null);
-      console.log('[ServerBackup] error?.statusCode:', (uploadResult.error as any)?.statusCode ?? null);
+      console.log('=== [ServerBackup] upload result:', JSON.stringify({
+        data: uploadResult.data,
+        error: uploadResult.error ? {
+          message: uploadResult.error.message,
+          statusCode: (uploadResult.error as any).statusCode,
+          name: uploadResult.error.name,
+        } : null,
+      }));
 
       if (uploadResult.error) {
         throw new Error(`${uploadResult.error.message} (status: ${(uploadResult.error as any).statusCode})`);
       }
 
-      if (!uploadResult.error) {
-        console.log('[ServerBackup] upload SUCCESS - path:', uploadResult.data?.path);
-      }
+      console.log('[ServerBackup] upload SUCCESS - path:', uploadResult.data?.path);
+
+      const { data: listData, error: listError } = await supabase.storage.from('backups').list('', {
+        limit: 100,
+        sortBy: { column: 'created_at', order: 'desc' },
+      });
+      console.log('[ServerBackup] list root:', JSON.stringify({ files: listData?.map(f => f.name), error: listError }));
 
       await supabase.from('settings').update({ last_backup_date: new Date().toISOString() }).eq('id', 1);
 
