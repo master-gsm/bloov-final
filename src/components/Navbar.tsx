@@ -4,6 +4,7 @@ import { useOffline } from '../contexts/OfflineContext';
 import { useBranch } from '../contexts/BranchContext';
 import { LogOut, Globe, Wifi, WifiOff, RefreshCw, AlertCircle, Building2, ChevronDown } from 'lucide-react';
 import { ConnectionStatusButton } from './ConnectionStatusButton';
+import { NotificationBell } from './NotificationCenter';
 import { useState, useEffect } from 'react';
 
 export function Navbar() {
@@ -237,6 +238,8 @@ export function Navbar() {
                 )}
               </div>
             )}
+
+            <NotificationBell />
 
             <button
               onClick={toggleLanguage}

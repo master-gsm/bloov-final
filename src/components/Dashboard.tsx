@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
-import { TrendingUp, TrendingDown, DollarSign, Package, Users, ShoppingCart } from 'lucide-react';
-
-interface Partner {
-  id: string;
-  name: string;
-  name_ar: string;
-  share_percentage: number;
-}
+import { TrendingUp, DollarSign, Package, ShoppingCart } from 'lucide-react';
+import { AlertsPanel } from './NotificationCenter';
 
 interface RecentSale {
   id: string;
@@ -20,7 +14,6 @@ interface RecentSale {
 
 export function Dashboard() {
   const { t, isRTL, language } = useLanguage();
-  const [partners, setPartners] = useState<Partner[]>([]);
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [stats, setStats] = useState({
     totalSales: 0,
@@ -40,8 +33,7 @@ export function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [partnersRes, salesRes, purchasesRes, inventoryRes, recentSalesRes, financialRes] = await Promise.all([
-        supabase.from('partners').select('*').eq('is_active', true).order('share_percentage', { ascending: false }),
+      const [salesRes, purchasesRes, inventoryRes, recentSalesRes, financialRes] = await Promise.all([
         supabase.from('sales').select('total, source').eq('status', 'confirmed'),
         supabase.from('purchases').select('total').in('status', ['confirmed', 'received']),
         supabase.from('inventory').select('quantity, products(purchase_price)'),
@@ -49,7 +41,6 @@ export function Dashboard() {
         supabase.rpc('get_financial_summary', { p_date_from: null, p_date_to: null, p_branch_id: null }),
       ]);
 
-      if (partnersRes.data) setPartners(partnersRes.data);
       if (recentSalesRes.data) setRecentSales(recentSalesRes.data as any);
 
       const storeSales = salesRes.data?.filter(s => s.source === 'store').reduce((sum, s) => sum + (s.total || 0), 0) || 0;
@@ -168,34 +159,7 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5 text-teal-600" />
-            {t('dashboard.partners')}
-          </h3>
-          {partners.length === 0 ? (
-            <p className="text-center py-4 text-gray-400">{isRTL ? 'لا يوجد شركاء' : 'No partners'}</p>
-          ) : (
-            <div className="space-y-4">
-              {partners.map((partner) => (
-                <div key={partner.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <h4 className="font-semibold text-gray-900">
-                      {language === 'ar' ? partner.name_ar : partner.name}
-                    </h4>
-                    <p className="text-sm text-gray-500">{partner.share_percentage}% {isRTL ? 'حصة' : 'Share'}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-teal-600">
-                      {formatCurrency((stats.operatingNet * partner.share_percentage) / 100)}
-                    </p>
-                    <p className="text-xs text-gray-500">{isRTL ? 'الفترة الحالية' : 'Current Period'}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <AlertsPanel />
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
