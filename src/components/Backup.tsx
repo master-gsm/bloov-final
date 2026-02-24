@@ -170,12 +170,14 @@ export default function Backup() {
       console.log('[ServerBackup] session:', session?.user?.email, 'error:', sessionError?.message);
       if (!session) throw new Error(language === 'ar' ? 'غير مسجل الدخول' : 'Not authenticated');
 
+      const testKey = `test_${Date.now()}.txt`;
       const testBlob = new Blob(['test'], { type: 'text/plain' });
-      const testResult = await supabase.storage.from('backups').upload('test.txt', testBlob, { upsert: true });
+      const testResult = await supabase.storage.from('backups').upload(testKey, testBlob, { upsert: false });
       console.log('[ServerBackup] test upload result:', JSON.stringify(testResult));
       if (testResult.error) {
         throw new Error(`Storage test failed: ${testResult.error.message} (status: ${(testResult.error as any).statusCode})`);
       }
+      await supabase.storage.from('backups').remove([testKey]);
       console.log('[ServerBackup] test upload OK - Storage is working');
 
       const backupData: any = {
