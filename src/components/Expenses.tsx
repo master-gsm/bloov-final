@@ -49,6 +49,7 @@ export default function Expenses() {
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [partners, setPartners] = useState<{ id: string; name: string; name_ar: string }[]>([]);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -64,12 +65,14 @@ export default function Expenses() {
     payment_method: 'cash',
     notes: '',
     notes_ar: '',
+    partner_id: '',
   });
 
   useEffect(() => {
     checkAdmin();
     loadUserBranch();
     loadBranches();
+    loadPartners();
   }, []);
 
   useEffect(() => {
@@ -99,6 +102,11 @@ export default function Expenses() {
   const loadBranches = async () => {
     const { data } = await supabase.from('branches').select('id, name').order('name');
     setBranches(data || []);
+  };
+
+  const loadPartners = async () => {
+    const { data } = await supabase.from('partners').select('id, name, name_ar').eq('is_active', true).order('name');
+    setPartners(data || []);
   };
 
   const checkAdmin = async () => {
@@ -195,6 +203,26 @@ export default function Expenses() {
         }
       }
 
+      // If partner is selected, create partner_contribution first
+      let partnerContributionId = null;
+      if (formData.partner_id) {
+        const { data: contributionData, error: contributionError } = await supabase
+          .from('partner_contributions')
+          .insert({
+            partner_id: formData.partner_id,
+            contribution_type: formData.expense_type,
+            amount: parseFloat(formData.amount),
+            description: formData.description,
+            description_ar: formData.description_ar || formData.description,
+            contribution_date: formData.expense_date,
+          })
+          .select()
+          .single();
+
+        if (contributionError) throw contributionError;
+        partnerContributionId = contributionData.id;
+      }
+
       const { error } = await supabase.from('expenses').insert([
         {
           expense_number: expenseNumber,
@@ -209,6 +237,7 @@ export default function Expenses() {
           attachment_url: attachmentUrl,
           branch_id: selectedBranchId,
           created_by: user?.id,
+          partner_contribution_id: partnerContributionId,
         },
       ]);
 
@@ -223,6 +252,7 @@ export default function Expenses() {
         payment_method: 'cash',
         notes: '',
         notes_ar: '',
+        partner_id: '',
       });
       setAttachmentFile(null);
       setShowForm(false);
@@ -385,6 +415,25 @@ export default function Expenses() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {isRTL ? 'الشريك الدافع (اختياري)' : 'Paid by Partner (Optional)'}
+                </label>
+                <select
+                  value={formData.partner_id}
+                  onChange={(e) => setFormData({ ...formData, partner_id: e.target.value })}
+                  disabled={!canEdit}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="">{isRTL ? 'مصروف مشترك (بدون شريك محدد)' : 'Shared expense (no specific partner)'}</option>
+                  {partners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {isRTL ? p.name_ar || p.name : p.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
