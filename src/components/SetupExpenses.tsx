@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip } from 'lucide-react';
+import { Plus, Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
+import ExcelImport from './partners/ExcelImport';
 
 interface SetupExpense {
   id: string;
@@ -55,7 +56,9 @@ export default function SetupExpenses() {
   const [partners, setPartners] = useState<{ id: string; name: string; name_ar: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingExpense, setEditingExpense] = useState<SetupExpense | null>(null);
+  const [partnerTotals, setPartnerTotals] = useState<Record<string, number>>({});
   const { language } = useLanguage();
 
   const [formData, setFormData] = useState({
@@ -99,12 +102,22 @@ export default function SetupExpenses() {
       .select(`
         *,
         branch:branches(name),
-        supplier:suppliers(name)
+        supplier:suppliers(name),
+        partner:partners(id, name, name_ar)
       `)
       .order('expense_date', { ascending: false });
 
     if (error) throw error;
     setExpenses((data || []) as any[]);
+
+    // Calculate partner totals
+    const totals: Record<string, number> = {};
+    (data || []).forEach((expense: any) => {
+      if (expense.partner_id) {
+        totals[expense.partner_id] = (totals[expense.partner_id] || 0) + Number(expense.amount);
+      }
+    });
+    setPartnerTotals(totals);
   };
 
   const loadBranches = async () => {
@@ -259,33 +272,77 @@ export default function SetupExpenses() {
               : 'Capital and founding expenses (Separate from operating expenses)'}
           </p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowForm(true);
-          }}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-5 h-5" />
-          {language === 'ar' ? 'إضافة مصروف' : 'Add Expense'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            <Upload className="w-5 h-5" />
+            {language === 'ar' ? 'استيراد Excel' : 'Import Excel'}
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-5 h-5" />
+            {language === 'ar' ? 'إضافة مصروف' : 'Add Expense'}
+          </button>
+        </div>
       </div>
 
-      <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-6 border border-purple-200">
+      {/* Partner Payment Summary Cards */}
+      {partners.length > 0 && Object.keys(partnerTotals).length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {partners.map(partner => {
+            const total = partnerTotals[partner.id] || 0;
+            if (total === 0) return null;
+            return (
+              <div key={partner.id} className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg p-5 border border-blue-200 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase font-medium mb-1">
+                      {language === 'ar' ? 'إجمالي مدفوعات' : 'Total Payments'}
+                    </p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {language === 'ar' ? partner.name_ar || partner.name : partner.name}
+                    </p>
+                  </div>
+                  <DollarSign className="w-10 h-10 text-blue-600" />
+                </div>
+                <p className="text-2xl font-bold text-blue-900">
+                  {total.toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{' '}
+                  <span className="text-lg">{language === 'ar' ? 'ر.س' : 'SAR'}</span>
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-lg p-6 border border-gray-200">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-600 mb-1">
               {language === 'ar' ? 'إجمالي مصاريف التأسيس' : 'Total Setup Expenses'}
             </p>
-            <p className="text-3xl font-bold text-purple-900">
+            <p className="text-3xl font-bold text-gray-900">
               {totalSetupExpenses.toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}{' '}
               {language === 'ar' ? 'ر.س' : 'SAR'}
             </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {expenses.length} {language === 'ar' ? 'مصروف' : 'expenses'}
+            </p>
           </div>
-          <DollarSign className="w-12 h-12 text-purple-600" />
+          <DollarSign className="w-12 h-12 text-gray-600" />
         </div>
       </div>
 
@@ -580,6 +637,18 @@ export default function SetupExpenses() {
           </div>
         )}
       </div>
+
+      {/* Excel Import Modal */}
+      {showImport && (
+        <ExcelImport
+          partners={partners}
+          onClose={() => setShowImport(false)}
+          onSuccess={() => {
+            setShowImport(false);
+            loadExpenses();
+          }}
+        />
+      )}
     </div>
   );
 }
