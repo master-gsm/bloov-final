@@ -29,7 +29,8 @@ const BAR_COLORS = ['bg-teal-500', 'bg-sky-500', 'bg-amber-500', 'bg-rose-500', 
 function fmt(val: number) {
   return new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 2 }).format(val);
 }
-function fmtDate(date: string, isRTL: boolean) {
+function fmtDate(date: string | null, isRTL: boolean) {
+  if (!date) return isRTL ? 'بدون تاريخ' : 'No date';
   return new Date(date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
@@ -90,6 +91,8 @@ export function Partners() {
   const [showDistributeModal, setShowDistributeModal] = useState(false);
   const [deactivateConfirm, setDeactivateConfirm] = useState<string | null>(null);
   const [deleteExpenseConfirm, setDeleteExpenseConfirm] = useState<string | null>(null);
+  const [editingExpenseDateId, setEditingExpenseDateId] = useState<string | null>(null);
+  const [editingExpenseDateVal, setEditingExpenseDateVal] = useState('');
   const [voidSettlementConfirm, setVoidSettlementConfirm] = useState<string | null>(null);
 
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -211,8 +214,15 @@ export function Partners() {
 
         const validated = rows.map((row, idx) => {
           const errors: string[] = [];
-          const dateStr = String(row.date || '').trim();
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) errors.push(isRTL ? 'تاريخ غير صحيح' : 'Invalid date');
+          const dateRaw = String(row.date || '').trim();
+          let dateStr: string | null = null;
+          if (dateRaw) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+              dateStr = dateRaw;
+            } else {
+              errors.push(isRTL ? 'صيغة التاريخ غير صحيحة (YYYY-MM-DD) أو اتركه فارغاً' : 'Invalid date format (YYYY-MM-DD) or leave empty');
+            }
+          }
 
           const partnerName = String(row.partner || '').trim();
           const foundPartner = partners.find(
@@ -281,7 +291,7 @@ export function Partners() {
         expense_type: row.type,
         description: row.description,
         amount: row.amount,
-        expense_date: row.date,
+        expense_date: row.date || null,
         payment_method: 'cash',
         partner_id: row._partnerId,
         created_by: authUser.id,
@@ -482,6 +492,20 @@ export function Partners() {
       const result = data as any;
       if (!result?.success) throw new Error(result?.message || 'Failed');
       setDeleteExpenseConfirm(null);
+      await loadData();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleUpdateExpenseDate = async (id: string) => {
+    if (!editingExpenseDateVal) return;
+    try {
+      const { error: err } = await supabase
+        .from('setup_expenses')
+        .update({ expense_date: editingExpenseDateVal })
+        .eq('id', id);
+      if (err) throw err;
+      setEditingExpenseDateId(null);
+      setEditingExpenseDateVal('');
       await loadData();
     } catch (err: any) { alert(err.message); }
   };
@@ -927,8 +951,43 @@ export function Partners() {
                 ) : expenses.map(expense => {
                   const p = partners.find(pp => pp.id === expense.partner_id);
                   return (
-                    <tr key={expense.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                      <td className="px-4 py-2.5 text-xs text-gray-600">{fmtDate(expense.expense_date, isRTL)}</td>
+                    <tr key={expense.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${!expense.expense_date ? 'bg-amber-50/30' : ''}`}>
+                      <td className="px-4 py-2.5 text-xs">
+                        {editingExpenseDateId === expense.id ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="date"
+                              value={editingExpenseDateVal}
+                              onChange={e => setEditingExpenseDateVal(e.target.value)}
+                              className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-32"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleUpdateExpenseDate(expense.id)}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded"
+                              disabled={!editingExpenseDateVal}
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => { setEditingExpenseDateId(null); setEditingExpenseDateVal(''); }}
+                              className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => canEdit ? (setEditingExpenseDateId(expense.id), setEditingExpenseDateVal(expense.expense_date || '')) : undefined}
+                            className={`flex items-center gap-1 group ${!expense.expense_date ? 'text-amber-600 font-medium' : 'text-gray-600'} ${canEdit ? 'hover:text-blue-600 cursor-pointer' : 'cursor-default'}`}
+                            title={canEdit ? (isRTL ? 'انقر لتعديل التاريخ' : 'Click to edit date') : undefined}
+                          >
+                            {!expense.expense_date && <CalendarDays className="w-3 h-3" />}
+                            {fmtDate(expense.expense_date, isRTL)}
+                            {canEdit && <Edit3 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-50 ml-0.5" />}
+                          </button>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-sm font-medium">{p ? (isRTL ? p.name_ar : p.name) : '-'}</td>
                       <td className="px-4 py-2.5">
                         <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">

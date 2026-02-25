@@ -77,7 +77,7 @@ export interface SetupExpense {
   description: string;
   description_ar: string | null;
   amount: number;
-  expense_date: string;
+  expense_date: string | null;
   attachment: string | null;
   expense_type: string;
   notes: string | null;

@@ -12,7 +12,7 @@ interface Partner {
 }
 
 interface ImportRow {
-  date: string;
+  date: string | null;
   partner: string;
   type: string;
   description: string;
@@ -21,6 +21,7 @@ interface ImportRow {
   _isValid: boolean;
   _errors: string[];
   _partnerId?: string;
+  _hasDate: boolean;
 }
 
 interface ImportModalProps {
@@ -41,15 +42,23 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
   const [validCount, setValidCount] = useState(0);
   const [invalidCount, setInvalidCount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [noDateCount, setNoDateCount] = useState(0);
 
   const validateRow = (row: any, index: number): ImportRow => {
     const errors: string[] = [];
     let partnerId: string | undefined;
 
-    // Validate date
-    const dateStr = String(row.date || '').trim();
-    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      errors.push(isRTL ? 'تاريخ غير صحيح (YYYY-MM-DD مطلوب)' : 'Invalid date (YYYY-MM-DD required)');
+    // Validate date - optional, accept empty/missing
+    const dateRaw = String(row.date || '').trim();
+    let dateStr: string | null = null;
+    let hasDate = false;
+    if (dateRaw) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+        dateStr = dateRaw;
+        hasDate = true;
+      } else {
+        errors.push(isRTL ? 'صيغة التاريخ غير صحيحة (YYYY-MM-DD) أو اتركه فارغاً' : 'Invalid date format (use YYYY-MM-DD) or leave empty');
+      }
     }
 
     // Validate partner
@@ -92,10 +101,11 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
       type,
       description,
       amount: isNaN(amount) ? 0 : amount,
-      _rowIndex: index + 2, // +2 for header row and 0-index
+      _rowIndex: index + 2,
       _isValid: errors.length === 0,
       _errors: errors,
-      _partnerId: partnerId
+      _partnerId: partnerId,
+      _hasDate: hasDate,
     };
   };
 
@@ -135,10 +145,12 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
         const total = validatedRows
           .filter(r => r._isValid)
           .reduce((sum, r) => sum + r.amount, 0);
+        const noDate = validatedRows.filter(r => r._isValid && !r._hasDate).length;
 
         setPreview(validatedRows);
         setValidCount(valid);
         setInvalidCount(invalid);
+        setNoDateCount(noDate);
         setTotalAmount(total);
         setShowPreview(true);
       } catch (error) {
@@ -175,7 +187,7 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
         expense_type: row.type,
         description: row.description,
         amount: row.amount,
-        expense_date: row.date,
+        expense_date: row.date || null,
         payment_method: 'cash',
         partner_id: row._partnerId,
         created_by: user.id,
@@ -326,6 +338,17 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
                 </div>
               </div>
 
+              {noDateCount > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-amber-800">
+                    {isRTL
+                      ? `${noDateCount} سجل بدون تاريخ - سيتم استيرادها وتستطيع إضافة التاريخ لاحقاً من الجدول`
+                      : `${noDateCount} record(s) without date - they will be imported and you can set the date later from the table`}
+                  </p>
+                </div>
+              )}
+
               {/* Preview Table */}
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="overflow-x-auto max-h-96">
@@ -361,8 +384,11 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
                           <td className="px-4 py-3 text-sm text-gray-600">
                             {row._rowIndex}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            {row.date}
+                          <td className="px-4 py-3 text-sm">
+                            {row.date
+                              ? <span className="text-gray-900">{row.date}</span>
+                              : <span className="text-amber-600 text-xs font-medium">{isRTL ? 'بدون تاريخ' : 'No date'}</span>
+                            }
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900">
                             {row.partner}
