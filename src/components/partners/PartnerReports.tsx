@@ -121,22 +121,29 @@ export function PartnerReports({ accounts, distributions, withdrawals, isRTL, la
 
           {report === 'current_account' && (
             <div className="space-y-4">
-              {accounts.map(a => (
-                <div key={a.partner_id} className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
-                    <span className="font-bold text-gray-900">{isRTL ? a.name_ar : a.name}</span>
-                    <span className={`text-sm font-bold ${Number(a.current_account_balance) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {Number(a.current_account_balance) >= 0 ? '+' : ''}{fmt(Number(a.current_account_balance))} {isRTL ? 'ر.س' : 'SAR'}
-                    </span>
+              {accounts.map(a => {
+                const capital = Number(a.capital_contribution);
+                const distributed = Number(a.total_profit_distributed);
+                const withdrawn = Number(a.total_withdrawals);
+                const netSettlements = Number(a.total_settlements_received) - Number(a.total_settlements_paid);
+                const totalBalance = capital + distributed - withdrawn + netSettlements;
+                return (
+                  <div key={a.partner_id} className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
+                      <span className="font-bold text-gray-900">{isRTL ? a.name_ar : a.name}</span>
+                      <span className={`text-sm font-bold ${totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {totalBalance >= 0 ? '+' : ''}{fmt(totalBalance)} {isRTL ? 'ر.س' : 'SAR'}
+                      </span>
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'رأس المال' : 'Capital'}</span><span className="font-medium text-teal-700">{fmt(capital)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'أرباح موزعة' : 'Distributed'}</span><span className="font-medium text-green-600">+{fmt(distributed)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'مسحوبات' : 'Withdrawals'}</span><span className="font-medium text-red-600">-{fmt(withdrawn)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'تسويات صافية' : 'Net Settlements'}</span><span className={`font-medium ${netSettlements >= 0 ? 'text-green-600' : 'text-red-600'}`}>{netSettlements >= 0 ? '+' : ''}{fmt(netSettlements)}</span></div>
+                    </div>
                   </div>
-                  <div className="p-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'رأس المال' : 'Capital'}</span><span className="font-medium">{fmt(Number(a.capital_contribution))}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'أرباح موزعة' : 'Distributed'}</span><span className="font-medium text-green-600">+{fmt(Number(a.total_profit_distributed))}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'مسحوبات' : 'Withdrawals'}</span><span className="font-medium text-red-600">-{fmt(Number(a.total_withdrawals))}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">{isRTL ? 'تسويات صافية' : 'Net Settlements'}</span><span className="font-medium">{fmt(Number(a.total_settlements_received) - Number(a.total_settlements_paid))}</span></div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
