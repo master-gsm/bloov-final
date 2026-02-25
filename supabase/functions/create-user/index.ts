@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
     if (
       profileError ||
       !userProfile ||
-      userProfile.role !== "admin" ||
+      !["admin", "super_admin"].includes(userProfile.role) ||
       !userProfile.is_active
     ) {
       return new Response(
