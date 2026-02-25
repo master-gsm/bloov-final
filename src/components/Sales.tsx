@@ -7,10 +7,11 @@ import { useOffline } from '../contexts/OfflineFirstContext';
 import { supabase } from '../lib/supabase';
 import { indexedDBManager } from '../lib/offline/indexedDBManager';
 import { enhancedSyncManager } from '../lib/offline/enhancedSyncManager';
-import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, CreditCard as Edit, RotateCcw, Building2 } from 'lucide-react';
+import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, CreditCard as Edit, RotateCcw, Building2, Monitor } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
 import { Pagination } from './Pagination';
 import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
+import { POSView } from './pos/POSView';
 
 interface Product {
   id: string;
@@ -123,6 +124,7 @@ export function Sales() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
+  const [showPOS, setShowPOS] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [viewingSale, setViewingSale] = useState<Sale | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
@@ -1430,6 +1432,8 @@ export function Sales() {
   }
 
   return (
+    <>
+    {showPOS && <POSView onClose={() => setShowPOS(false)} />}
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -1439,12 +1443,20 @@ export function Sales() {
           </div>
           <p className="text-gray-500 mt-1">{isRTL ? 'إدارة المبيعات والفواتير' : 'Manage sales and invoices'}</p>
         </div>
-        {canEdit && (
-          <button onClick={openNewSale} className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium">
-            <Plus className="w-5 h-5" />
-            {isRTL ? 'بيع جديد' : 'New Sale'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <button onClick={() => setShowPOS(true)} className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2.5 rounded-lg hover:bg-violet-700 transition font-medium">
+              <Monitor className="w-5 h-5" />
+              {isRTL ? 'وضع POS' : 'POS Mode'}
+            </button>
+          )}
+          {canEdit && (
+            <button onClick={openNewSale} className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition font-medium">
+              <Plus className="w-5 h-5" />
+              {isRTL ? 'بيع جديد' : 'New Sale'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -1679,5 +1691,6 @@ export function Sales() {
         />
       )}
     </div>
+    </>
   );
 }
