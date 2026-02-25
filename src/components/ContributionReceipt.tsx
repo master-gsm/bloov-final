@@ -27,7 +27,7 @@ export function ContributionReceipt({ contribution, partner, onClose }: Contribu
   const printRef = useRef<HTMLDivElement>(null);
 
   const [companyName, setCompanyName] = useState('BLOOV');
-  const [companyNameAr, setCompanyNameAr] = useState('بلوف');
+  const [companyNameAr, setCompanyNameAr] = useState('BLOOV');
   const [taxNumber, setTaxNumber] = useState('');
 
   useEffect(() => {

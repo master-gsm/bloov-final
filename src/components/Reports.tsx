@@ -511,7 +511,7 @@ export function Reports() {
 
     const summaryData = [
       [isRTL ? 'التقرير المالي الشامل' : 'Comprehensive Financial Report'],
-      [isRTL ? 'نظام بلوف المحاسبي' : 'BLOOV Accounting System'],
+      [isRTL ? 'نظام BLOOV المحاسبي' : 'BLOOV Accounting System'],
       [isRTL ? `الفترة: من ${dateFrom} إلى ${dateTo}` : `Period: From ${dateFrom} To ${dateTo}`],
       [],
       [isRTL ? 'المبيعات' : 'Sales', formatCurrency(reportData.sales.total)],

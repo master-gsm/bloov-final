@@ -73,10 +73,10 @@ export function LoginForm() {
               />
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-violet-900 drop-shadow-sm">
+          <h2 className="text-3xl font-bold text-gray-900 drop-shadow-sm">
             {showResetForm ? t('auth.resetPassword') : t('auth.welcome')}
           </h2>
-          <p className="mt-2 text-sm text-violet-700/80">
+          <p className="mt-2 text-sm text-gray-700">
             {showResetForm ? t('auth.resetPasswordDescription') : t('auth.description')}
           </p>
         </div>
@@ -91,7 +91,7 @@ export function LoginForm() {
 
             <div className="space-y-4">
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-violet-900 mb-1">
+                <label htmlFor="username" className="block text-sm font-medium text-gray-900 mb-1">
                   {isRTL ? 'اسم المستخدم' : 'Username'}
                 </label>
                 <input
@@ -107,7 +107,7 @@ export function LoginForm() {
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-violet-900 mb-1">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-900 mb-1">
                   {t('auth.password')}
                 </label>
                 <input
@@ -126,7 +126,7 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => setShowResetForm(true)}
-                className="text-sm text-violet-600 hover:text-violet-800 font-medium transition"
+                className="text-sm text-gray-600 hover:text-gray-900 font-medium transition"
               >
                 {t('auth.forgotPassword')}
               </button>
@@ -156,7 +156,7 @@ export function LoginForm() {
             )}
 
             <div>
-              <label htmlFor="reset-email" className="block text-sm font-medium text-violet-900 mb-1">
+              <label htmlFor="reset-email" className="block text-sm font-medium text-gray-900 mb-1">
                 {t('auth.email')}
               </label>
               <input
@@ -186,7 +186,7 @@ export function LoginForm() {
                 setError('');
                 setSuccess('');
               }}
-              className="w-full flex items-center justify-center gap-2 text-violet-700 py-3 px-4 rounded-lg border border-violet-200/60 hover:bg-violet-50/50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition font-medium"
+              className="w-full flex items-center justify-center gap-2 text-gray-700 py-3 px-4 rounded-lg border border-gray-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition font-medium"
             >
               <ArrowLeft className={`w-5 h-5 ${isRTL ? 'rotate-180' : ''}`} />
               {t('auth.backToLogin')}

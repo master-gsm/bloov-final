@@ -135,7 +135,7 @@ export function Dashboard() {
           {isRTL ? 'مرحباً بك في BLOOV' : 'Welcome to BLOOV'}
         </h2>
         <p className="text-teal-100 text-lg">
-          {isRTL ? 'نظام محاسبي متكامل صُمم خصيصاً لبلوف' : 'A comprehensive accounting system designed specifically for BLOOV'}
+          {isRTL ? 'نظام محاسبي متكامل صُمم خصيصاً لـ BLOOV' : 'A comprehensive accounting system designed specifically for BLOOV'}
         </p>
       </div>
 

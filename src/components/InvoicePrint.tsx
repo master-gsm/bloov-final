@@ -35,7 +35,7 @@ export function InvoicePrint({ sale, items, onClose, onWhatsApp }: InvoicePrintP
   const printRef = useRef<HTMLDivElement>(null);
 
   const [companyName, setCompanyName] = useState('BLOOV');
-  const [companyNameAr, setCompanyNameAr] = useState('بلوف');
+  const [companyNameAr, setCompanyNameAr] = useState('BLOOV');
   const [businessType, setBusinessType] = useState('Flowers & Gifts');
   const [businessTypeAr, setBusinessTypeAr] = useState('محل ورد وهدايا');
   const [taxNumber, setTaxNumber] = useState('');
