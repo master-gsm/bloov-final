@@ -89,10 +89,6 @@ export function ResetTestDatabaseButton({ isRTL, setBackupMessage }: ResetTestDa
       setShowConfirmModal(false);
       setConfirmationText('');
 
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-
     } catch (error: any) {
       console.error('Reset error:', error);
       setBackupMessage(

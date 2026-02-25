@@ -9,14 +9,12 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache');
         return cache.addAll(urlsToCache);
       })
       .catch((error) => {
         console.error('Cache installation failed:', error);
       })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -75,7 +73,6 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim();
 });
 
 self.addEventListener('sync', (event) => {

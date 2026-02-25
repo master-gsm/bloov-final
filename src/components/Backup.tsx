@@ -67,7 +67,7 @@ export default function Backup() {
     }
 
     loadBackupHistory();
-    const interval = setInterval(loadBackupHistory, 5000);
+    const interval = setInterval(loadBackupHistory, 60000);
     return () => clearInterval(interval);
   }, [profile]);
 
