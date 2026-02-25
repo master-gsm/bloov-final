@@ -92,6 +92,19 @@ export const EXPENSE_TYPES = {
   operational: { ar: 'مصروف تشغيلي', en: 'Operational Expense' },
 } as const;
 
+export function mapExpenseType(raw: string): string {
+  const normalized = raw.trim().toLowerCase();
+  for (const [key, labels] of Object.entries(EXPENSE_TYPES)) {
+    if (normalized === key) return key;
+    if (normalized === labels.ar || normalized === labels.en.toLowerCase()) return key;
+  }
+  if (/capital|رأس\s*مال/i.test(raw)) return 'capital';
+  if (/inventor|مخزون/i.test(raw)) return 'inventory';
+  if (/asset|أصول/i.test(raw)) return 'asset';
+  if (/operat|تشغيل/i.test(raw)) return 'operational';
+  return 'capital';
+}
+
 export const MONTH_NAMES_AR = [
   '', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
   'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',

@@ -11,6 +11,7 @@ import PartnerSettlements from './partners/PartnerSettlements';
 import {
   Partner, PartnerAccount, PartnerWithdrawal, ProfitDistribution,
   PartnerSettlement, SetupExpense, EXPENSE_TYPES, MONTH_NAMES_AR, MONTH_NAMES_EN,
+  mapExpenseType,
 } from './partners/types';
 import {
   Users, Plus, DollarSign, X, ShieldAlert, FileSpreadsheet,
@@ -267,8 +268,8 @@ export function Partners() {
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
     const templateData = [
-      { date: yesterday, partner: firstPartner?.name_ar || firstPartner?.name || 'سامي', type: 'رأس مال نقدي', description: 'دفع حصة رأسمالية', amount: 10000 },
-      { date: today, partner: secondPartner?.name_ar || secondPartner?.name || 'أنس', type: 'رأس مال نقدي', description: 'دفع حصة رأسمالية', amount: 5000 },
+      { date: yesterday, partner: firstPartner?.name_ar || firstPartner?.name || 'سامي', type: 'capital', description: 'دفع حصة رأسمالية', amount: 10000 },
+      { date: today, partner: secondPartner?.name_ar || secondPartner?.name || 'أنس', type: 'asset', description: 'شراء أصول ثابتة', amount: 5000 },
     ];
 
     const ws = XLSX.utils.json_to_sheet(templateData, { header: ['date', 'partner', 'type', 'description', 'amount'] });
@@ -286,18 +287,22 @@ export function Partners() {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) throw new Error('Not authenticated');
 
-      const records = valid.map(row => ({
-        branch_id: currentBranchId || null,
-        category: row.type || 'capital',
-        expense_type: row.type,
-        description: row.description,
-        amount: row.amount,
-        expense_date: row.date || null,
-        payment_method: 'cash',
-        partner_id: row._partnerId,
-        created_by: authUser.id,
-        notes: `Imported: ${importFile?.name || ''}`,
-      }));
+      const today = new Date().toISOString().split('T')[0];
+      const records = valid.map(row => {
+        const mapped = mapExpenseType(row.type || 'capital');
+        return {
+          branch_id: currentBranchId || null,
+          category: mapped,
+          expense_type: mapped,
+          description: row.description,
+          amount: row.amount,
+          expense_date: row.date || today,
+          payment_method: 'cash',
+          partner_id: row._partnerId,
+          created_by: authUser.id,
+          notes: `Imported: ${importFile?.name || ''}`,
+        };
+      });
 
       const { error: insertError } = await supabase.from('setup_expenses').insert(records);
       if (insertError) throw insertError;

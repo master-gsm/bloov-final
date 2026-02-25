@@ -15,8 +15,10 @@ type ExpenseType = 'capital' | 'inventory' | 'asset' | 'operational';
 
 const EXPENSE_TYPE_MAP: Record<string, ExpenseType> = {
   capital: 'capital',
+  'cash capital': 'capital',
   'رأس مال': 'capital',
   'رأسمال': 'capital',
+  'رأس مال نقدي': 'capital',
   'رأس_مال': 'capital',
   ra2s_mal: 'capital',
   inventory: 'inventory',
@@ -28,9 +30,12 @@ const EXPENSE_TYPE_MAP: Record<string, ExpenseType> = {
   'أصول': 'asset',
   'أصل ثابت': 'asset',
   'أصول ثابتة': 'asset',
+  'fixed assets': 'asset',
   'تجهيزات': 'asset',
   equipment: 'asset',
   operational: 'operational',
+  'operational expense': 'operational',
+  'مصروف تشغيلي': 'operational',
   'تشغيلي': 'operational',
   'تشغيل': 'operational',
   operations: 'operational',
