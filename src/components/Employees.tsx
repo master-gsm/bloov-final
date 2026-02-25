@@ -5,12 +5,13 @@ import { supabase } from '../lib/supabase';
 import {
   Users, Plus, Edit2, Trash2, DollarSign, TrendingUp, Calendar,
   Search, X, Save, Loader2, AlertCircle, CheckCircle, Clock,
-  CalendarDays, FileText, UserX,
+  CalendarDays, FileText, UserX, ShieldAlert,
 } from 'lucide-react';
 import { LeavesTab } from './hr/LeavesTab';
 import { SettlementsTab } from './hr/SettlementsTab';
 import { PayrollTab } from './hr/PayrollTab';
 import { LoansTab } from './hr/LoansTab';
+import { CommissionsPanel } from './hr/CommissionsPanel';
 import type { Employee, Commission, EmployeeLeave, EmployeeSettlement, Loan, Tab } from './hr/types';
 
 export function Employees() {
@@ -46,6 +47,8 @@ export function Employees() {
     employment_type: 'full_time' as const,
     contract_type: 'permanent' as const,
     vacation_balance_days: 21,
+    iqama_number: '',
+    iqama_expiry_date: '',
     termination_date: '',
     termination_reason: '',
     notes: '',
@@ -140,6 +143,8 @@ export function Employees() {
         employment_type: formData.employment_type,
         contract_type: formData.contract_type,
         vacation_balance_days: formData.vacation_balance_days,
+        iqama_number: formData.iqama_number || null,
+        iqama_expiry_date: formData.iqama_expiry_date || null,
         notes: formData.notes,
       };
       if (formData.termination_date) {
@@ -184,6 +189,8 @@ export function Employees() {
       employment_type: employee.employment_type || 'full_time',
       contract_type: (employee as any).contract_type || 'permanent',
       vacation_balance_days: (employee as any).vacation_balance_days ?? 21,
+      iqama_number: (employee as any).iqama_number || '',
+      iqama_expiry_date: (employee as any).iqama_expiry_date || '',
       termination_date: employee.termination_date || '',
       termination_reason: employee.termination_reason || '',
       notes: employee.notes || '',
@@ -279,9 +286,9 @@ export function Employees() {
                     {[
                       isRTL ? 'الاسم' : 'Name',
                       isRTL ? 'المنصب' : 'Position',
-                      isRTL ? 'القسم' : 'Department',
                       isRTL ? 'الفرع' : 'Branch',
                       isRTL ? 'الراتب' : 'Salary',
+                      isRTL ? 'الإقامة' : 'Residence',
                       isRTL ? 'رصيد الإجازة' : 'Leave Balance',
                       isRTL ? 'العمولة %' : 'Commission %',
                       isRTL ? 'الحالة' : 'Status',
@@ -309,10 +316,32 @@ export function Employees() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{emp.position}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{emp.department}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{emp.branches?.name}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">
                         {(emp.basic_salary ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {(emp as any).iqama_expiry_date ? (() => {
+                          const expiry = new Date((emp as any).iqama_expiry_date);
+                          const today = new Date();
+                          const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                          const isExpired = diffDays < 0;
+                          const isWarning = diffDays >= 0 && diffDays <= 30;
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${
+                              isExpired ? 'bg-red-100 text-red-700' : isWarning ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                            }`}>
+                              {isExpired && <ShieldAlert className="w-3 h-3" />}
+                              {isExpired
+                                ? (isRTL ? 'منتهية' : 'Expired')
+                                : isWarning
+                                  ? (isRTL ? `${diffDays} يوم` : `${diffDays}d left`)
+                                  : new Date((emp as any).iqama_expiry_date).toLocaleDateString()}
+                            </span>
+                          );
+                        })() : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-center">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${
@@ -373,87 +402,7 @@ export function Employees() {
       )}
 
       {activeTab === 'commissions' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              {
-                label: isRTL ? 'إجمالي العمولات المستحقة' : 'Total Pending',
-                value: commissions.filter(c => (c as any).status === 'pending' || (!(c as any).status && !c.is_paid)).reduce((s, c) => s + (c.commission_amount ?? 0), 0),
-                color: 'text-amber-600',
-              },
-              {
-                label: isRTL ? 'إجمالي العمولات المعتمدة' : 'Total Approved',
-                value: commissions.filter(c => (c as any).status === 'approved' || c.is_paid).reduce((s, c) => s + (c.commission_amount ?? 0), 0),
-                color: 'text-green-600',
-              },
-              {
-                label: isRTL ? 'إجمالي جميع العمولات' : 'Total All',
-                value: commissions.filter(c => (c as any).status !== 'void').reduce((s, c) => s + (c.commission_amount ?? 0), 0),
-                color: 'text-teal-600',
-              },
-            ].map((card, i) => (
-              <div key={i} className="bg-white rounded-xl shadow-sm border p-5">
-                <p className="text-sm text-gray-500 mb-1">{card.label}</p>
-                <p className={`text-2xl font-bold ${card.color}`}>
-                  {card.value.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {isRTL ? 'ر.س' : 'SAR'}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    {[
-                      isRTL ? 'الموظف' : 'Employee',
-                      isRTL ? 'مبلغ البيع' : 'Sale Amount',
-                      isRTL ? 'نسبة العمولة' : 'Rate',
-                      isRTL ? 'مبلغ العمولة' : 'Commission',
-                      isRTL ? 'الحالة' : 'Status',
-                      isRTL ? 'التاريخ' : 'Date',
-                    ].map((h, i) => (
-                      <th key={i} className="px-4 py-3 text-right text-sm font-medium text-gray-700">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {loading ? (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-teal-600" />
-                    </td></tr>
-                  ) : commissions.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                      {isRTL ? 'لا يوجد عمولات' : 'No commissions'}
-                    </td></tr>
-                  ) : commissions.map(comm => (
-                    <tr key={comm.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{comm.employees?.full_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{(comm.sale_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{comm.commission_rate}%</td>
-                      <td className="px-4 py-3 text-sm font-bold text-green-600">{(comm.commission_amount ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          (comm as any).status === 'approved' || comm.is_paid ? 'bg-green-100 text-green-700' :
-                          (comm as any).status === 'void'                     ? 'bg-red-100 text-red-700'   :
-                                                                                'bg-amber-100 text-amber-700'
-                        }`}>
-                          {(comm as any).status === 'approved' || comm.is_paid
-                            ? <><CheckCircle className="w-3 h-3" /> {isRTL ? 'مؤكدة' : 'Approved'}</>
-                            : (comm as any).status === 'void'
-                              ? <><X className="w-3 h-3" /> {isRTL ? 'ملغاة' : 'Void'}</>
-                              : <><Clock className="w-3 h-3" /> {isRTL ? 'معلقة' : 'Pending'}</>}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{new Date(comm.created_at).toLocaleDateString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <CommissionsPanel isRTL={isRTL} commissions={commissions} loading={loading} />
       )}
 
       {activeTab === 'loans' && (
@@ -572,6 +521,16 @@ export function Employees() {
                   <option value="fixed_term">{isRTL ? 'محدد المدة' : 'Fixed Term'}</option>
                   <option value="project">{isRTL ? 'مشروع' : 'Project-based'}</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'رقم الإقامة' : 'Residence Number (Iqama)'}</label>
+                <input type="text" value={formData.iqama_number} onChange={e => setFormData({ ...formData, iqama_number: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'تاريخ انتهاء الإقامة' : 'Residence Expiry Date'}</label>
+                <input type="date" value={formData.iqama_expiry_date} onChange={e => setFormData({ ...formData, iqama_expiry_date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'نسبة عمولة المبيعات الداخلية %' : 'Internal Commission %'}</label>

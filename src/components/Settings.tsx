@@ -7,13 +7,13 @@ import { supabase } from '../lib/supabase';
 import {
   Settings as SettingsIcon, Globe, Building2, Shield, Save, Receipt,
   Truck, Heart, Bell, Package, CreditCard, FileText, QrCode, CheckCircle, Loader2,
-  AlertCircle, MessageSquare, Brain, Sparkles, TestTube, Info, Code2, User
+  AlertCircle, MessageSquare, TestTube, Info, Code2, User
 } from 'lucide-react';
 import { ResetTestDatabaseButton } from './ResetTestDatabaseButton';
 
 type SettingsMap = Record<string, string>;
 
-const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'ai', 'testing', 'language', 'about'] as const;
+const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'testing', 'language', 'about'] as const;
 type Tab = typeof TABS[number];
 
 export function Settings() {
@@ -116,7 +116,6 @@ export function Settings() {
     inventory: { icon: Package, label: 'Inventory', labelAr: 'المخزون' },
     loyalty: { icon: Heart, label: 'Loyalty', labelAr: 'الولاء' },
     sms: { icon: MessageSquare, label: 'SMS Gateway', labelAr: 'الرسائل النصية' },
-    ai: { icon: Brain, label: 'AI Analysis', labelAr: 'التحليل الذكي' },
     testing: { icon: TestTube, label: 'Test Mode & Reset', labelAr: 'وضع التجربة والتنظيف' },
     language: { icon: Globe, label: 'Language', labelAr: 'اللغة والعرض' },
     about: { icon: Info, label: 'About', labelAr: 'نبذة عن البرنامج' },
@@ -486,166 +485,6 @@ export function Settings() {
           </div>
         )}
 
-        {activeTab === 'ai' && (
-          <div className="grid grid-cols-1 gap-6">
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-                  <Brain className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">
-                    {isRTL ? 'إعدادات الذكاء الاصطناعي' : 'AI Analysis Settings'}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {isRTL ? 'تفعيل وتكوين ميزات التحليل الذكي' : 'Enable and configure AI-powered analysis features'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-6">
-                <div className="flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold text-amber-900 mb-1">
-                      {isRTL ? 'ماذا تحصل مع الذكاء الاصطناعي؟' : 'What You Get with AI:'}
-                    </h4>
-                    <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
-                      <li>{isRTL ? 'توقعات ذكية للمبيعات والمخزون' : 'Smart sales & inventory forecasts'}</li>
-                      <li>{isRTL ? 'تصنيف تلقائي للمصروفات' : 'Auto-categorize expenses'}</li>
-                      <li>{isRTL ? 'استعلامات باللغة الطبيعية' : 'Natural language queries'}</li>
-                      <li>{isRTL ? 'تحليل العملاء وتحديد المعرضين للخطر' : 'Customer insights & at-risk detection'}</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'الإعدادات الأساسية' : 'Basic Settings'}</h3>
-
-              {renderToggle('ai_enabled', 'Enable AI Analysis', 'تفعيل التحليل الذكي',
-                'Enable AI-powered features', 'تفعيل ميزات الذكاء الاصطناعي')}
-
-              {renderSelect('ai_provider', 'AI Provider', 'مزود الذكاء الاصطناعي', [
-                { value: 'openai', label: 'OpenAI', labelAr: 'OpenAI' },
-                { value: 'gemini', label: 'Google Gemini', labelAr: 'Google Gemini' },
-              ])}
-
-              {settings['ai_provider'] === 'openai' && renderSelect('ai_model', 'OpenAI Model', 'نموذج OpenAI', [
-                { value: 'gpt-4o-mini', label: 'GPT-4o Mini (Recommended)', labelAr: 'GPT-4o Mini (موصى به)' },
-                { value: 'gpt-4o', label: 'GPT-4o (Most Capable)', labelAr: 'GPT-4o (الأقوى)' },
-                { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', labelAr: 'GPT-4 Turbo' },
-                { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Cheapest)', labelAr: 'GPT-3.5 Turbo (الأرخص)' },
-              ])}
-
-              {settings['ai_provider'] === 'gemini' && renderSelect('ai_model', 'Gemini Model', 'نموذج Gemini', [
-                { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Recommended)', labelAr: 'Gemini 2.0 Flash (موصى به)' },
-                { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash (Latest)', labelAr: 'Gemini 2.5 Flash (الأحدث)' },
-                { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Most Capable)', labelAr: 'Gemini 1.5 Pro (الأقوى)' },
-                { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Fast)', labelAr: 'Gemini 1.5 Flash (سريع)' },
-              ])}
-
-              {renderInput('ai_api_key', 'API Key', 'مفتاح API', {
-                type: 'password',
-                placeholder: settings['ai_provider'] === 'gemini' ? 'AIza...' : 'sk-...',
-              })}
-
-              {settings['ai_provider'] === 'openai' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                  <h4 className="font-semibold text-blue-900 mb-2">
-                    {isRTL ? 'كيفية الحصول على مفتاح OpenAI:' : 'How to Get OpenAI Key:'}
-                  </h4>
-                  <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
-                    <li>
-                      {isRTL ? 'اذهب إلى' : 'Go to'}{' '}
-                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-blue-600">
-                        platform.openai.com/api-keys
-                      </a>
-                    </li>
-                    <li>{isRTL ? 'سجل دخول أو أنشئ حساب جديد' : 'Sign in or create a new account'}</li>
-                    <li>{isRTL ? 'انقر على "Create new secret key"' : 'Click "Create new secret key"'}</li>
-                    <li>{isRTL ? 'انسخ المفتاح والصقه أعلاه' : 'Copy the key and paste it above'}</li>
-                  </ol>
-                  <p className="text-xs text-blue-700 mt-3">
-                    {isRTL
-                      ? 'ملاحظة: OpenAI تفرض رسوم بناءً على الاستخدام. GPT-4o Mini موصى به للتكلفة المناسبة.'
-                      : 'Note: OpenAI charges per usage. GPT-4o Mini is recommended for cost-effectiveness.'}
-                  </p>
-                </div>
-              )}
-
-              {settings['ai_provider'] === 'gemini' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                  <h4 className="font-semibold text-blue-900 mb-2">
-                    {isRTL ? 'كيفية الحصول على مفتاح Gemini:' : 'How to Get Gemini Key:'}
-                  </h4>
-                  <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
-                    <li>
-                      {isRTL ? 'اذهب إلى' : 'Go to'}{' '}
-                      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-blue-600">
-                        aistudio.google.com/apikey
-                      </a>
-                    </li>
-                    <li>{isRTL ? 'سجل دخول بحساب Google' : 'Sign in with your Google account'}</li>
-                    <li>{isRTL ? 'انقر على "Create API Key"' : 'Click "Create API Key"'}</li>
-                    <li>{isRTL ? 'انسخ المفتاح والصقه أعلاه' : 'Copy the key and paste it above'}</li>
-                  </ol>
-                  <p className="text-xs text-blue-700 mt-3">
-                    {isRTL
-                      ? 'ملاحظة: Gemini يقدم طبقة مجانية سخية. Gemini 2.0 Flash موصى به للأداء والتكلفة.'
-                      : 'Note: Gemini offers a generous free tier. Gemini 2.0 Flash is recommended for performance and cost.'}
-                  </p>
-                </div>
-              )}
-
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4">
-                <h4 className="font-semibold text-green-900 mb-2">
-                  {isRTL ? 'التكلفة المتوقعة:' : 'Estimated Costs:'}
-                </h4>
-                <div className="text-sm text-green-800 space-y-1">
-                  {settings['ai_provider'] === 'gemini' ? (
-                    <>
-                      <p><strong>Gemini 2.0 Flash:</strong> {isRTL ? 'مجاني (حتى 15 طلب/دقيقة)' : 'Free (up to 15 req/min)'}</p>
-                      <p><strong>Gemini 1.5 Pro:</strong> {isRTL ? 'مجاني (حتى 2 طلب/دقيقة)' : 'Free (up to 2 req/min)'}</p>
-                    </>
-                  ) : (
-                    <>
-                      <p><strong>GPT-4o Mini:</strong> ~$0.01 per query (Budget-friendly)</p>
-                      <p><strong>GPT-4o:</strong> ~$0.10 per query (High quality)</p>
-                    </>
-                  )}
-                  <p className="text-xs mt-2">
-                    {isRTL
-                      ? 'هذه تقديرات تقريبية. التكلفة الفعلية تعتمد على طول وتعقيد الاستعلام.'
-                      : 'These are approximate estimates. Actual costs depend on query length and complexity.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  onClick={saveSettings}
-                  disabled={saving}
-                  className={`w-full flex items-center justify-center gap-2 px-5 py-3 rounded-lg font-medium transition text-base ${
-                    saved
-                      ? 'bg-green-600 text-white'
-                      : 'bg-teal-600 text-white hover:bg-teal-700'
-                  } disabled:opacity-50`}
-                >
-                  {saving ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> {isRTL ? 'جاري الحفظ...' : 'Saving...'}</>
-                  ) : saved ? (
-                    <><CheckCircle className="w-5 h-5" /> {isRTL ? 'تم حفظ الإعدادات' : 'Settings Saved'}</>
-                  ) : (
-                    <><Save className="w-5 h-5" /> {isRTL ? 'حفظ إعدادات الذكاء الاصطناعي' : 'Save AI Settings'}</>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {activeTab === 'testing' && (
           <div className="grid grid-cols-1 gap-6">
             {backupMessage && (
@@ -843,7 +682,7 @@ export function Settings() {
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">{isRTL ? 'معلومات التقنية' : 'Technical Info'}</h4>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: isRTL ? 'الإصدار' : 'Version', value: '1.0.0' },
+                    { label: isRTL ? 'الإصدار' : 'Version', value: '1.1.0' },
                     { label: isRTL ? 'البيئة' : 'Environment', value: 'Production' },
                     { label: isRTL ? 'قاعدة البيانات' : 'Database', value: 'Supabase (PostgreSQL)' },
                     { label: isRTL ? 'الواجهة' : 'Frontend', value: 'React 18 + Vite' },

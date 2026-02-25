@@ -15,12 +15,10 @@ import {
   Wallet,
   Receipt,
   Store,
-  Brain,
   Building2,
   DollarSign,
   Database,
   Landmark,
-  RefreshCw,
   BookOpen,
   ShieldCheck,
 } from 'lucide-react';
@@ -47,12 +45,10 @@ const MENU_ACCESS: Record<string, string[]> = {
   cashregister: ['admin', 'accountant', 'viewer'],
   reports: ['admin', 'accountant', 'viewer'],
   journal: ['admin', 'accountant', 'viewer'],
-  aianalysis: ['admin', 'accountant', 'viewer'],
   backup: ['admin'],
   systemhealth: ['admin'],
   users: ['admin'],
   settings: ['admin'],
-  syncqueue: ['admin', 'accountant', 'salesperson', 'viewer'],
 };
 
 export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
@@ -76,8 +72,6 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
     { id: 'reports', icon: FileText, label: t('nav.reports') },
     { id: 'journal', icon: BookOpen, label: isRTL ? 'القيود اليومية' : 'Journal Entries' },
-    { id: 'aianalysis', icon: Brain, label: isRTL ? 'التحليل الذكي' : 'AI Analysis' },
-    { id: 'syncqueue', icon: RefreshCw, label: isRTL ? 'قائمة المزامنة' : 'Sync Queue' },
     { id: 'backup', icon: Database, label: isRTL ? 'النسخ الاحتياطي' : 'Backup' },
     { id: 'systemhealth', icon: ShieldCheck, label: isRTL ? 'صحة النظام' : 'System Health' },
     { id: 'users', icon: UserCog, label: t('nav.users') },

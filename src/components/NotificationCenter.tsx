@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAlerts, Alert } from '../hooks/useAlerts';
 import {
   Bell, X, RefreshCw, AlertTriangle, AlertCircle, Info, Zap,
-  Clock, FileText, DollarSign, Users, Wallet,
+  Clock, FileText, DollarSign, Users, Wallet, Package,
 } from 'lucide-react';
 
 const SEVERITY_CONFIG = {
@@ -48,6 +48,7 @@ const TYPE_ICONS: Record<string, React.ComponentType<any>> = {
   open_shift: Wallet,
   vat_quarter: Clock,
   vat_unsettled: AlertTriangle,
+  low_stock: Package,
 };
 
 function AlertItem({ alert, isRTL }: { alert: Alert; isRTL: boolean }) {
