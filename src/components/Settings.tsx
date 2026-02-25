@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import {
   Settings as SettingsIcon, Globe, Building2, Shield, Save, Receipt,
   Truck, Heart, Bell, Package, CreditCard, FileText, QrCode, CheckCircle, Loader2,
-  AlertCircle, MessageSquare, TestTube, Info, Code2, User
+  AlertCircle, MessageSquare, TestTube, Info, Code2, User, ShieldOff
 } from 'lucide-react';
 import { ResetTestDatabaseButton } from './ResetTestDatabaseButton';
 
@@ -18,7 +18,7 @@ type Tab = typeof TABS[number];
 
 export function Settings() {
   const { language, setLanguage } = useLanguage();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { isTestMode, setTestMode } = useTestMode();
   const isRTL = language === 'ar';
 
@@ -28,8 +28,30 @@ export function Settings() {
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('business');
   const [backupMessage, setBackupMessage] = useState('');
+  const [accessDenied, setAccessDenied] = useState(false);
 
-  useEffect(() => { loadSettings(); }, []);
+  useEffect(() => {
+    // Security check: Only admin can access settings
+    if (profile && profile.role !== 'admin' && profile.role !== 'super_admin') {
+      setAccessDenied(true);
+      // Log unauthorized access attempt
+      supabase.from('audit_logs').insert({
+        action: 'SETTINGS_ACCESS_DENIED',
+        table_name: 'settings',
+        user_id: profile.id,
+        metadata: {
+          attempted_at: new Date().toISOString(),
+          user_role: profile.role,
+          reason: 'Insufficient permissions'
+        }
+      }).then(({ error }) => {
+        if (error) console.error('[Settings] Failed to log unauthorized attempt:', error);
+      });
+      return;
+    }
+
+    loadSettings();
+  }, [profile]);
 
   const loadSettings = async () => {
     try {
@@ -168,6 +190,34 @@ export function Settings() {
       </select>
     </div>
   );
+
+  // Access denied UI
+  if (accessDenied) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-8 max-w-md text-center" dir={isRTL ? 'rtl' : 'ltr'}>
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+              <ShieldOff className="w-8 h-8 text-red-600" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold text-red-900 mb-2">
+            {isRTL ? 'الوصول مرفوض' : 'Access Denied'}
+          </h2>
+          <p className="text-red-700 mb-4">
+            {isRTL
+              ? 'الإعدادات متاحة للمسؤولين فقط. لا تمتلك الصلاحيات اللازمة لتعديل إعدادات النظام.'
+              : 'Settings are only available to administrators. You do not have the necessary permissions to modify system settings.'}
+          </p>
+          <p className="text-sm text-red-600">
+            {isRTL
+              ? 'تم تسجيل محاولة الوصول هذه في سجل النظام.'
+              : 'This access attempt has been logged in the system audit log.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

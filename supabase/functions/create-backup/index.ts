@@ -91,7 +91,19 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Failed to fetch user profile: ${profileError.message}`);
     }
 
-    if (!userProfile || userProfile.role !== "admin") {
+    if (!userProfile || (userProfile.role !== "admin" && userProfile.role !== "super_admin")) {
+      // Log unauthorized attempt
+      await supabase.from("audit_logs").insert({
+        action: "BACKUP_API_ACCESS_DENIED",
+        table_name: "backup",
+        user_id: user.id,
+        metadata: {
+          attempted_at: new Date().toISOString(),
+          user_role: userProfile?.role || "unknown",
+          reason: "Insufficient permissions",
+          endpoint: "/functions/v1/create-backup"
+        }
+      });
       throw new Error("Only admins can create backups");
     }
 

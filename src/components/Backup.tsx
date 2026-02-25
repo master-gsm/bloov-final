@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Database, Download, HardDrive, Clock, FileText, AlertCircle, CheckCircle, Loader, Upload, RotateCcw } from 'lucide-react';
+import { Database, Download, HardDrive, Clock, FileText, AlertCircle, CheckCircle, Loader, Upload, RotateCcw, ShieldOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface BackupResult {
   filename: string;
@@ -23,7 +24,9 @@ interface BackupHistory {
 
 export default function Backup() {
   const { language } = useLanguage();
+  const { profile } = useAuth();
   const [localLoading, setLocalLoading] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [serverLoading, setServerLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
@@ -44,10 +47,29 @@ export default function Backup() {
   };
 
   useEffect(() => {
+    // Security check: Only admin can access backup
+    if (profile && profile.role !== 'admin' && profile.role !== 'super_admin') {
+      setAccessDenied(true);
+      // Log unauthorized access attempt
+      supabase.from('audit_logs').insert({
+        action: 'BACKUP_ACCESS_DENIED',
+        table_name: 'backup',
+        user_id: profile.id,
+        metadata: {
+          attempted_at: new Date().toISOString(),
+          user_role: profile.role,
+          reason: 'Insufficient permissions'
+        }
+      }).then(({ error }) => {
+        if (error) console.error('[Backup] Failed to log unauthorized attempt:', error);
+      });
+      return;
+    }
+
     loadBackupHistory();
     const interval = setInterval(loadBackupHistory, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [profile]);
 
   const loadBackupHistory = async () => {
     try {
@@ -530,6 +552,34 @@ export default function Backup() {
       minute: '2-digit',
     });
   };
+
+  // Access denied UI
+  if (accessDenied) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto flex items-center justify-center min-h-screen" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-8 max-w-md text-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+              <ShieldOff className="w-8 h-8 text-red-600" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold text-red-900 mb-2">
+            {language === 'ar' ? 'الوصول مرفوض' : 'Access Denied'}
+          </h2>
+          <p className="text-red-700 mb-4">
+            {language === 'ar'
+              ? 'هذا القسم متاح للمسؤولين فقط. لا تمتلك الصلاحيات اللازمة للوصول إلى النسخ الاحتياطي.'
+              : 'This section is only available to administrators. You do not have the necessary permissions to access backup functionality.'}
+          </p>
+          <p className="text-sm text-red-600">
+            {language === 'ar'
+              ? 'تم تسجيل محاولة الوصول هذه في سجل النظام.'
+              : 'This access attempt has been logged in the system audit log.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto" dir={language === 'ar' ? 'rtl' : 'ltr'}>
