@@ -173,6 +173,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
+        userId: newUser.user.id,
         user: {
           id: newUser.user.id,
           email: newUser.user.email,

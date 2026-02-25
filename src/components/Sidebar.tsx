@@ -22,40 +22,18 @@ import {
   BookOpen,
   ShieldCheck,
 } from 'lucide-react';
+import type { Section } from '../lib/permissions';
 
 interface SidebarProps {
   activeSection: string;
   setActiveSection: (section: string) => void;
 }
 
-const MENU_ACCESS: Record<string, string[]> = {
-  dashboard: ['admin', 'viewer', 'observer'],
-  sales: ['admin', 'accountant', 'salesperson', 'viewer', 'observer'],
-  purchases: ['admin', 'accountant', 'viewer', 'observer'],
-  expenses: ['admin', 'accountant', 'viewer', 'observer'],
-  fixedassets: ['admin', 'accountant', 'viewer', 'observer'],
-  products: ['admin', 'accountant', 'salesperson', 'viewer', 'observer'],
-  inventory: ['admin', 'accountant', 'salesperson', 'viewer', 'observer'],
-  customers: ['admin', 'accountant', 'viewer', 'observer'],
-  suppliers: ['admin', 'accountant', 'viewer', 'observer'],
-  partners: ['admin', 'viewer', 'observer'],
-  employees: ['admin', 'observer'],
-  branches: ['admin'],
-  salla: ['admin', 'accountant', 'observer'],
-  cashregister: ['admin', 'accountant', 'viewer', 'observer'],
-  reports: ['admin', 'accountant', 'viewer', 'observer'],
-  journal: ['admin', 'accountant', 'viewer', 'observer'],
-  backup: ['admin'],
-  systemhealth: ['admin'],
-  users: ['admin'],
-  settings: ['admin'],
-};
-
 export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
   const { t, isRTL } = useLanguage();
-  const { profile } = useAuth();
+  const { can } = useAuth();
 
-  const menuItems = [
+  const menuItems: { id: Section; icon: typeof LayoutDashboard; label: string }[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
     { id: 'sales', icon: ShoppingCart, label: t('nav.sales') },
     { id: 'purchases', icon: ShoppingBag, label: t('nav.purchases') },
@@ -78,11 +56,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'settings', icon: Settings, label: t('nav.settings') },
   ];
 
-  const visibleItems = menuItems.filter(item => {
-    const allowedRoles = MENU_ACCESS[item.id];
-    if (!allowedRoles || !profile) return false;
-    return allowedRoles.includes(profile.role);
-  });
+  const visibleItems = menuItems.filter(item => can(item.id, 'view'));
 
   return (
     <aside className="w-64 bg-gradient-to-b from-gray-900 to-gray-800 text-white h-[calc(100vh-73px)] overflow-y-auto flex-shrink-0">

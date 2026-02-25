@@ -31,6 +31,7 @@ import FixedAssets from './components/FixedAssets';
 import JournalEntries from './components/JournalEntries';
 import SystemHealth from './components/SystemHealth';
 import { supabase } from './lib/supabase';
+import type { Section } from './lib/permissions';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -67,7 +68,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
               onClick={() => this.setState({ hasError: false, error: null })}
               className="px-6 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-medium"
             >
-              المحاولة مجدداً
+              المحاولة مجددا
             </button>
           </div>
         </div>
@@ -77,32 +78,8 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   }
 }
 
-const SECTION_PERMISSIONS: Record<string, string[]> = {
-  dashboard: ['admin', 'viewer', 'observer'],
-  sales: ['admin', 'accountant', 'salesperson', 'viewer', 'observer'],
-  purchases: ['admin', 'accountant', 'viewer', 'observer'],
-  expenses: ['admin', 'accountant', 'viewer', 'observer'],
-  fixedassets: ['admin', 'accountant', 'viewer', 'observer'],
-  setupexpenses: ['admin'],
-  products: ['admin', 'accountant', 'salesperson', 'viewer', 'observer'],
-  inventory: ['admin', 'accountant', 'salesperson', 'viewer', 'observer'],
-  customers: ['admin', 'accountant', 'viewer', 'observer'],
-  suppliers: ['admin', 'accountant', 'viewer', 'observer'],
-  partners: ['admin', 'viewer', 'observer'],
-  employees: ['admin', 'observer'],
-  branches: ['admin'],
-  salla: ['admin', 'accountant', 'observer'],
-  cashregister: ['admin', 'accountant', 'viewer', 'observer'],
-  reports: ['admin', 'accountant', 'viewer', 'observer'],
-  journal: ['admin', 'accountant', 'viewer', 'observer'],
-  backup: ['admin'],
-  systemhealth: ['admin'],
-  users: ['admin'],
-  settings: ['admin'],
-};
-
 function AppContent() {
-  const { user, loading, hasPermission, isAdmin, profile } = useAuth();
+  const { user, loading, isAdmin, can } = useAuth();
   const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
@@ -126,14 +103,18 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (profile && !isAdmin && !profileSetRef.current) {
+    if (user && !isAdmin && !profileSetRef.current) {
       profileSetRef.current = true;
-      setActiveSection('sales');
+      if (can('sales' as Section, 'view')) {
+        setActiveSection('sales');
+      } else if (can('dashboard' as Section, 'view')) {
+        setActiveSection('dashboard');
+      }
     }
-    if (!profile) {
+    if (!user) {
       profileSetRef.current = false;
     }
-  }, [profile, isAdmin]);
+  }, [user, isAdmin, can]);
 
   if (isPasswordRecovery) {
     return <ResetPassword />;
@@ -154,22 +135,27 @@ function AppContent() {
     return <LoginForm />;
   }
 
-  const canAccessSection = (section: string): boolean => {
-    const allowedRoles = SECTION_PERMISSIONS[section];
-    if (!allowedRoles) return false;
-    if (!profile) return false;
-    return allowedRoles.includes(profile.role);
-  };
-
   const handleSetActiveSection = (section: string) => {
-    if (canAccessSection(section)) {
+    if (can(section as Section, 'view')) {
       setActiveSection(section);
     }
   };
 
   const renderSection = () => {
-    if (!canAccessSection(activeSection)) {
-      return <Sales />;
+    if (!can(activeSection as Section, 'view')) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center p-8">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">لا توجد صلاحية</h3>
+            <p className="text-gray-500 text-sm">ليس لديك صلاحية للوصول لهذا القسم</p>
+          </div>
+        </div>
+      );
     }
 
     switch (activeSection) {

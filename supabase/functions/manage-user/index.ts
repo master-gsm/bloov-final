@@ -37,8 +37,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: requestingUser }, error: authError } =
-      await supabaseAdmin.auth.getUser(token);
+    const {
+      data: { user: requestingUser },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !requestingUser) {
       return jsonResponse({ error: "Unauthorized" }, 401);
@@ -100,7 +102,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "update_user") {
-      const { newName, newRole, permissions } = body;
+      const { newName, newRole, permissions, branch_id } = body;
       const updates: Record<string, unknown> = {};
       if (newName) updates.full_name = newName;
       if (
@@ -109,6 +111,7 @@ Deno.serve(async (req: Request) => {
       )
         updates.role = newRole;
       if (permissions !== undefined) updates.permissions = permissions;
+      if (branch_id !== undefined) updates.branch_id = branch_id || null;
       updates.updated_at = new Date().toISOString();
 
       const { error: updateError } = await supabaseAdmin
@@ -136,8 +139,13 @@ Deno.serve(async (req: Request) => {
       });
 
       if (rpcError) {
+        console.error("safe_delete_user RPC error:", JSON.stringify(rpcError));
         return jsonResponse(
-          { error: `Delete profile failed: ${rpcError.message}` },
+          {
+            error: `Delete profile failed: ${rpcError.message}`,
+            code: rpcError.code,
+            details: rpcError.details,
+          },
           400
         );
       }
@@ -146,6 +154,7 @@ Deno.serve(async (req: Request) => {
         await supabaseAdmin.auth.admin.deleteUser(userId);
 
       if (authDelError) {
+        console.error("Auth delete error:", JSON.stringify(authDelError));
         return jsonResponse(
           { error: `Delete auth failed: ${authDelError.message}` },
           400
@@ -157,7 +166,9 @@ Deno.serve(async (req: Request) => {
 
     return jsonResponse({ error: "Invalid action" }, 400);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Internal server error";
+    console.error("Unhandled error in manage-user:", error);
+    const msg =
+      error instanceof Error ? error.message : "Internal server error";
     return jsonResponse({ error: msg }, 500);
   }
 });

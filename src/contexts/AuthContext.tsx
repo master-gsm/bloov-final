@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { PermissionsMap, emptyPermissions, fullPermissions, Section, Action } from '../lib/permissions';
 
 interface UserProfile {
   role: 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier' | 'manager' | 'employee';
@@ -16,9 +17,12 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (key: string) => boolean;
+  can: (section: Section, action: Action) => boolean;
+  sectionPermissions: PermissionsMap;
   isAdmin: boolean;
   isViewer: boolean;
   branchId: string | null;
+  reloadPermissions: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,8 +30,40 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [sectionPermissions, setSectionPermissions] = useState<PermissionsMap>(emptyPermissions());
   const [loading, setLoading] = useState(true);
   const loadingProfileRef = useRef<string | null>(null);
+
+  const loadGranularPermissions = async (userId: string, role: string) => {
+    if (role === 'admin') {
+      setSectionPermissions(fullPermissions());
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('user_permissions')
+      .select('section, can_view, can_create, can_edit, can_delete')
+      .eq('user_id', userId);
+
+    if (error || !data || data.length === 0) {
+      setSectionPermissions(emptyPermissions());
+      return;
+    }
+
+    const perms = emptyPermissions();
+    for (const row of data) {
+      const s = row.section as Section;
+      if (perms[s]) {
+        perms[s] = {
+          view: row.can_view ?? false,
+          create: row.can_create ?? false,
+          edit: row.can_edit ?? false,
+          delete: row.can_delete ?? false,
+        };
+      }
+    }
+    setSectionPermissions(perms);
+  };
 
   const loadProfile = async (userId: string) => {
     if (loadingProfileRef.current === userId) return;
@@ -41,16 +77,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (data) {
+        const role = data.role as UserProfile['role'];
         setProfile({
-          role: data.role as UserProfile['role'],
+          role,
           permissions: (data.permissions || {}) as unknown as Record<string, boolean>,
           branch_id: data.branch_id || null,
         });
+        await loadGranularPermissions(userId, role);
       }
     } finally {
       loadingProfileRef.current = null;
     }
   };
+
+  const reloadPermissions = useCallback(async () => {
+    if (user && profile) {
+      await loadGranularPermissions(user.id, profile.role);
+    }
+  }, [user, profile]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -70,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await loadProfile(newUser.id);
         } else {
           setProfile(null);
+          setSectionPermissions(emptyPermissions());
         }
       })();
     });
@@ -101,6 +146,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return profile?.permissions?.[key] === true;
   };
 
+  const can = useCallback((section: Section, action: Action): boolean => {
+    if (profile?.role === 'admin') return true;
+    const sp = sectionPermissions[section];
+    if (!sp) return false;
+    return sp[action] ?? false;
+  }, [profile?.role, sectionPermissions]);
+
   const value = useMemo(() => ({
     user,
     profile,
@@ -109,11 +161,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signOut,
     hasPermission,
+    can,
+    sectionPermissions,
     isAdmin,
     isViewer,
     branchId,
+    reloadPermissions,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [user, profile, loading]);
+  }), [user, profile, loading, sectionPermissions, can, reloadPermissions]);
 
   return (
     <AuthContext.Provider value={value}>
