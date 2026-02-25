@@ -32,7 +32,9 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing environment variables");
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
