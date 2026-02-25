@@ -222,13 +222,14 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      const today = new Date().toISOString().split('T')[0];
       const recordsToInsert = validRows.map(row => ({
         branch_id: currentBranch.id,
         category: row.mappedType || 'asset',
         expense_type: row.mappedType || 'asset',
         description: row.description,
         amount: row.amount,
-        expense_date: row.date || null,
+        expense_date: row.date || today,
         payment_method: 'cash',
         partner_id: row._partnerId,
         created_by: user.id,
@@ -375,8 +376,8 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
                   <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                   <p className="text-sm text-amber-800">
                     {isRTL
-                      ? `${noDateCount} سجل بدون تاريخ - سيتم استيرادها وتستطيع إضافة التاريخ لاحقاً من الجدول`
-                      : `${noDateCount} record(s) without date - they will be imported and you can set the date later from the table`}
+                      ? `${noDateCount} سجل بدون تاريخ - سيُستخدم تاريخ اليوم تلقائياً`
+                      : `${noDateCount} record(s) without date - today's date will be used automatically`}
                   </p>
                 </div>
               )}
