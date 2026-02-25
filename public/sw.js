@@ -1,97 +1,90 @@
-const CACHE_NAME = 'bloov-accounting-v3';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+const CACHE_NAME = 'bloov-accounting-v4';
+
+const NEVER_CACHE = [
+  'supabase.co',
+  '/api/',
+  'functions/v1/',
 ];
 
+const NEVER_CACHE_EXTENSIONS = [
+  '.html',
+];
+
+function shouldNeverCache(url) {
+  const urlStr = url.toString();
+  if (NEVER_CACHE.some(pattern => urlStr.includes(pattern))) return true;
+  if (url.pathname === '/' || url.pathname === '/index.html') return true;
+  if (NEVER_CACHE_EXTENSIONS.some(ext => url.pathname.endsWith(ext))) return true;
+  return false;
+}
+
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(urlsToCache);
-      })
-      .catch((error) => {
-        console.error('Cache installation failed:', error);
-      })
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames
+          .filter((name) => name !== CACHE_NAME)
+          .map((name) => caches.delete(name))
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') {
-    return;
-  }
+  if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  if (url.origin.includes('supabase.co') || url.pathname.includes('/api/')) {
+  if (shouldNeverCache(url)) {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-        })
+      fetch(event.request).catch(() => {
+        return new Response(
+          JSON.stringify({ error: 'Offline', offline: true }),
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+      })
     );
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        if (response) {
-          return response;
-        }
+  const isAsset = url.pathname.match(/\.(js|css|woff2?|png|jpg|jpeg|svg|ico)(\?.*)?$/);
 
-        return fetch(event.request).then((response) => {
-          if (!response || response.status !== 200 || response.type === 'error') {
-            return response;
+  if (isAsset) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const cloned = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
           }
-
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-
           return response;
-        });
-      })
-  );
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  event.respondWith(fetch(event.request));
 });
 
-self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-data') {
-    event.waitUntil(syncData());
+    event.waitUntil(
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'BACKGROUND_SYNC', message: 'Starting background sync' });
+        });
+      })
+    );
   }
 });
-
-async function syncData() {
-  console.log('Background sync triggered');
-  try {
-    const clients = await self.clients.matchAll();
-    clients.forEach(client => {
-      client.postMessage({
-        type: 'BACKGROUND_SYNC',
-        message: 'Starting background sync'
-      });
-    });
-  } catch (error) {
-    console.error('Background sync failed:', error);
-  }
-}
