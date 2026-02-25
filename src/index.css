@@ -30,3 +30,46 @@ input, textarea, select {
     height: 100dvh;
   }
 }
+
+body {
+  background: linear-gradient(135deg, #f0fdf4 0%, #f0fdfa 50%, #fafbfc 100%),
+              url('https://images.pexels.com/photos/4551832/pexels-photo-4551832.jpeg?auto=compress&cs=tinysrgb&w=1920');
+  background-attachment: fixed;
+  background-size: cover;
+  background-position: center;
+  background-blend-mode: overlay;
+}
+
+.app-background {
+  background: linear-gradient(135deg, rgba(240, 253, 244, 0.95) 0%, rgba(240, 253, 250, 0.95) 50%, rgba(250, 251, 252, 0.95) 100%),
+              url('https://images.pexels.com/photos/4551832/pexels-photo-4551832.jpeg?auto=compress&cs=tinysrgb&w=1920');
+  background-attachment: fixed;
+  background-size: cover;
+  background-position: center;
+}
+
+@layer components {
+  .gradient-teal-emerald {
+    @apply bg-gradient-to-r from-teal-500 to-emerald-500;
+  }
+
+  .gradient-emerald-teal {
+    @apply bg-gradient-to-r from-emerald-500 to-teal-500;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium;
+  }
+
+  .card-base {
+    @apply bg-white/80 backdrop-blur-sm rounded-xl shadow-md border border-teal-100/30;
+  }
+
+  .input-base {
+    @apply px-3 py-2 border border-teal-200/50 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all;
+  }
+}

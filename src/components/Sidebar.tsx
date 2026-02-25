@@ -59,7 +59,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
   const visibleItems = menuItems.filter(item => can(item.id, 'view'));
 
   return (
-    <aside className="w-64 bg-gradient-to-b from-gray-900 to-gray-800 text-white h-[calc(100vh-73px)] overflow-y-auto flex-shrink-0">
+    <aside className="w-64 bg-gradient-to-b from-teal-900 to-emerald-900 text-white h-[calc(100vh-73px)] overflow-y-auto flex-shrink-0 shadow-lg">
       <nav className="p-4 space-y-1">
         {visibleItems.map((item) => {
           const Icon = item.icon;
@@ -71,8 +71,8 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
               onClick={() => setActiveSection(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
                 isActive
-                  ? 'bg-teal-600 text-white shadow-lg'
-                  : 'hover:bg-white/10 text-gray-300 hover:text-white'
+                  ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-lg'
+                  : 'hover:bg-white/10 text-teal-100 hover:text-white'
               } ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon className="w-5 h-5 flex-shrink-0" />

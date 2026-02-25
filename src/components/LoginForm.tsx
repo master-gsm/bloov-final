@@ -61,7 +61,7 @@ export function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-teal-50 px-4">
+    <div className="min-h-screen flex items-center justify-center app-background px-4">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="flex justify-center mb-6">
@@ -71,10 +71,10 @@ export function LoginForm() {
               className="h-24 w-auto"
             />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">
+          <h2 className="text-3xl font-bold text-teal-900">
             {showResetForm ? t('auth.resetPassword') : t('auth.welcome')}
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-teal-600/70">
             {showResetForm ? t('auth.resetPasswordDescription') : t('auth.description')}
           </p>
         </div>
@@ -89,7 +89,7 @@ export function LoginForm() {
 
             <div className="space-y-4">
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="username" className="block text-sm font-medium text-teal-900 mb-1">
                   {isRTL ? 'اسم المستخدم' : 'Username'}
                 </label>
                 <input
@@ -98,14 +98,14 @@ export function LoginForm() {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
+                  className="w-full px-4 py-3 border border-teal-200/50 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white/80"
                   placeholder={isRTL ? 'اسم المستخدم أو البريد الإلكتروني' : 'Username or Email'}
                   dir="ltr"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="password" className="block text-sm font-medium text-teal-900 mb-1">
                   {t('auth.password')}
                 </label>
                 <input
@@ -114,7 +114,7 @@ export function LoginForm() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
+                  className="w-full px-4 py-3 border border-teal-200/50 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white/80"
                   placeholder="********"
                 />
               </div>
@@ -133,14 +133,14 @@ export function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white py-3 px-4 rounded-lg hover:from-teal-700 hover:to-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white py-3 px-4 rounded-lg hover:from-teal-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md"
             >
               <LogIn className="w-5 h-5" />
               {loading ? t('common.loading') : t('auth.signInButton')}
             </button>
           </form>
         ) : (
-          <form className="mt-8 space-y-6 bg-white p-8 rounded-2xl shadow-xl" onSubmit={handleResetPassword}>
+          <form className="mt-8 space-y-6 bg-white/90 backdrop-blur-sm p-8 rounded-2xl shadow-xl border border-teal-100/50" onSubmit={handleResetPassword}>
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
                 {error}
@@ -148,13 +148,13 @@ export function LoginForm() {
             )}
 
             {success && (
-              <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-600 px-4 py-3 rounded-lg text-sm">
                 {success}
               </div>
             )}
 
             <div>
-              <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="reset-email" className="block text-sm font-medium text-teal-900 mb-1">
                 {t('auth.email')}
               </label>
               <input
@@ -163,7 +163,7 @@ export function LoginForm() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-teal-200/50 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition bg-white/80"
                 placeholder={isRTL ? 'البريد الإلكتروني' : 'Email'}
                 dir="ltr"
               />
@@ -172,7 +172,7 @@ export function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white py-3 px-4 rounded-lg hover:from-teal-700 hover:to-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white py-3 px-4 rounded-lg hover:from-teal-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md"
             >
               {loading ? t('common.loading') : t('auth.sendResetLink')}
             </button>
@@ -184,7 +184,7 @@ export function LoginForm() {
                 setError('');
                 setSuccess('');
               }}
-              className="w-full flex items-center justify-center gap-2 text-gray-700 py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition font-medium"
+              className="w-full flex items-center justify-center gap-2 text-teal-700 py-3 px-4 rounded-lg border border-teal-200/50 hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition font-medium"
             >
               <ArrowLeft className={`w-5 h-5 ${isRTL ? 'rotate-180' : ''}`} />
               {t('auth.backToLogin')}
