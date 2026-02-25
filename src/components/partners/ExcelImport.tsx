@@ -43,12 +43,12 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
   const [invalidCount, setInvalidCount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [noDateCount, setNoDateCount] = useState(0);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const validateRow = (row: any, index: number): ImportRow => {
     const errors: string[] = [];
     let partnerId: string | undefined;
 
-    // Validate date - optional, accept empty/missing
     const dateRaw = String(row.date || '').trim();
     let dateStr: string | null = null;
     let hasDate = false;
@@ -61,7 +61,6 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
       }
     }
 
-    // Validate partner
     const partnerName = String(row.partner || '').trim();
     if (!partnerName) {
       errors.push(isRTL ? 'اسم الشريك مطلوب' : 'Partner name required');
@@ -77,19 +76,16 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
       }
     }
 
-    // Validate type
     const type = String(row.type || '').trim();
     if (!type) {
       errors.push(isRTL ? 'النوع مطلوب' : 'Type required');
     }
 
-    // Validate description
     const description = String(row.description || '').trim();
     if (!description) {
       errors.push(isRTL ? 'الوصف مطلوب' : 'Description required');
     }
 
-    // Validate amount
     const amount = parseFloat(row.amount);
     if (isNaN(amount) || amount <= 0) {
       errors.push(isRTL ? 'المبلغ يجب أن يكون رقم موجب' : 'Amount must be a positive number');
@@ -110,19 +106,18 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setErrorMsg('');
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    // Validate file type
     const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
     if (!['xlsx', 'xls', 'csv'].includes(fileExtension || '')) {
-      alert(isRTL ? 'يرجى رفع ملف Excel أو CSV فقط' : 'Please upload Excel or CSV file only');
+      setErrorMsg(isRTL ? 'يرجى رفع ملف Excel أو CSV فقط' : 'Please upload Excel or CSV file only');
       return;
     }
 
     setFile(selectedFile);
 
-    // Read and parse file
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -133,18 +128,15 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
         if (jsonData.length === 0) {
-          alert(isRTL ? 'الملف فارغ' : 'File is empty');
+          setErrorMsg(isRTL ? 'الملف فارغ' : 'File is empty');
           return;
         }
 
-        // Validate all rows
         const validatedRows = jsonData.map((row, index) => validateRow(row, index));
 
         const valid = validatedRows.filter(r => r._isValid).length;
         const invalid = validatedRows.filter(r => !r._isValid).length;
-        const total = validatedRows
-          .filter(r => r._isValid)
-          .reduce((sum, r) => sum + r.amount, 0);
+        const total = validatedRows.filter(r => r._isValid).reduce((sum, r) => sum + r.amount, 0);
         const noDate = validatedRows.filter(r => r._isValid && !r._hasDate).length;
 
         setPreview(validatedRows);
@@ -155,7 +147,7 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
         setShowPreview(true);
       } catch (error) {
         console.error('Error parsing file:', error);
-        alert(isRTL ? 'خطأ في قراءة الملف' : 'Error reading file');
+        setErrorMsg(isRTL ? 'خطأ في قراءة الملف' : 'Error reading file');
       }
     };
 
@@ -163,14 +155,16 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
   };
 
   const handleImport = async () => {
+    setErrorMsg('');
+
     if (!currentBranch) {
-      alert(isRTL ? 'يرجى اختيار فرع' : 'Please select a branch');
+      setErrorMsg(isRTL ? 'يرجى اختيار فرع' : 'Please select a branch');
       return;
     }
 
     const validRows = preview.filter(r => r._isValid);
     if (validRows.length === 0) {
-      alert(isRTL ? 'لا توجد سجلات صحيحة للاستيراد' : 'No valid records to import');
+      setErrorMsg(isRTL ? 'لا توجد سجلات صحيحة للاستيراد' : 'No valid records to import');
       return;
     }
 
@@ -180,10 +174,9 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Prepare data for insertion
       const recordsToInsert = validRows.map(row => ({
         branch_id: currentBranch.id,
-        category: 'capital',
+        category: row.type || 'capital',
         expense_type: row.type,
         description: row.description,
         amount: row.amount,
@@ -191,28 +184,21 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
         payment_method: 'cash',
         partner_id: row._partnerId,
         created_by: user.id,
-        notes: `Imported from Excel: ${file?.name}`
+        notes: `Imported from Excel: ${file?.name}`,
       }));
 
-      // Insert all records in a transaction
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('setup_expenses')
         .insert(recordsToInsert)
         .select();
 
       if (error) throw error;
 
-      alert(
-        isRTL
-          ? `تم استيراد ${validRows.length} سجل بنجاح`
-          : `Successfully imported ${validRows.length} records`
-      );
-
       onSuccess();
       onClose();
     } catch (error: any) {
       console.error('Error importing:', error);
-      alert(error.message || (isRTL ? 'حدث خطأ أثناء الاستيراد' : 'Error during import'));
+      setErrorMsg(error.message || (isRTL ? 'حدث خطأ أثناء الاستيراد' : 'Error during import'));
     } finally {
       setImporting(false);
     }
@@ -222,7 +208,7 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
     return new Intl.NumberFormat('ar-SA', {
       style: 'currency',
       currency: 'SAR',
-      minimumFractionDigits: 2
+      minimumFractionDigits: 2,
     }).format(amount);
   };
 
@@ -237,10 +223,7 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
               {isRTL ? 'استيراد من Excel' : 'Import from Excel'}
             </h3>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -249,7 +232,6 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
         <div className="flex-1 overflow-y-auto p-6">
           {!showPreview ? (
             <div className="space-y-6">
-              {/* Instructions */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h4 className="font-semibold text-blue-900 mb-2">
                   {isRTL ? 'تعليمات:' : 'Instructions:'}
@@ -263,7 +245,6 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
                 </ul>
               </div>
 
-              {/* Available Partners */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <h4 className="font-semibold text-gray-900 mb-2">
                   {isRTL ? 'الشركاء المتاحين:' : 'Available Partners:'}
@@ -277,7 +258,6 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
                 </div>
               </div>
 
-              {/* File Upload */}
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
                 <label className="flex flex-col items-center cursor-pointer">
                   <Upload className="h-12 w-12 text-gray-400 mb-3" />
@@ -305,7 +285,6 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Summary */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-1">
@@ -349,59 +328,34 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
                 </div>
               )}
 
-              {/* Preview Table */}
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="overflow-x-auto max-h-96">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          {isRTL ? 'السطر' : 'Row'}
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          {isRTL ? 'التاريخ' : 'Date'}
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          {isRTL ? 'الشريك' : 'Partner'}
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          {isRTL ? 'النوع' : 'Type'}
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          {isRTL ? 'الوصف' : 'Description'}
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          {isRTL ? 'المبلغ' : 'Amount'}
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          {isRTL ? 'الحالة' : 'Status'}
-                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{isRTL ? 'السطر' : 'Row'}</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{isRTL ? 'التاريخ' : 'Date'}</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{isRTL ? 'الشريك' : 'Partner'}</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{isRTL ? 'النوع' : 'Type'}</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{isRTL ? 'الوصف' : 'Description'}</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{isRTL ? 'المبلغ' : 'Amount'}</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{isRTL ? 'الحالة' : 'Status'}</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {preview.map((row) => (
                         <tr key={row._rowIndex} className={row._isValid ? '' : 'bg-red-50'}>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {row._rowIndex}
-                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{row._rowIndex}</td>
                           <td className="px-4 py-3 text-sm">
                             {row.date
                               ? <span className="text-gray-900">{row.date}</span>
                               : <span className="text-amber-600 text-xs font-medium">{isRTL ? 'بدون تاريخ' : 'No date'}</span>
                             }
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            {row.partner}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            {row.type}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            {row.description}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 font-semibold">
-                            {formatCurrency(row.amount)}
-                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{row.partner}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{row.type}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{row.description}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 font-semibold">{formatCurrency(row.amount)}</td>
                           <td className="px-4 py-3 text-sm">
                             {row._isValid ? (
                               <span className="text-green-600 flex items-center gap-1">
@@ -431,44 +385,56 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-200 flex items-center justify-between bg-gray-50">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
-          >
-            {isRTL ? 'إلغاء' : 'Cancel'}
-          </button>
-          {showPreview && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  setShowPreview(false);
-                  setFile(null);
-                  setPreview([]);
-                }}
-                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
-              >
-                {isRTL ? 'رفع ملف آخر' : 'Upload Another'}
-              </button>
-              <button
-                onClick={handleImport}
-                disabled={importing || validCount === 0}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {importing ? (
-                  <>
-                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                    {isRTL ? 'جاري الاستيراد...' : 'Importing...'}
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    {isRTL ? `استيراد ${validCount} سجل` : `Import ${validCount} records`}
-                  </>
-                )}
+        <div className="p-6 border-t border-gray-200 bg-gray-50 space-y-3">
+          {errorMsg && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700 flex-1">{errorMsg}</p>
+              <button onClick={() => setErrorMsg('')} className="text-red-400 hover:text-red-600 shrink-0">
+                <X className="h-4 w-4" />
               </button>
             </div>
           )}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onClose}
+              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+            >
+              {isRTL ? 'إلغاء' : 'Cancel'}
+            </button>
+            {showPreview && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setShowPreview(false);
+                    setFile(null);
+                    setPreview([]);
+                    setErrorMsg('');
+                  }}
+                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+                >
+                  {isRTL ? 'رفع ملف آخر' : 'Upload Another'}
+                </button>
+                <button
+                  onClick={handleImport}
+                  disabled={importing || validCount === 0}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {importing ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                      {isRTL ? 'جاري الاستيراد...' : 'Importing...'}
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      {isRTL ? `استيراد ${validCount} سجل` : `Import ${validCount} records`}
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -14,7 +14,7 @@ import {
 } from './partners/types';
 import {
   Users, Plus, DollarSign, X, ShieldAlert, FileSpreadsheet,
-  Camera, Eye, Paperclip, ArrowRightLeft, Ban, Edit3, Check, AlertTriangle,
+  Camera, Eye, Paperclip, ArrowRightLeft, Ban, Edit3, Check, AlertTriangle, AlertCircle,
   PieChart, Percent, TrendingUp, UserPlus, Save, ChevronDown, ChevronUp,
   ToggleLeft, ToggleRight, Landmark, Banknote, CalendarDays,
 } from 'lucide-react';
@@ -288,6 +288,7 @@ export function Partners() {
 
       const records = valid.map(row => ({
         branch_id: currentBranchId || null,
+        category: row.type || 'capital',
         expense_type: row.type,
         description: row.description,
         amount: row.amount,
@@ -306,7 +307,7 @@ export function Partners() {
       setImportPreview([]);
       await loadData();
     } catch (err: any) {
-      alert(err.message || (isRTL ? 'خطأ في الاستيراد' : 'Import error'));
+      setError(err.message || (isRTL ? 'خطأ في الاستيراد' : 'Import error'));
     } finally {
       setImportSubmitting(false);
     }
@@ -1595,28 +1596,39 @@ export function Partners() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
-              <button
-                onClick={() => { setImportFile(null); setImportPreview([]); }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100"
-              >
-                {isRTL ? 'رفع ملف آخر' : 'Upload another'}
-              </button>
-              <div className="flex items-center gap-3">
-                <button onClick={() => setShowImportExcel(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100">
-                  {isRTL ? 'إلغاء' : 'Cancel'}
-                </button>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 space-y-3">
+              {error && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-700">{error}</p>
+                  <button onClick={() => setError('')} className="ml-auto text-red-400 hover:text-red-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
                 <button
-                  onClick={handleImportConfirm}
-                  disabled={importSubmitting || importPreview.filter(r => r._valid).length === 0}
-                  className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => { setImportFile(null); setImportPreview([]); setError(''); }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100"
                 >
-                  {importSubmitting ? (
-                    <><div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />{isRTL ? 'جاري الاستيراد...' : 'Importing...'}</>
-                  ) : (
-                    <><FileSpreadsheet className="w-4 h-4" />{isRTL ? `استيراد ${importPreview.filter(r => r._valid).length} سجل` : `Import ${importPreview.filter(r => r._valid).length} records`}</>
-                  )}
+                  {isRTL ? 'رفع ملف آخر' : 'Upload another'}
                 </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => { setShowImportExcel(false); setError(''); }} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100">
+                    {isRTL ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    onClick={handleImportConfirm}
+                    disabled={importSubmitting || importPreview.filter(r => r._valid).length === 0}
+                    className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {importSubmitting ? (
+                      <><div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />{isRTL ? 'جاري الاستيراد...' : 'Importing...'}</>
+                    ) : (
+                      <><FileSpreadsheet className="w-4 h-4" />{isRTL ? `استيراد ${importPreview.filter(r => r._valid).length} سجل` : `Import ${importPreview.filter(r => r._valid).length} records`}</>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
