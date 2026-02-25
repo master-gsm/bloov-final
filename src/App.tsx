@@ -79,7 +79,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 }
 
 function AppContent() {
-  const { user, loading, isAdmin, can } = useAuth();
+  const { user, loading, can } = useAuth();
   const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
@@ -103,18 +103,18 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (user && !isAdmin && !profileSetRef.current) {
+    if (user && !profileSetRef.current) {
       profileSetRef.current = true;
-      if (can('sales' as Section, 'view')) {
-        setActiveSection('sales');
-      } else if (can('dashboard' as Section, 'view')) {
+      if (can('dashboard' as Section, 'view')) {
         setActiveSection('dashboard');
+      } else if (can('sales' as Section, 'view')) {
+        setActiveSection('sales');
       }
     }
     if (!user) {
       profileSetRef.current = false;
     }
-  }, [user, isAdmin, can]);
+  }, [user, can]);
 
   if (isPasswordRecovery) {
     return <ResetPassword />;

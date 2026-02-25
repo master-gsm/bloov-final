@@ -56,8 +56,8 @@ interface Purchase {
 
 export function Purchases() {
   const { t, language } = useLanguage();
-  const { user } = useAuth();
-  const canEdit = useCanEdit();
+  const { user, can } = useAuth();
+  const canEdit = useCanEdit('purchases');
   const { isOnline, addPendingOperation } = useOffline();
   const isRTL = language === 'ar';
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -82,7 +82,7 @@ export function Purchases() {
   const attachmentFileInputRef = useRef<HTMLInputElement>(null);
   const attachmentCameraInputRef = useRef<HTMLInputElement>(null);
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const canViewAllBranches = can('branches', 'view');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -102,14 +102,13 @@ export function Purchases() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('branch_id, role')
+        .select('branch_id')
         .eq('id', user.id)
         .maybeSingle();
 
       if (error) throw error;
       if (data) {
         setUserBranchId(data.branch_id);
-        setIsSuperAdmin(data.role === 'admin' || data.role === 'observer');
       }
     } catch (err) {
       console.error('Error loading user branch:', err);
@@ -136,7 +135,7 @@ export function Purchases() {
         .order('created_at', { ascending: false });
 
       // RLS will handle filtering, but we can optimize the query
-      if (!isSuperAdmin && userBranchId) {
+      if (!canViewAllBranches && userBranchId) {
         purchasesQuery = purchasesQuery.eq('branch_id', userBranchId);
       }
 

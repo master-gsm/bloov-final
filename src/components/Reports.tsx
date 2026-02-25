@@ -94,11 +94,11 @@ interface ReportData {
 
 export function Reports() {
   const { t, language } = useLanguage();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const isRTL = language === 'ar';
+  const canViewReports = can('reports', 'view');
 
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<'operational' | 'trial_balance' | 'income_statement' | 'balance_sheet' | 'vat_summary'>('operational');
   const [financialLoading, setFinancialLoading] = useState(false);
 
@@ -132,29 +132,21 @@ export function Reports() {
   });
 
   useEffect(() => {
-    checkAdminAndLoad();
-  }, [user]);
+    if (canViewReports) {
+      loadReportData();
+    } else {
+      setLoading(false);
+    }
+  }, [canViewReports]);
 
   useEffect(() => {
-    if (isAdmin) {
-      loadReportData();
+    if (canViewReports) {
       if (activeTab === 'trial_balance') loadTrialBalance();
       else if (activeTab === 'income_statement') loadIncomeStatement();
       else if (activeTab === 'balance_sheet') loadBalanceSheet();
+      else loadReportData();
     }
-  }, [dateFrom, dateTo, isAdmin]);
-
-  const checkAdminAndLoad = async () => {
-    if (!user) return;
-    try {
-      const { data: role } = await supabase.rpc('get_my_role');
-      const admin = role === 'admin';
-      setIsAdmin(admin);
-      setLoading(false);
-    } catch (err) {
-      setLoading(false);
-    }
-  };
+  }, [dateFrom, dateTo, activeTab, canViewReports]);
 
   const loadReportData = async () => {
     setLoading(true);
@@ -606,7 +598,7 @@ export function Reports() {
     );
   }
 
-  if (!isAdmin) {
+  if (!canViewReports) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center max-w-md">
@@ -616,8 +608,8 @@ export function Reports() {
           </h3>
           <p className="text-gray-600">
             {isRTL
-              ? 'التقارير المالية متاحة للمديرين فقط'
-              : 'Financial reports are available to administrators only'}
+              ? 'ليس لديك صلاحية لعرض التقارير'
+              : 'You do not have permission to view reports'}
           </p>
         </div>
       </div>

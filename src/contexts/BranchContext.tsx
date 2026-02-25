@@ -26,7 +26,7 @@ interface BranchContextType {
 const BranchContext = createContext<BranchContextType | undefined>(undefined);
 
 export function BranchProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, can, sectionPermissions } = useAuth();
   const [currentBranch, setCurrentBranch] = useState<Branch | null>(null);
   const [currentBranchId, setCurrentBranchId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -72,10 +72,10 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const admin = userData.role === 'admin';
-      setIsAdmin(admin);
+      const canManageBranches = can('branches', 'view');
+      setIsAdmin(canManageBranches);
 
-      if (admin) {
+      if (canManageBranches) {
         const { data: branches, error: branchError } = await supabase
           .from('branches')
           .select('id, name, code, location, city, is_active')
@@ -131,7 +131,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadBranchData();
-  }, [userId]);
+  }, [userId, sectionPermissions]);
 
   const handleSetSelectedBranchFilter = (id: string | null) => {
     setSelectedBranchFilter(id);

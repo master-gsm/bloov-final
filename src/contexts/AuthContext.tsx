@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { PermissionsMap, emptyPermissions, fullPermissions, Section, Action } from '../lib/permissions';
+import { PermissionsMap, emptyPermissions, ROLE_TEMPLATES, Section, Action } from '../lib/permissions';
 
 interface UserProfile {
   role: 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier' | 'manager' | 'employee';
@@ -35,18 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadingProfileRef = useRef<string | null>(null);
 
   const loadGranularPermissions = async (userId: string, role: string) => {
-    if (role === 'admin') {
-      setSectionPermissions(fullPermissions());
-      return;
-    }
-
     const { data, error } = await supabase
       .from('user_permissions')
       .select('section, can_view, can_create, can_edit, can_delete')
       .eq('user_id', userId);
 
     if (error || !data || data.length === 0) {
-      setSectionPermissions(emptyPermissions());
+      setSectionPermissions(ROLE_TEMPLATES[role] || emptyPermissions());
       return;
     }
 
@@ -142,16 +137,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const branchId = profile?.branch_id ?? null;
 
   const hasPermission = (key: string): boolean => {
-    if (profile?.role === 'admin') return true;
     return profile?.permissions?.[key] === true;
   };
 
   const can = useCallback((section: Section, action: Action): boolean => {
-    if (profile?.role === 'admin') return true;
     const sp = sectionPermissions[section];
     if (!sp) return false;
     return sp[action] ?? false;
-  }, [profile?.role, sectionPermissions]);
+  }, [sectionPermissions]);
 
   const value = useMemo(() => ({
     user,

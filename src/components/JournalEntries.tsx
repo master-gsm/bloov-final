@@ -203,8 +203,9 @@ function fmtN(n: number): string {
 }
 
 export default function JournalEntries() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const { isRTL } = useLanguage();
+  const canViewAllBranches = can('branches', 'view');
 
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,7 +224,6 @@ export default function JournalEntries() {
   const [reverseError, setReverseError] = useState('');
   const [reverseSuccess, setReverseSuccess] = useState('');
 
-  const [userRole, setUserRole] = useState<string>('');
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
 
   const [accountingMode, setAccountingMode] = useState<Record<string, boolean>>({});
@@ -238,8 +238,8 @@ export default function JournalEntries() {
   }, [user]);
 
   useEffect(() => {
-    if (userRole && userBranchId !== undefined) {
-      loadEntries(userRole, userBranchId);
+    if (userBranchId !== undefined) {
+      loadEntries(userBranchId);
     }
   }, [currentPage, pageSize]);
 
@@ -247,17 +247,16 @@ export default function JournalEntries() {
     if (!user) return;
     const { data } = await supabase
       .from('users')
-      .select('role, branch_id')
+      .select('branch_id')
       .eq('id', user.id)
       .maybeSingle();
     if (data) {
-      setUserRole(data.role);
       setUserBranchId(data.branch_id);
     }
-    loadEntries(data?.role, data?.branch_id);
+    loadEntries(data?.branch_id);
   };
 
-  const loadEntries = async (role?: string, branchId?: string | null) => {
+  const loadEntries = async (branchId?: string | null) => {
     setLoading(true);
     try {
       let query = supabase
@@ -271,7 +270,7 @@ export default function JournalEntries() {
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (role !== 'super_admin' && role !== 'admin' && branchId) {
+      if (!canViewAllBranches && branchId) {
         query = query.eq('branch_id', branchId);
       }
 
@@ -360,7 +359,7 @@ export default function JournalEntries() {
       setReverseSuccess(
         isRTL ? 'تم إنشاء قيد العكس بنجاح' : 'Reverse entry created successfully'
       );
-      loadEntries(userRole, userBranchId);
+      loadEntries(userBranchId);
       setTimeout(() => {
         setReverseModal({ entryId: '', entryNumber: '', open: false });
         setReverseSuccess('');

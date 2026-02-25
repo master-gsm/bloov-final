@@ -28,14 +28,15 @@ interface OperatingExpense {
 }
 
 export default function Expenses() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const { language } = useLanguage();
-  const canEdit = useCanEdit();
+  const canEdit = useCanEdit('expenses');
   const isRTL = language === 'ar';
+  const isAdmin = can('expenses', 'delete');
+  const canViewAllBranches = can('branches', 'view');
 
   const [expenses, setExpenses] = useState<OperatingExpense[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -45,7 +46,6 @@ export default function Expenses() {
   const attachmentFileInputRef = useRef<HTMLInputElement>(null);
   const attachmentCameraInputRef = useRef<HTMLInputElement>(null);
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -69,7 +69,6 @@ export default function Expenses() {
   });
 
   useEffect(() => {
-    checkAdmin();
     loadUserBranch();
     loadBranches();
     loadPartners();
@@ -84,14 +83,13 @@ export default function Expenses() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('branch_id, role')
+        .select('branch_id')
         .eq('id', user.id)
         .maybeSingle();
 
       if (error) throw error;
       if (data) {
         setUserBranchId(data.branch_id);
-        setIsSuperAdmin(data.role === 'admin' || data.role === 'observer');
         if (data.branch_id) setSelectedBranchId(data.branch_id);
       }
     } catch (err) {
@@ -109,16 +107,6 @@ export default function Expenses() {
     setPartners(data || []);
   };
 
-  const checkAdmin = async () => {
-    if (!user) return;
-    try {
-      const { data: role } = await supabase.rpc('get_my_role');
-      setIsAdmin(role === 'admin');
-    } catch (err) {
-      console.error('Error checking role:', err);
-    }
-  };
-
   const loadExpenses = async () => {
     try {
       let query = supabase
@@ -128,7 +116,7 @@ export default function Expenses() {
         .not('category', 'in', '(salaries,commissions,purchases)')
         .order('expense_date', { ascending: false });
 
-      if (!isSuperAdmin && userBranchId) {
+      if (!canViewAllBranches && userBranchId) {
         query = query.eq('branch_id', userBranchId);
       }
 
@@ -358,7 +346,7 @@ export default function Expenses() {
                 <select
                   value={selectedBranchId}
                   onChange={(e) => setSelectedBranchId(e.target.value)}
-                  disabled={!isSuperAdmin}
+                  disabled={!canViewAllBranches}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:bg-gray-50"
                   required
                 >

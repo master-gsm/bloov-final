@@ -17,9 +17,10 @@ type Tab = typeof TABS[number];
 
 export function Settings() {
   const { language, setLanguage } = useLanguage();
-  const { user, profile } = useAuth();
+  const { user, profile, can } = useAuth();
   const { isTestMode, setTestMode } = useTestMode();
   const isRTL = language === 'ar';
+  const canViewSettings = can('settings', 'view');
 
   const [settings, setSettings] = useState<SettingsMap>({});
   const [loading, setLoading] = useState(true);
@@ -30,26 +31,12 @@ export function Settings() {
   const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
-    // Security check: Only admin can access settings
-    if (profile && profile.role !== 'admin' && profile.role !== 'super_admin') {
+    if (!canViewSettings) {
       setAccessDenied(true);
-      // Log unauthorized access attempt
-      supabase.from('audit_logs').insert({
-        action: 'SETTINGS_ACCESS_DENIED',
-        table_name: 'settings',
-        user_id: profile.id,
-        metadata: {
-          attempted_at: new Date().toISOString(),
-          user_role: profile.role,
-          reason: 'Insufficient permissions'
-        }
-      }).then(({ error }) => {
-      });
       return;
     }
-
     loadSettings();
-  }, [profile]);
+  }, [canViewSettings]);
 
   const loadSettings = async () => {
     try {

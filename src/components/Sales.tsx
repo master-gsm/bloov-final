@@ -85,8 +85,8 @@ interface Sale {
 
 export function Sales() {
   const { t, language } = useLanguage();
-  const { user } = useAuth();
-  const canEdit = useCanEdit();
+  const { user, can } = useAuth();
+  const canEdit = useCanEdit('sales');
   const { isSyncing, pendingOperationsCount, isOnline } = useOffline();
   const isRTL = language === 'ar';
 
@@ -112,8 +112,8 @@ export function Sales() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [canManageSales, setCanManageSales] = useState(false);
+  const isAdmin = can('sales', 'delete');
+  const canManageSales = can('sales', 'edit');
   const [searchTerm, setSearchTerm] = useState('');
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
@@ -173,7 +173,6 @@ export function Sales() {
   }, [offlineProducts, offlineCustomers, offlineEmployees, productsLoading, customersLoading, employeesLoading]);
 
   useEffect(() => {
-    checkAdmin();
     loadUserBranch();
     checkOpenRegister();
     loadSalesAndSettings();
@@ -227,17 +226,6 @@ export function Sales() {
       setOpenRegisterId(data?.id || null);
     } catch (err) {
       console.error('Error checking cash register:', err);
-    }
-  };
-
-  const checkAdmin = async () => {
-    if (!user || !navigator.onLine) return;
-    try {
-      const { data: role } = await supabase.rpc('get_my_role');
-      setIsAdmin(role === 'admin');
-      setCanManageSales(role === 'admin' || role === 'accountant');
-    } catch (err) {
-      console.error('Error checking role:', err);
     }
   };
 

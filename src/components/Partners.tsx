@@ -65,10 +65,11 @@ function Section({
 
 export function Partners() {
   const { language } = useLanguage();
-  const { user } = useAuth();
-  const canEdit = useCanEdit();
+  const { user, can } = useAuth();
+  const canEdit = useCanEdit('partners');
   const { currentBranchId } = useBranch();
   const isRTL = language === 'ar';
+  const canViewPartners = can('partners', 'view');
 
   const [partners, setPartners] = useState<Partner[]>([]);
   const [accounts, setAccounts] = useState<PartnerAccount[]>([]);
@@ -77,7 +78,6 @@ export function Partners() {
   const [withdrawals, setWithdrawals] = useState<PartnerWithdrawal[]>([]);
   const [distributions, setDistributions] = useState<ProfitDistribution[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'settlements'>('overview');
@@ -146,15 +146,8 @@ export function Partners() {
   const settlementCameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    checkRole();
     loadData();
   }, [user]);
-
-  const checkRole = async () => {
-    if (!user) return;
-    const { data } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
-    setIsAdmin(data?.role === 'admin');
-  };
 
   const loadData = useCallback(async () => {
     try {
@@ -597,14 +590,14 @@ export function Partners() {
     </div>
   );
 
-  if (!isAdmin) return (
+  if (!canViewPartners) return (
     <div className="flex items-center justify-center h-full">
       <div className="text-center">
         <div className="bg-red-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
           <ShieldAlert className="w-10 h-10 text-red-500" />
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">{isRTL ? 'غير مصرح' : 'Access Restricted'}</h2>
-        <p className="text-gray-500">{isRTL ? 'هذا القسم للمدير فقط' : 'Admins only'}</p>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">{isRTL ? 'وصول محظور' : 'Access Denied'}</h2>
+        <p className="text-gray-500">{isRTL ? 'ليس لديك صلاحية لعرض هذا القسم' : 'You do not have permission to view this section'}</p>
       </div>
     </div>
   );

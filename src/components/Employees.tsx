@@ -17,8 +17,10 @@ import type { Employee, Commission, EmployeeLeave, EmployeeSettlement, Loan, Tab
 
 export function Employees() {
   const { language } = useLanguage();
-  const { profile: userProfile, isAdmin } = useAuth();
+  const { profile: userProfile, can } = useAuth();
   const isRTL = language === 'ar';
+  const canViewEmployees = can('employees', 'view');
+  const canViewAllBranches = can('branches', 'view');
 
   const [activeTab, setActiveTab] = useState<Tab>('employees');
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -84,7 +86,7 @@ export function Employees() {
           .from('employees')
           .select('*, branches(name)', { count: 'exact' })
           .order('created_at', { ascending: false });
-        if (!isAdmin && (userProfile as any)?.branch_id) {
+        if (!canViewAllBranches && (userProfile as any)?.branch_id) {
           empQuery = (empQuery as any).eq('branch_id', (userProfile as any).branch_id);
         }
 
@@ -109,7 +111,7 @@ export function Employees() {
         if (count !== null) setTotalCount(count);
 
         let statusQuery = supabase.from('v_employee_residence_status').select('*');
-        if (!isAdmin && (userProfile as any)?.branch_id) {
+        if (!canViewAllBranches && (userProfile as any)?.branch_id) {
           statusQuery = statusQuery.eq('branch_id', (userProfile as any).branch_id);
         }
         const { data: statusData } = await statusQuery;
@@ -255,13 +257,13 @@ export function Employees() {
     return status?.residence_status === residenceFilter;
   });
 
-  if (!isAdmin) {
+  if (!canViewEmployees) {
     return (
       <div className="p-6">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <AlertCircle className="w-5 h-5 text-yellow-600 inline mr-2" />
           <span className="text-yellow-800">
-            {isRTL ? 'هذا القسم متاح للمسؤولين فقط' : 'This section is available for admins only'}
+            {isRTL ? 'ليس لديك صلاحية لعرض هذا القسم' : 'You do not have permission to view this section'}
           </span>
         </div>
       </div>

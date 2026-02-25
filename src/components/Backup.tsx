@@ -24,7 +24,8 @@ interface BackupHistory {
 
 export default function Backup() {
   const { language } = useLanguage();
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
+  const canViewBackup = can('backup', 'view');
   const [localLoading, setLocalLoading] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [serverLoading, setServerLoading] = useState(false);
@@ -47,29 +48,14 @@ export default function Backup() {
   };
 
   useEffect(() => {
-    // Security check: Only admin can access backup
-    if (profile && profile.role !== 'admin' && profile.role !== 'super_admin') {
+    if (!canViewBackup) {
       setAccessDenied(true);
-      // Log unauthorized access attempt
-      supabase.from('audit_logs').insert({
-        action: 'BACKUP_ACCESS_DENIED',
-        table_name: 'backup',
-        user_id: profile.id,
-        metadata: {
-          attempted_at: new Date().toISOString(),
-          user_role: profile.role,
-          reason: 'Insufficient permissions'
-        }
-      }).then(({ error }) => {
-        if (error) console.error('[Backup] Failed to log unauthorized attempt:', error);
-      });
       return;
     }
-
     loadBackupHistory();
     const interval = setInterval(loadBackupHistory, 60000);
     return () => clearInterval(interval);
-  }, [profile]);
+  }, [canViewBackup]);
 
   const loadBackupHistory = async () => {
     try {
