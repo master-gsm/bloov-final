@@ -8,6 +8,7 @@ import { uploadFile, getFileUrl } from '../lib/fileUpload';
 import { Receipt, Plus, Trash2, Search, Calendar, DollarSign, FileText, Filter, Download, Users, Paperclip, Camera, Printer, X, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { AttachmentPreviewModal } from './AttachmentPreviewModal';
+import { Pagination } from './Pagination';
 
 interface OperatingExpense {
   id: string;
@@ -47,6 +48,12 @@ export default function Expenses() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
 
   const [formData, setFormData] = useState({
     expense_type: 'other',
@@ -60,11 +67,14 @@ export default function Expenses() {
   });
 
   useEffect(() => {
-    loadExpenses();
     checkAdmin();
     loadUserBranch();
     loadBranches();
   }, []);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [currentPage, pageSize]);
 
   const loadUserBranch = async () => {
     if (!user) return;
@@ -105,7 +115,7 @@ export default function Expenses() {
     try {
       let query = supabase
         .from('expenses')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('is_deleted', false)
         .not('category', 'in', '(salaries,commissions,purchases)')
         .order('expense_date', { ascending: false });
@@ -114,10 +124,26 @@ export default function Expenses() {
         query = query.eq('branch_id', userBranchId);
       }
 
-      const { data, error } = await query;
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`expense_number.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,description_ar.ilike.%${searchTerm}%`);
+      }
+
+      // Apply type filter
+      if (filterType !== 'all') {
+        query = query.eq('category', filterType);
+      }
+
+      // Apply pagination
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
       if (data) setExpenses(data.map((e: any) => ({ ...e, expense_type: e.category })) as any[]);
+      if (count !== null) setTotalCount(count);
     } catch (err) {
       console.error('Error loading expenses:', err);
     } finally {
@@ -145,6 +171,8 @@ export default function Expenses() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (submitting) return;
+
     if (!formData.description || !formData.amount) {
       alert(isRTL ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
       return;
@@ -155,17 +183,15 @@ export default function Expenses() {
       return;
     }
 
+    setSubmitting(true);
     try {
       const expenseNumber = await generateExpenseNumber();
 
       let attachmentUrl = null;
       if (attachmentFile) {
-        console.log('Uploading attachment file:', attachmentFile.name);
         attachmentUrl = await uploadFile(attachmentFile, 'operating_expenses');
         if (!attachmentUrl) {
-          console.warn('File upload failed, continuing without attachment');
         } else {
-          console.log('Attachment uploaded successfully:', attachmentUrl);
         }
       }
 
@@ -204,6 +230,8 @@ export default function Expenses() {
     } catch (err) {
       console.error('Error adding expense:', err);
       alert(isRTL ? 'حدث خطأ أثناء إضافة المصروف' : 'Error adding expense');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -244,16 +272,8 @@ export default function Expenses() {
     XLSX.writeFile(wb, `expenses_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const filteredExpenses = expenses.filter((exp) => {
-    const matchesSearch =
-      exp.expense_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      exp.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (exp.description_ar && exp.description_ar.includes(searchTerm));
-
-    const matchesFilter = filterType === 'all' || exp.expense_type === filterType;
-
-    return matchesSearch && matchesFilter;
-  });
+  // Server-side filtering is now applied in loadExpenses
+  const filteredExpenses = expenses;
 
   const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
 
@@ -486,9 +506,10 @@ export default function Expenses() {
               {canEdit && (
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                  disabled={submitting}
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isRTL ? 'حفظ' : 'Save'}
+                  {submitting ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ' : 'Save')}
                 </button>
               )}
             </div>
@@ -644,6 +665,19 @@ export default function Expenses() {
             </div>
           )}
         </div>
+
+        {totalCount > pageSize && (
+          <div className="mt-6">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCount / pageSize)}
+              onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              totalItems={totalCount}
+            />
+          </div>
+        )}
       </div>
 
       <AttachmentPreviewModal

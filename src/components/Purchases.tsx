@@ -2,11 +2,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
-import { useOffline } from '../contexts/OfflineContext';
+import { useOffline } from '../contexts/OfflineFirstContext';
 import { supabase } from '../lib/supabase';
 import { uploadFile, getSignedUrl, getFileUrl } from '../lib/fileUpload';
 import { ShoppingBag, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Paperclip, Download, Printer, Camera } from 'lucide-react';
 import { AttachmentPreviewModal } from './AttachmentPreviewModal';
+import { Pagination } from './Pagination';
 
 interface Product {
   id: string;
@@ -83,10 +84,18 @@ export function Purchases() {
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+
   useEffect(() => {
-    loadData();
     loadUserBranch();
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [currentPage, pageSize]);
 
   const loadUserBranch = async () => {
     if (!user) return;
@@ -120,9 +129,10 @@ export function Purchases() {
 
   const loadData = async () => {
     try {
+      // Build query with filters and search
       let purchasesQuery = supabase
         .from('purchases')
-        .select('*, suppliers(name, name_ar)')
+        .select('*, suppliers(name, name_ar)', { count: 'exact' })
         .order('created_at', { ascending: false });
 
       // RLS will handle filtering, but we can optimize the query
@@ -130,12 +140,29 @@ export function Purchases() {
         purchasesQuery = purchasesQuery.eq('branch_id', userBranchId);
       }
 
+      // Apply search filter if exists
+      if (searchTerm) {
+        purchasesQuery = purchasesQuery.or(`purchase_number.ilike.%${searchTerm}%,notes.ilike.%${searchTerm}%`);
+      }
+
+      // Apply status filter
+      if (statusFilter !== 'all') {
+        purchasesQuery = purchasesQuery.eq('status', statusFilter);
+      }
+
+      // Apply pagination
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      purchasesQuery = purchasesQuery.range(from, to);
+
       const [purchasesRes, productsRes, suppliersRes] = await Promise.all([
         purchasesQuery,
         supabase.from('products').select('id, name, name_ar, purchase_price, sku').eq('is_active', true),
         supabase.from('suppliers').select('id, name, name_ar, code, vat_status').eq('is_active', true),
       ]);
+
       if (purchasesRes.data) setPurchases(purchasesRes.data as any[]);
+      if (purchasesRes.count !== null) setTotalCount(purchasesRes.count);
       if (productsRes.data) setProducts(productsRes.data);
       if (suppliersRes.data) setSuppliers(suppliersRes.data);
     } catch (err) {
@@ -198,12 +225,9 @@ export function Purchases() {
     try {
       let attachmentUrl = null;
       if (attachmentFile && isOnline) {
-        console.log('Uploading attachment file:', attachmentFile.name);
         attachmentUrl = await uploadFile(attachmentFile, 'purchases');
         if (!attachmentUrl) {
-          console.warn('File upload failed, continuing without attachment');
         } else {
-          console.log('Attachment uploaded successfully:', attachmentUrl);
         }
       }
 
@@ -246,12 +270,6 @@ export function Purchases() {
         created_at: timestamp,
       }));
 
-      console.log('[Purchases] Saving purchase:', {
-        isOnline,
-        purchaseId,
-        itemsCount: items.length
-      });
-
       if (isOnline) {
         const { data: purchase, error: purchaseError } = await supabase
           .from('purchases')
@@ -263,8 +281,6 @@ export function Purchases() {
 
         const { error: itemsError } = await supabase.from('purchase_items').insert(items);
         if (itemsError) throw itemsError;
-
-        console.log('[Purchases] Saved to server successfully');
       } else {
         await addPendingOperation('purchases', 'insert', purchaseData);
 
@@ -272,7 +288,6 @@ export function Purchases() {
           await addPendingOperation('purchase_items', 'insert', item);
         }
 
-        console.log('[Purchases] Queued for offline sync');
         setError(isRTL ? 'تم حفظ الفاتورة محلياً وسيتم المزامنة عند الاتصال بالإنترنت' : 'Purchase saved locally and will sync when online');
       }
 
@@ -310,16 +325,6 @@ export function Purchases() {
         const result = data as any;
         if (!result?.success) {
           throw new Error(result?.message || (isRTL ? 'فشل في معالجة الاستلام' : 'Failed to process receipt'));
-        }
-        if (result?.duplicate) {
-          console.log('[Purchases] Receipt already processed (idempotent):', result.message);
-        } else {
-          console.log('[Purchases] Receipt processed:', {
-            movements: result.movements_created,
-            vatRecorded: result.vat_recorded,
-            vatAmount: result.vat_amount,
-            journalEntry: result.journal_entry_id,
-          });
         }
       } else {
         const { data, error } = await supabase.rpc('update_purchase_status', {
@@ -692,6 +697,19 @@ export function Purchases() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {totalCount > pageSize && (
+          <div className="mt-6">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCount / pageSize)}
+              onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              totalItems={totalCount}
+            />
           </div>
         )}
       </div>

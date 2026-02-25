@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useOffline } from '../contexts/OfflineContext';
+import { useOffline } from '../contexts/OfflineFirstContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Wifi, WifiOff, RefreshCw, AlertCircle, Trash2, X } from 'lucide-react';
 

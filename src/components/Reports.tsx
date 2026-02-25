@@ -152,7 +152,6 @@ export function Reports() {
       setIsAdmin(admin);
       setLoading(false);
     } catch (err) {
-      console.error('Error checking role:', err);
       setLoading(false);
     }
   };
@@ -418,7 +417,6 @@ export function Reports() {
       });
 
     } catch (err) {
-      console.error('Error loading report data:', err);
     } finally {
       setLoading(false);
     }
@@ -435,7 +433,6 @@ export function Reports() {
       if (error) throw error;
       setTrialBalance(data || []);
     } catch (err) {
-      console.error('Error loading trial balance:', err);
     } finally {
       setFinancialLoading(false);
     }
@@ -452,7 +449,6 @@ export function Reports() {
       if (error) throw error;
       setIncomeStatement(data);
     } catch (err) {
-      console.error('Error loading income statement:', err);
     } finally {
       setFinancialLoading(false);
     }
@@ -468,7 +464,6 @@ export function Reports() {
       if (error) throw error;
       setBalanceSheet(data);
     } catch (err) {
-      console.error('Error loading balance sheet:', err);
     } finally {
       setFinancialLoading(false);
     }
@@ -485,7 +480,6 @@ export function Reports() {
       if (error) throw error;
       setVatSummary(data);
     } catch (err) {
-      console.error('Error loading VAT summary:', err);
     } finally {
       setFinancialLoading(false);
     }

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useOffline } from '../contexts/OfflineContext';
 import { useTestMode } from '../contexts/TestModeContext';
 import { supabase } from '../lib/supabase';
 import {
@@ -45,7 +44,6 @@ export function Settings() {
           reason: 'Insufficient permissions'
         }
       }).then(({ error }) => {
-        if (error) console.error('[Settings] Failed to log unauthorized attempt:', error);
       });
       return;
     }
@@ -82,7 +80,6 @@ export function Settings() {
 
       setSettings(map);
     } catch (err) {
-      console.error('Error loading settings:', err);
     } finally {
       setLoading(false);
     }
@@ -123,7 +120,6 @@ export function Settings() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
-      console.error('Error saving settings:', err);
     } finally {
       setSaving(false);
     }

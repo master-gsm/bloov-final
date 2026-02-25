@@ -67,7 +67,6 @@ export function Dashboard() {
         inventoryValue,
       });
     } catch (error) {
-      console.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
     }

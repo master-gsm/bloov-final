@@ -5,6 +5,7 @@ import { useOfflineData } from '../hooks/useOfflineData';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Download, MessageSquare, Send, CheckCircle, AlertCircle, Loader2, Crown, Star, UserX, Filter, TrendingUp, Calendar, Award, StickyNote, ArrowUpDown, ArrowUp, ArrowDown, Trophy, Zap } from 'lucide-react';
+import { Pagination } from './Pagination';
 
 interface Customer {
   id: string;
@@ -94,30 +95,65 @@ export function Customers() {
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [branches, setBranches] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (!customersLoading && !branchesLoading) {
-      setCustomers(offlineCustomers);
-      const activeBranches = offlineBranches.filter((b: any) => b.is_active !== false);
-      setBranches(activeBranches);
-      setLoading(false);
-    }
-  }, [offlineCustomers, offlineBranches, customersLoading, branchesLoading]);
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     loadUserBranch();
   }, []);
 
+  useEffect(() => {
+    loadCustomers();
+  }, [currentPage, pageSize]);
+
+  useEffect(() => {
+    if (!customersLoading && !branchesLoading) {
+      const activeBranches = offlineBranches.filter((b: any) => b.is_active !== false);
+      setBranches(activeBranches);
+    }
+  }, [offlineBranches, branchesLoading]);
+
   const loadCustomers = async () => {
     if (!navigator.onLine) return;
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('customers')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false });
+
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,name_ar.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+      }
+
+      // Apply tier filter
+      if (filterTier !== 'all') {
+        query = query.eq('tier', filterTier);
+      }
+
+      // Apply spend filters
+      if (filterMinSpend) {
+        query = query.gte('total_spend', parseFloat(filterMinSpend));
+      }
+      if (filterMaxSpend) {
+        query = query.lte('total_spend', parseFloat(filterMaxSpend));
+      }
+
+      // Apply pagination
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
       if (error) throw error;
       if (data) setCustomers(data as any[]);
+      if (count !== null) setTotalCount(count);
     } catch (err) {
       console.error('Error loading customers:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -784,6 +820,19 @@ export function Customers() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {totalCount > pageSize && (
+          <div className="mt-6">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCount / pageSize)}
+              onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              totalItems={totalCount}
+            />
           </div>
         )}
       </div>

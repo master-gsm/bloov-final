@@ -18,10 +18,14 @@ export interface OfflineContextType {
   isSyncing: boolean;
   pendingOperationsCount: number;
   lastSyncTime: number | null;
+  lastBackupTime: number | null;
   syncError: string | null;
   canWrite: boolean;
   performSync: () => Promise<SyncResult>;
+  syncNow: () => Promise<void>;
   clearSyncError: () => void;
+  addPendingOperation: (table: string, operation: 'insert' | 'update' | 'delete', data: any) => Promise<string>;
+  clearAllPending: () => Promise<number>;
   executorReady: boolean;
 }
 
@@ -35,31 +39,24 @@ export const OfflineFirstProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingOperationsCount, setPendingOperationsCount] = useState(0);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [lastBackupTime, setLastBackupTime] = useState<number | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [executorReady, setExecutorReady] = useState(false);
 
   useEffect(() => {
     const initializeOfflineSystem = async () => {
       try {
-        console.log('[OfflineFirstContext] Initializing offline system...');
-
         await indexedDBManager.init();
-        console.log('[OfflineFirstContext] IndexedDB initialized');
 
         healthCheckManager.startPeriodicChecks(30);
-        console.log('[OfflineFirstContext] Health checks started');
 
         if (navigator.onLine) {
-          console.log('[OfflineFirstContext] Online - performing initial sync...');
           const syncResult = await initialSyncManager.performInitialSync();
-          console.log('[OfflineFirstContext] Initial sync result:', syncResult);
         }
 
         await enhancedSyncManager.startAutoSync(30);
-        console.log('[OfflineFirstContext] Auto-sync started');
 
         setExecutorReady(true);
-        console.log('[OfflineFirstContext] Offline system ready');
       } catch (error) {
         console.error('[OfflineFirstContext] Initialization failed:', error);
         setExecutorReady(true);
@@ -135,6 +132,18 @@ export const OfflineFirstProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
+  const syncNow = useCallback(async () => {
+    await performSync();
+  }, [performSync]);
+
+  const addPendingOperation = useCallback(async (table: string, operation: 'insert' | 'update' | 'delete', data: any): Promise<string> => {
+    return await indexedDBManager.addOperation({ table, operation, data });
+  }, []);
+
+  const clearAllPending = useCallback(async (): Promise<number> => {
+    return await indexedDBManager.clearQueue();
+  }, []);
+
   const value: OfflineContextType = useMemo(() => ({
     isOnline,
     isHealthy,
@@ -143,12 +152,16 @@ export const OfflineFirstProvider: React.FC<{ children: React.ReactNode }> = ({ 
     isSyncing,
     pendingOperationsCount,
     lastSyncTime,
+    lastBackupTime,
     syncError,
     canWrite,
     performSync,
+    syncNow,
     clearSyncError,
+    addPendingOperation,
+    clearAllPending,
     executorReady,
-  }), [isOnline, isHealthy, connectionQuality, latency, isSyncing, pendingOperationsCount, lastSyncTime, syncError, canWrite, executorReady, performSync, clearSyncError]);
+  }), [isOnline, isHealthy, connectionQuality, latency, isSyncing, pendingOperationsCount, lastSyncTime, lastBackupTime, syncError, canWrite, executorReady, performSync, syncNow, clearSyncError, addPendingOperation, clearAllPending]);
 
   return (
     <OfflineFirstContext.Provider value={value}>
@@ -164,6 +177,9 @@ export const useOfflineFirst = (): OfflineContextType => {
   }
   return context;
 };
+
+// Alias for backward compatibility with old OfflineContext
+export const useOffline = useOfflineFirst;
 
 export const useOfflineOperations = () => {
   return {

@@ -4,6 +4,7 @@ import { useCanEdit } from '../hooks/useCanEdit';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Truck, Plus, Search, Edit, Trash2, X, Phone, Mail, MapPin, Globe, FileText, DollarSign, Save } from 'lucide-react';
+import { Pagination } from './Pagination';
 
 interface Supplier {
   id: string;
@@ -65,18 +66,36 @@ export function Suppliers() {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+
   useEffect(() => {
     loadSuppliers();
-  }, []);
+  }, [currentPage, pageSize]);
 
   const loadSuppliers = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('suppliers')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false });
+
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,name_ar.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+      }
+
+      // Apply pagination
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
       if (error) throw error;
       if (data) setSuppliers(data as any[]);
+      if (count !== null) setTotalCount(count);
     } catch (err) {
       console.error('Error loading suppliers:', err);
     } finally {
@@ -336,6 +355,19 @@ export function Suppliers() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {totalCount > pageSize && (
+          <div className="mt-6">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCount / pageSize)}
+              onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              totalItems={totalCount}
+            />
           </div>
         )}
       </div>

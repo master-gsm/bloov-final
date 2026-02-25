@@ -10,6 +10,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { Pagination } from './Pagination';
 
 interface JournalEntry {
   id: string;
@@ -227,9 +228,20 @@ export default function JournalEntries() {
 
   const [accountingMode, setAccountingMode] = useState<Record<string, boolean>>({});
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+
   useEffect(() => {
     loadUserContext();
   }, [user]);
+
+  useEffect(() => {
+    if (userRole && userBranchId !== undefined) {
+      loadEntries(userRole, userBranchId);
+    }
+  }, [currentPage, pageSize]);
 
   const loadUserContext = async () => {
     if (!user) return;
@@ -255,7 +267,7 @@ export default function JournalEntries() {
           branches(name),
           creator:users!journal_entries_created_by_fkey(full_name),
           poster:users!journal_entries_posted_by_fkey(full_name)
-        `)
+        `, { count: 'exact' })
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -263,9 +275,33 @@ export default function JournalEntries() {
         query = query.eq('branch_id', branchId);
       }
 
-      const { data, error } = await query;
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`entry_number.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+      }
+
+      // Apply status filter
+      if (filterStatus !== 'all') {
+        query = query.eq('status', filterStatus);
+      }
+
+      // Apply date filters
+      if (filterDateFrom) {
+        query = query.gte('date', filterDateFrom);
+      }
+      if (filterDateTo) {
+        query = query.lte('date', filterDateTo);
+      }
+
+      // Apply pagination
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
       if (error) throw error;
       setEntries((data || []) as any[]);
+      if (count !== null) setTotalCount(count);
     } finally {
       setLoading(false);
     }
@@ -342,19 +378,8 @@ export default function JournalEntries() {
     Void:   { label_ar: 'ملغى',  label_en: 'Void',   cls: 'bg-red-100 text-red-600',      icon: <Ban className="w-3 h-3" /> },
   };
 
-  const filteredEntries = entries.filter(e => {
-    const term = searchTerm.toLowerCase();
-    const matchSearch =
-      !term ||
-      (e.entry_number || '').toLowerCase().includes(term) ||
-      (e.description || '').toLowerCase().includes(term);
-
-    const matchStatus = filterStatus === 'all' || e.status === filterStatus;
-    const matchDateFrom = !filterDateFrom || e.date >= filterDateFrom;
-    const matchDateTo   = !filterDateTo   || e.date <= filterDateTo;
-
-    return matchSearch && matchStatus && matchDateFrom && matchDateTo;
-  });
+  // Server-side filtering is now applied in loadEntries
+  const filteredEntries = entries;
 
   const totalDebit = (entryLines: JournalLine[]) =>
     entryLines.reduce((s, l) => s + (l.debit || 0), 0);
@@ -784,6 +809,19 @@ export default function JournalEntries() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {totalCount > pageSize && (
+          <div className="mt-6 px-5">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCount / pageSize)}
+              onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              totalItems={totalCount}
+            />
           </div>
         )}
       </div>

@@ -73,7 +73,6 @@ export default function Backup() {
 
   const loadBackupHistory = async () => {
     try {
-      console.log('[Backup] Loading backup history...');
       const { data: files, error } = await supabase.storage
         .from('backups')
         .list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
@@ -83,12 +82,9 @@ export default function Backup() {
         return;
       }
 
-      console.log('[Backup] Total files in storage:', files?.length || 0);
-
       const history = (files || [])
         .filter((f: any) => f.name && f.name.endsWith('.json'))
         .map((f: any) => {
-          console.log('[Backup] Found backup file:', f.name, 'size:', f.metadata?.size);
           return {
             name: f.name,
             created_at: f.created_at,
@@ -97,7 +93,6 @@ export default function Backup() {
         })
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      console.log('[Backup] Loaded', history.length, 'backup files');
       setBackupHistory(history);
     } catch (err) {
       console.error('[Backup] Error loading history:', err);
@@ -136,14 +131,13 @@ export default function Backup() {
       for (const table of TABLES_TO_BACKUP) {
         try {
           const { data, error } = await supabase.from(table as any).select('*');
-          if (error) { console.warn(`Error loading ${table}:`, error); continue; }
+          if (error) { continue; }
           if (data && data.length > 0) {
             backupData.data[table] = data;
             totalRecords += data.length;
             successfulTables++;
           }
         } catch (err) {
-          console.warn(`Error loading ${table}:`, err);
         }
       }
 
@@ -195,21 +189,16 @@ export default function Backup() {
     try {
       const startTime = Date.now();
 
-      console.log('[ServerBackup] === START ===');
-
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      console.log('[ServerBackup] session:', session?.user?.email, 'error:', sessionError?.message);
       if (!session) throw new Error(language === 'ar' ? 'غير مسجل الدخول' : 'Not authenticated');
 
       const testKey = `test_${Date.now()}.txt`;
       const testBlob = new Blob(['test'], { type: 'text/plain' });
       const testResult = await supabase.storage.from('backups').upload(testKey, testBlob, { upsert: false });
-      console.log('[ServerBackup] test upload result:', JSON.stringify(testResult));
       if (testResult.error) {
         throw new Error(`Storage test failed: ${testResult.error.message} (status: ${(testResult.error as any).statusCode})`);
       }
       await supabase.storage.from('backups').remove([testKey]);
-      console.log('[ServerBackup] test upload OK - Storage is working');
 
       const backupData: any = {
         metadata: {
@@ -227,35 +216,24 @@ export default function Backup() {
       for (const table of TABLES_TO_BACKUP) {
         try {
           const { data, error } = await supabase.from(table as any).select('*');
-          if (error) { console.warn(`[ServerBackup] ${table}:`, error.message); continue; }
+          if (error) { continue; }
           if (data && data.length > 0) {
             backupData.data[table] = data;
             totalRecords += data.length;
             successfulTables++;
           }
         } catch (err) {
-          console.warn(`[ServerBackup] ${table}:`, err);
         }
       }
 
       backupData.metadata.total_records = totalRecords;
       backupData.metadata.tables_count = successfulTables;
-      console.log(`[ServerBackup] collected ${totalRecords} records from ${successfulTables} tables`);
 
       const backupJson = JSON.stringify(backupData, null, 2);
       const backupBlob = new Blob([backupJson], { type: 'application/json' });
       const backupSize = backupBlob.size;
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `backup_${timestamp}.json`;
-
-      console.log('=== [ServerBackup] PRE-UPLOAD DIAGNOSTICS ===');
-      console.log('[ServerBackup] bucket:', 'backups');
-      console.log('[ServerBackup] upload path:', filename);
-      console.log('[ServerBackup] file size (bytes):', backupSize, `(${(backupSize / 1024).toFixed(1)} KB)`);
-      console.log('[ServerBackup] blob type:', backupBlob.type);
-
-      const { data: bucketList, error: bucketListError } = await supabase.storage.listBuckets();
-      console.log('[ServerBackup] listBuckets() result:', JSON.stringify({ data: bucketList, error: bucketListError }));
 
       const uploadResult = await supabase.storage
         .from('backups')
@@ -264,26 +242,14 @@ export default function Backup() {
           upsert: false,
         });
 
-      console.log('=== [ServerBackup] upload result:', JSON.stringify({
-        data: uploadResult.data,
-        error: uploadResult.error ? {
-          message: uploadResult.error.message,
-          statusCode: (uploadResult.error as any).statusCode,
-          name: uploadResult.error.name,
-        } : null,
-      }));
-
       if (uploadResult.error) {
         throw new Error(`${uploadResult.error.message} (status: ${(uploadResult.error as any).statusCode})`);
       }
-
-      console.log('[ServerBackup] upload SUCCESS - path:', uploadResult.data?.path);
 
       const { data: listData, error: listError } = await supabase.storage.from('backups').list('', {
         limit: 100,
         sortBy: { column: 'created_at', order: 'desc' },
       });
-      console.log('[ServerBackup] list root:', JSON.stringify({ files: listData?.map(f => f.name), error: listError }));
 
       await supabase.from('settings').update({ last_backup_date: new Date().toISOString() }).eq('id', 1);
 
@@ -304,7 +270,6 @@ export default function Backup() {
 
       await loadBackupHistory();
 
-      console.log('[ServerBackup] Showing success alert — upload confirmed error === null');
       showAlert(
         language === 'ar'
           ? `تم رفع النسخة الاحتياطية بنجاح!\n\nالملف: ${filename}\nعدد السجلات: ${totalRecords.toLocaleString()}\nوقت التنفيذ: ${executionTime} ثانية`

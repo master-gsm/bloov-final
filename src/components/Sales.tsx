@@ -3,8 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCanEdit } from '../hooks/useCanEdit';
 import { useOfflineData } from '../hooks/useOfflineData';
-import { useOffline } from '../contexts/OfflineContext';
-import { useOfflineFirst } from '../contexts/OfflineFirstContext';
+import { useOffline } from '../contexts/OfflineFirstContext';
 import { supabase } from '../lib/supabase';
 import { indexedDBManager } from '../lib/offline/indexedDBManager';
 import { enhancedSyncManager } from '../lib/offline/enhancedSyncManager';
@@ -88,8 +87,7 @@ export function Sales() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const canEdit = useCanEdit();
-  const { isSyncing, pendingOperationsCount } = useOffline();
-  const { isOnline } = useOfflineFirst();
+  const { isSyncing, pendingOperationsCount, isOnline } = useOffline();
   const isRTL = language === 'ar';
 
   // Offline-First Data Hooks
@@ -181,10 +179,7 @@ export function Sales() {
     loadSalesAndSettings();
 
     const unsubscribeSyncing = enhancedSyncManager.onSyncingStateChange((isSyncing) => {
-      console.log('[Sales] Sync state changed:', isSyncing);
-
       if (!isSyncing && navigator.onLine) {
-        console.log('[Sales] Sync completed, reloading sales data...');
         setTimeout(() => {
           loadSalesAndSettings();
         }, 500);
@@ -212,10 +207,7 @@ export function Sales() {
 
       if (error) throw error;
       if (data) {
-        console.log('[Sales] User branch_id:', data.branch_id, '| user.id:', user.id);
         setUserBranchId(data.branch_id as string);
-      } else {
-        console.warn('[Sales] No user profile found for id:', user.id);
       }
     } catch (err) {
       console.error('Error loading user branch:', err);
@@ -252,8 +244,6 @@ export function Sales() {
   const loadSalesAndSettings = async () => {
     try {
       if (navigator.onLine) {
-        console.log('[Sales] Loading sales from server with pagination...');
-
         // Get total count first
         const { count } = await supabase
           .from('sales')
@@ -278,17 +268,12 @@ export function Sales() {
           console.error('[Sales] RLS/server error loading sales:', salesRes.error);
         }
         if (salesRes.data) {
-          console.log('[Sales] Loaded', salesRes.data.length, 'sales from server (page', currentPage, ')');
           setSales(salesRes.data as any[]);
-        } else {
-          console.warn('[Sales] salesRes.data is null/empty — possible RLS block. Error:', salesRes.error);
         }
         if (settingsRes.data?.tax_rate) setTaxRate(parseFloat(settingsRes.data.tax_rate.toString()));
       } else {
-        console.log('[Sales] Offline: Loading sales from cache...');
         const cachedSales = await indexedDBManager.getCachedRecords('sales');
         if (cachedSales && cachedSales.length > 0) {
-          console.log('[Sales] Loaded', cachedSales.length, 'sales from cache');
           setTotalCount(cachedSales.length);
           // Apply pagination to cached data
           const from = (currentPage - 1) * pageSize;
@@ -622,18 +607,12 @@ export function Sales() {
     }));
 
     try {
-      console.log('[Sales] Starting WhatsApp ONE-CLICK share for sale:', sale.id);
-
       await shareInvoiceViaWhatsApp(sale, formattedItems as any, phone);
-      console.log('[Sales] WhatsApp share completed successfully');
 
     } catch (error: any) {
       console.error('[Sales] Error sharing invoice:', error);
-      console.error('[Sales] Error message:', error?.message);
-      console.error('[Sales] Error stack:', error?.stack);
 
       if (error?.name === 'AbortError') {
-        console.log('[Sales] User cancelled share dialog');
         return;
       }
 

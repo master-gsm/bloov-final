@@ -4,6 +4,7 @@ import { useCanEdit } from '../hooks/useCanEdit';
 import { useOfflineData } from '../hooks/useOfflineData';
 import { supabase } from '../lib/supabase';
 import { Package, Plus, Edit, Trash2, Search, X, Filter, ClipboardList } from 'lucide-react';
+import { Pagination } from './Pagination';
 
 interface Product {
   id: string;
@@ -90,14 +91,21 @@ export function Products() {
   const [selectedMaterial, setSelectedMaterial] = useState('');
   const [materialQuantity, setMaterialQuantity] = useState(1);
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+
   useEffect(() => {
-    if (!productsLoading && !categoriesLoading) {
-      setProducts(offlineProducts);
+    loadData();
+  }, [currentPage, pageSize]);
+
+  useEffect(() => {
+    if (!categoriesLoading) {
       const activeCategories = offlineCategories.filter((c: any) => c.is_active !== false);
       setCategories(activeCategories);
-      setLoading(false);
     }
-  }, [offlineProducts, offlineCategories, productsLoading, categoriesLoading]);
+  }, [offlineCategories, categoriesLoading]);
 
   const loadData = async () => {
     try {
@@ -105,12 +113,36 @@ export function Products() {
         console.log('[Products] Offline - using cached data');
         return;
       }
-      const [productsRes, categoriesRes] = await Promise.all([
-        supabase.from('products').select('*').order('created_at', { ascending: false }),
-        supabase.from('categories').select('*').eq('is_active', true),
-      ]);
-      if (productsRes.data) setProducts(productsRes.data as any[]);
-      if (categoriesRes.data) setCategories(categoriesRes.data as any[]);
+      let query = supabase
+        .from('products')
+        .select('*', { count: 'exact' })
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,name_ar.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%`);
+      }
+
+      // Apply type filter
+      if (typeFilter !== 'all') {
+        query = query.eq('type', typeFilter);
+      }
+
+      // Apply classification filter
+      if (classificationFilter !== 'all') {
+        query = query.eq('classification', classificationFilter);
+      }
+
+      // Apply pagination
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+      if (data) setProducts(data as any[]);
+      if (count !== null) setTotalCount(count);
     } catch (err) {
       console.error('Error loading data:', err);
     } finally {
@@ -253,18 +285,8 @@ export function Products() {
     }
   };
 
-  const filteredProducts = products.filter((p) => {
-    if (!p.is_active) return false;
-    if (typeFilter !== 'all' && p.type !== typeFilter) return false;
-    if (classificationFilter !== 'all' && p.classification !== classificationFilter) return false;
-    const s = searchTerm.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(s) ||
-      p.name_ar.includes(searchTerm) ||
-      p.sku.toLowerCase().includes(s) ||
-      (p.classification && getClassificationLabel(p.classification).toLowerCase().includes(s))
-    );
-  });
+  // Server-side filtering is now applied in loadData
+  const filteredProducts = products;
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, { en: string, ar: string }> = {
@@ -525,6 +547,19 @@ export function Products() {
             </tbody>
           </table>
         </div>
+
+        {totalCount > pageSize && (
+          <div className="mt-6">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalCount / pageSize)}
+              onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              totalItems={totalCount}
+            />
+          </div>
+        )}
       </div>
 
       {deleteConfirm && (

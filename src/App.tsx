@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BranchProvider } from './contexts/BranchContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
-import { OfflineProvider } from './contexts/OfflineContext';
 import { OfflineFirstProvider } from './contexts/OfflineFirstContext';
 import { TestModeProvider } from './contexts/TestModeContext';
 import { LoginForm } from './components/LoginForm';
@@ -174,11 +173,9 @@ function App() {
       <BranchProvider>
         <LanguageProvider>
           <TestModeProvider>
-            <OfflineProvider>
-              <OfflineFirstProvider>
-                <AppContent />
-              </OfflineFirstProvider>
-            </OfflineProvider>
+            <OfflineFirstProvider>
+              <AppContent />
+            </OfflineFirstProvider>
           </TestModeProvider>
         </LanguageProvider>
       </BranchProvider>

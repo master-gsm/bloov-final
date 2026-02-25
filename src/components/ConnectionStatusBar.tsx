@@ -1,4 +1,4 @@
-import { useOffline } from '../contexts/OfflineContext';
+import { useOffline } from '../contexts/OfflineFirstContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Wifi, WifiOff, RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import { useEffect, useState } from 'react';

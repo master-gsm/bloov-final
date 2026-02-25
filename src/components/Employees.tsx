@@ -12,6 +12,7 @@ import { SettlementsTab } from './hr/SettlementsTab';
 import { PayrollTab } from './hr/PayrollTab';
 import { LoansTab } from './hr/LoansTab';
 import { CommissionsPanel } from './hr/CommissionsPanel';
+import { Pagination } from './Pagination';
 import type { Employee, Commission, EmployeeLeave, EmployeeSettlement, Loan, Tab } from './hr/types';
 
 export function Employees() {
@@ -32,6 +33,11 @@ export function Employees() {
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [branches, setBranches] = useState<any[]>([]);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
 
   const defaultForm = {
     full_name: '',
@@ -64,19 +70,43 @@ export function Employees() {
     loadData();
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab === 'employees') {
+      loadData();
+    }
+  }, [currentPage, pageSize]);
+
   const loadData = async () => {
     setLoading(true);
     try {
       if (activeTab === 'employees') {
         let empQuery = supabase
           .from('employees')
-          .select('*, branches(name)')
+          .select('*, branches(name)', { count: 'exact' })
           .order('created_at', { ascending: false });
         if (!isAdmin && (userProfile as any)?.branch_id) {
           empQuery = (empQuery as any).eq('branch_id', (userProfile as any).branch_id);
         }
-        const { data: empData } = await empQuery;
+
+        // Apply search filter
+        if (searchTerm) {
+          empQuery = empQuery.or(`full_name.ilike.%${searchTerm}%,position.ilike.%${searchTerm}%`);
+        }
+
+        // Apply residence filter
+        if (residenceFilter !== 'all') {
+          // Note: This filter needs to be applied client-side since it's from a view
+          // We'll filter after loading
+        }
+
+        // Apply pagination
+        const from = (currentPage - 1) * pageSize;
+        const to = from + pageSize - 1;
+        empQuery = empQuery.range(from, to);
+
+        const { data: empData, count } = await empQuery;
         setEmployees((empData || []) as any[]);
+        if (count !== null) setTotalCount(count);
 
         let statusQuery = supabase.from('v_employee_residence_status').select('*');
         if (!isAdmin && (userProfile as any)?.branch_id) {
@@ -217,11 +247,8 @@ export function Employees() {
     return residenceStatuses.find(s => s.employee_id === empId);
   };
 
+  // Server-side search is applied, but residence filter needs client-side filtering
   const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.position?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    if (!matchesSearch) return false;
     if (residenceFilter === 'all') return true;
 
     const status = getResidenceStatus(emp.id);
@@ -433,6 +460,19 @@ export function Employees() {
                 </tbody>
               </table>
             </div>
+
+            {totalCount > pageSize && (
+              <div className="mt-6 px-4">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={Math.ceil(totalCount / pageSize)}
+                  onPageChange={setCurrentPage}
+                  pageSize={pageSize}
+                  onPageSizeChange={setPageSize}
+                  totalItems={totalCount}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useOffline } from '../contexts/OfflineContext';
+import { useOffline } from '../contexts/OfflineFirstContext';
 import { useBranch } from '../contexts/BranchContext';
 import { LogOut, Globe, Wifi, WifiOff, RefreshCw, AlertCircle, Building2, ChevronDown } from 'lucide-react';
 import { ConnectionStatusButton } from './ConnectionStatusButton';
