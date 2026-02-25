@@ -18,8 +18,7 @@ function shouldNeverCache(url) {
   return false;
 }
 
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
+self.addEventListener('install', (_event) => {
 });
 
 self.addEventListener('activate', (event) => {

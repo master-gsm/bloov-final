@@ -11,7 +11,10 @@ if ('serviceWorker' in navigator) {
   } else {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').then((registration) => {
+        let updateAvailable = false;
+
         registration.addEventListener('updatefound', () => {
+          updateAvailable = true;
           const newWorker = registration.installing;
           if (!newWorker) return;
           newWorker.addEventListener('statechange', () => {
@@ -22,7 +25,9 @@ if ('serviceWorker' in navigator) {
         });
 
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-          window.location.reload();
+          if (updateAvailable) {
+            window.location.reload();
+          }
         });
       }).catch((error) => {
         console.error('ServiceWorker registration failed:', error);
