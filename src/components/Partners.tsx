@@ -764,7 +764,7 @@ export function Partners() {
                           <Landmark className="w-3 h-3 text-amber-500" />
                           <span className="text-xs text-gray-400">{isRTL ? 'رأس المال' : 'Capital'}</span>
                         </div>
-                        <p className="text-sm font-bold text-gray-900">{fmt(Number(partner.capital_contribution))}</p>
+                        <p className="text-sm font-bold text-gray-900">{fmt(Number(account?.capital_contribution ?? partner.capital_contribution))}</p>
                       </div>
                       {account && (
                         <div className="bg-gray-50 rounded-lg p-2.5">
@@ -772,9 +772,16 @@ export function Partners() {
                             <DollarSign className="w-3 h-3 text-emerald-500" />
                             <span className="text-xs text-gray-400">{isRTL ? 'الحساب الجاري' : 'Current Acc.'}</span>
                           </div>
-                          <p className={`text-sm font-bold ${Number(account.current_account_balance) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                            {Number(account.current_account_balance) >= 0 ? '+' : ''}{fmt(Number(account.current_account_balance))}
-                          </p>
+                          {(() => {
+                            const cap = Number(account.capital_contribution);
+                            const bal = Number(account.current_account_balance);
+                            const total = cap + bal;
+                            return (
+                              <p className={`text-sm font-bold ${total >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                {total >= 0 ? '+' : ''}{fmt(total)}
+                              </p>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
