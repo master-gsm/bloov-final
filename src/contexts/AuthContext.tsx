@@ -35,9 +35,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [permissionsReady, setPermissionsReady] = useState(false);
   const loadingProfileRef = useRef<string | null>(null);
+  const loadedProfileRef = useRef<string | null>(null);
 
-  const loadGranularPermissions = async (userId: string, role: string) => {
-    setPermissionsReady(false);
+  const loadGranularPermissions = async (userId: string, role: string, silent = false) => {
+    if (!silent) setPermissionsReady(false);
     const { data, error } = await supabase
       .from('user_permissions')
       .select('section, can_view, can_create, can_edit, can_delete')
@@ -65,8 +66,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPermissionsReady(true);
   };
 
-  const loadProfile = async (userId: string) => {
+  const loadProfile = async (userId: string, force = false) => {
     if (loadingProfileRef.current === userId) return;
+    if (!force && loadedProfileRef.current === userId) return;
     loadingProfileRef.current = userId;
 
     try {
@@ -78,12 +80,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data) {
         const role = data.role as UserProfile['role'];
+        const silent = loadedProfileRef.current === userId;
         setProfile({
           role,
           permissions: (data.permissions || {}) as unknown as Record<string, boolean>,
           branch_id: data.branch_id || null,
         });
-        await loadGranularPermissions(userId, role);
+        await loadGranularPermissions(userId, role, silent);
+        loadedProfileRef.current = userId;
       }
     } finally {
       loadingProfileRef.current = null;
@@ -92,7 +96,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const reloadPermissions = useCallback(async () => {
     if (user && profile) {
-      await loadGranularPermissions(user.id, profile.role);
+      loadedProfileRef.current = null;
+      await loadProfile(user.id, true);
     }
   }, [user, profile]);
 
@@ -111,10 +116,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const newUser = session?.user ?? null;
 
         if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-          setUser(prev => {
-            if (prev?.id === newUser?.id) return prev;
-            return newUser;
-          });
+          setUser(prev => (prev?.id === newUser?.id ? prev : newUser));
+          return;
+        }
+
+        if (event === 'SIGNED_IN' && newUser && loadedProfileRef.current === newUser.id) {
+          setUser(prev => (prev?.id === newUser.id ? prev : newUser));
           return;
         }
 
@@ -122,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (newUser) {
           await loadProfile(newUser.id);
         } else {
+          loadedProfileRef.current = null;
           setProfile(null);
           setSectionPermissions(emptyPermissions());
           setPermissionsReady(false);
