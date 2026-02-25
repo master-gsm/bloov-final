@@ -52,6 +52,7 @@ export default function SetupExpenses() {
   const [expenses, setExpenses] = useState<SetupExpense[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [partners, setPartners] = useState<{ id: string; name: string; name_ar: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState<SetupExpense | null>(null);
@@ -69,6 +70,7 @@ export default function SetupExpenses() {
     is_amortizable: false,
     amortization_months: 0,
     notes: '',
+    partner_id: '',
   });
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export default function SetupExpenses() {
         loadExpenses(),
         loadBranches(),
         loadSuppliers(),
+        loadPartners(),
       ]);
     } catch (error: any) {
       console.error('Error loading data:', error);
@@ -124,6 +127,17 @@ export default function SetupExpenses() {
 
     if (error) throw error;
     setSuppliers(data || []);
+  };
+
+  const loadPartners = async () => {
+    const { data, error } = await supabase
+      .from('partners')
+      .select('id, name, name_ar')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) throw error;
+    setPartners(data || []);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabase } from '../../lib/supabase';
-import { Users, ArrowRight, Plus, Calendar, FileText, AlertCircle } from 'lucide-react';
+import { Users, ArrowRight, Plus, Calendar, FileText, AlertCircle, X } from 'lucide-react';
 
 interface Partner {
   partner_id: string;
@@ -138,6 +138,27 @@ export default function PartnerSettlements() {
       description_ar: '',
       notes: ''
     });
+  };
+
+  const handleVoidSettlement = async (settlementId: string) => {
+    if (!confirm(isRTL ? 'هل أنت متأكد من إلغاء هذه التسوية؟' : 'Are you sure you want to void this settlement?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('partner_settlements')
+        .update({ status: 'voided' })
+        .eq('id', settlementId);
+
+      if (error) throw error;
+
+      alert(isRTL ? 'تم إلغاء التسوية بنجاح' : 'Settlement voided successfully');
+      fetchData();
+    } catch (error: any) {
+      console.error('Error voiding settlement:', error);
+      alert(error.message || (isRTL ? 'حدث خطأ أثناء إلغاء التسوية' : 'Error voiding settlement'));
+    }
   };
 
   const handleFullSettlement = (fromPartner: Partner, toPartner: Partner) => {
@@ -392,11 +413,14 @@ export default function PartnerSettlements() {
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                   {isRTL ? 'بواسطة' : 'By'}
                 </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  {isRTL ? 'إجراء' : 'Action'}
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {settlements.map((settlement) => (
-                <tr key={settlement.id} className="hover:bg-gray-50">
+                <tr key={settlement.id} className={`hover:bg-gray-50 ${settlement.status === 'voided' ? 'opacity-50 bg-red-50' : ''}`}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {new Date(settlement.settlement_date).toLocaleDateString('ar-SA')}
                   </td>
@@ -414,6 +438,22 @@ export default function PartnerSettlements() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                     {settlement.created_by_name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {settlement.status === 'voided' ? (
+                      <span className="text-red-600 font-medium">
+                        {isRTL ? 'ملغاة' : 'Voided'}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleVoidSettlement(settlement.id)}
+                        className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                        title={isRTL ? 'إلغاء التسوية' : 'Void Settlement'}
+                      >
+                        <X className="h-4 w-4" />
+                        {isRTL ? 'إلغاء' : 'Void'}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
