@@ -27,6 +27,8 @@ export function Employees() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [residenceFilter, setResidenceFilter] = useState<'all' | 'valid' | 'expiring_soon' | 'expired'>('all');
+  const [residenceStatuses, setResidenceStatuses] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [branches, setBranches] = useState<any[]>([]);
@@ -48,7 +50,9 @@ export function Employees() {
     contract_type: 'permanent' as const,
     vacation_balance_days: 21,
     iqama_number: '',
+    iqama_issue_date: '',
     iqama_expiry_date: '',
+    iqama_notes: '',
     termination_date: '',
     termination_reason: '',
     notes: '',
@@ -73,6 +77,13 @@ export function Employees() {
         }
         const { data: empData } = await empQuery;
         setEmployees((empData || []) as any[]);
+
+        let statusQuery = supabase.from('v_employee_residence_status').select('*');
+        if (!isAdmin && (userProfile as any)?.branch_id) {
+          statusQuery = statusQuery.eq('branch_id', (userProfile as any).branch_id);
+        }
+        const { data: statusData } = await statusQuery;
+        setResidenceStatuses((statusData || []) as any[]);
 
         const { data: branchData } = await supabase.from('branches').select('*').order('name');
         setBranches(branchData || []);
@@ -144,7 +155,9 @@ export function Employees() {
         contract_type: formData.contract_type,
         vacation_balance_days: formData.vacation_balance_days,
         iqama_number: formData.iqama_number || null,
+        iqama_issue_date: formData.iqama_issue_date || null,
         iqama_expiry_date: formData.iqama_expiry_date || null,
+        iqama_notes: formData.iqama_notes || null,
         notes: formData.notes,
       };
       if (formData.termination_date) {
@@ -190,7 +203,9 @@ export function Employees() {
       contract_type: (employee as any).contract_type || 'permanent',
       vacation_balance_days: (employee as any).vacation_balance_days ?? 21,
       iqama_number: (employee as any).iqama_number || '',
+      iqama_issue_date: (employee as any).iqama_issue_date || '',
       iqama_expiry_date: (employee as any).iqama_expiry_date || '',
+      iqama_notes: (employee as any).iqama_notes || '',
       termination_date: employee.termination_date || '',
       termination_reason: employee.termination_reason || '',
       notes: employee.notes || '',
@@ -198,10 +213,20 @@ export function Employees() {
     setShowModal(true);
   };
 
-  const filteredEmployees = employees.filter(emp =>
-    emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.position?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getResidenceStatus = (empId: string) => {
+    return residenceStatuses.find(s => s.employee_id === empId);
+  };
+
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.position?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+    if (residenceFilter === 'all') return true;
+
+    const status = getResidenceStatus(emp.id);
+    return status?.residence_status === residenceFilter;
+  });
 
   if (!isAdmin) {
     return (
@@ -267,15 +292,37 @@ export function Employees() {
 
       {activeTab === 'employees' && (
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder={isRTL ? 'بحث عن موظف...' : 'Search employee...'}
-              className="w-full pr-10 pl-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-            />
+          <div className="flex gap-3 flex-wrap">
+            <div className="flex-1 min-w-[200px] relative">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder={isRTL ? 'بحث عن موظف...' : 'Search employee...'}
+                className="w-full pr-10 pl-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+            <div className="flex gap-2">
+              {[
+                { key: 'all', labelAr: 'الكل', labelEn: 'All' },
+                { key: 'valid', labelAr: 'سارية', labelEn: 'Valid' },
+                { key: 'expiring_soon', labelAr: 'تنتهي قريباً', labelEn: 'Expiring Soon' },
+                { key: 'expired', labelAr: 'منتهية', labelEn: 'Expired' },
+              ].map(filter => (
+                <button
+                  key={filter.key}
+                  onClick={() => setResidenceFilter(filter.key as any)}
+                  className={`px-4 py-2.5 text-sm font-medium rounded-lg transition whitespace-nowrap ${
+                    residenceFilter === filter.key
+                      ? 'bg-teal-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {isRTL ? filter.labelAr : filter.labelEn}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -287,11 +334,11 @@ export function Employees() {
                       isRTL ? 'الاسم' : 'Name',
                       isRTL ? 'المنصب' : 'Position',
                       isRTL ? 'الفرع' : 'Branch',
+                      isRTL ? 'رقم الإقامة' : 'Iqama #',
+                      isRTL ? 'انتهاء الإقامة' : 'Iqama Expiry',
+                      isRTL ? 'الأيام المتبقية' : 'Days Left',
+                      isRTL ? 'حالة الإقامة' : 'Status',
                       isRTL ? 'الراتب' : 'Salary',
-                      isRTL ? 'الإقامة' : 'Residence',
-                      isRTL ? 'رصيد الإجازة' : 'Leave Balance',
-                      isRTL ? 'العمولة %' : 'Commission %',
-                      isRTL ? 'الحالة' : 'Status',
                       isRTL ? 'الإجراءات' : 'Actions',
                     ].map((h, i) => (
                       <th key={i} className="px-4 py-3 text-right text-sm font-medium text-gray-700">{h}</th>
@@ -307,7 +354,9 @@ export function Employees() {
                     <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                       {isRTL ? 'لا يوجد موظفين' : 'No employees'}
                     </td></tr>
-                  ) : filteredEmployees.map(emp => (
+                  ) : filteredEmployees.map(emp => {
+                    const resStatus = getResidenceStatus(emp.id);
+                    return (
                     <tr key={emp.id} className={`hover:bg-gray-50 ${emp.termination_date ? 'opacity-60' : ''}`}>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         <div className="flex items-center gap-2">
@@ -317,62 +366,56 @@ export function Employees() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{emp.position}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{emp.branches?.name}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {(emp.basic_salary ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
+                      <td className="px-4 py-3 text-sm text-gray-600" dir="ltr">
+                        {resStatus?.iqama_number || <span className="text-gray-400">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {resStatus?.iqama_expiry_date
+                          ? new Date(resStatus.iqama_expiry_date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')
+                          : <span className="text-gray-400">-</span>
+                        }
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {(emp as any).iqama_expiry_date ? (() => {
-                          const expiry = new Date((emp as any).iqama_expiry_date);
-                          const today = new Date();
-                          const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                          const isExpired = diffDays < 0;
-                          const isWarning = diffDays >= 0 && diffDays <= 30;
-                          return (
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${
-                              isExpired ? 'bg-red-100 text-red-700' : isWarning ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
-                            }`}>
-                              {isExpired && <ShieldAlert className="w-3 h-3" />}
-                              {isExpired
-                                ? (isRTL ? 'منتهية' : 'Expired')
-                                : isWarning
-                                  ? (isRTL ? `${diffDays} يوم` : `${diffDays}d left`)
-                                  : new Date((emp as any).iqama_expiry_date).toLocaleDateString()}
-                            </span>
-                          );
-                        })() : (
+                        {resStatus?.days_to_expiry !== null && resStatus?.days_to_expiry !== undefined ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${
+                            resStatus.residence_status === 'expired'
+                              ? 'bg-red-100 text-red-700'
+                              : resStatus.residence_status === 'expiring_soon'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-green-100 text-green-700'
+                          }`}>
+                            {resStatus.residence_status === 'expired' && <ShieldAlert className="w-3 h-3" />}
+                            {resStatus.residence_status === 'expired'
+                              ? (isRTL ? `منتهية منذ ${Math.abs(resStatus.days_to_expiry)} يوم` : `Expired ${Math.abs(resStatus.days_to_expiry)}d ago`)
+                              : (isRTL ? `${resStatus.days_to_expiry} يوم` : `${resStatus.days_to_expiry}d`)
+                            }
+                          </span>
+                        ) : (
                           <span className="text-gray-400 text-xs">-</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-center">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${
-                          (emp as any).vacation_balance_days > 5
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-amber-100 text-amber-700'
-                        }`}>
-                          <Calendar className="w-3 h-3" />
-                          {(emp as any).vacation_balance_days ?? 0} {isRTL ? 'يوم' : 'd'}
-                        </span>
+                      <td className="px-4 py-3 text-sm">
+                        {resStatus?.residence_status && resStatus.residence_status !== 'no_data' ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                            resStatus.residence_status === 'expired'
+                              ? 'bg-red-100 text-red-700'
+                              : resStatus.residence_status === 'expiring_soon'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-green-100 text-green-700'
+                          }`}>
+                            {resStatus.residence_status === 'expired'
+                              ? (isRTL ? 'منتهية' : 'Expired')
+                              : resStatus.residence_status === 'expiring_soon'
+                                ? (isRTL ? 'تنتهي قريباً' : 'Expiring')
+                                : (isRTL ? 'سارية' : 'Valid')
+                            }
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        <div className="space-y-0.5">
-                          <div className="text-xs text-gray-500">{isRTL ? 'داخلي' : 'Int'}: {emp.commission_rate ?? 0}%</div>
-                          <div className="text-xs text-gray-500">{isRTL ? 'خارجي' : 'Ext'}: {emp.commission_rate_external ?? 0}%</div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          emp.termination_date
-                            ? 'bg-red-100 text-red-700'
-                            : emp.is_active
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {emp.termination_date
-                            ? (isRTL ? 'منتهي الخدمة' : 'Terminated')
-                            : emp.is_active
-                              ? (isRTL ? 'نشط' : 'Active')
-                              : (isRTL ? 'غير نشط' : 'Inactive')}
-                        </span>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                        {(emp.basic_salary ?? 0).toLocaleString()} {isRTL ? 'ر.س' : 'SAR'}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -385,7 +428,8 @@ export function Employees() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -528,8 +572,18 @@ export function Employees() {
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" dir="ltr" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'تاريخ انتهاء الإقامة' : 'Residence Expiry Date'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'تاريخ إصدار الإقامة' : 'Iqama Issue Date'}</label>
+                <input type="date" value={formData.iqama_issue_date} onChange={e => setFormData({ ...formData, iqama_issue_date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'تاريخ انتهاء الإقامة' : 'Iqama Expiry Date'}</label>
                 <input type="date" value={formData.iqama_expiry_date} onChange={e => setFormData({ ...formData, iqama_expiry_date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'ملاحظات الإقامة' : 'Iqama Notes'}</label>
+                <input type="text" value={formData.iqama_notes} onChange={e => setFormData({ ...formData, iqama_notes: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" />
               </div>
               <div>
