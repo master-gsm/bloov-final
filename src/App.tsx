@@ -79,7 +79,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 }
 
 function AppContent() {
-  const { user, loading, can } = useAuth();
+  const { user, loading, permissionsReady, can } = useAuth();
   const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
@@ -142,6 +142,16 @@ function AppContent() {
   };
 
   const renderSection = () => {
+    if (!permissionsReady) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          </div>
+        </div>
+      );
+    }
+
     if (!can(activeSection as Section, 'view')) {
       return (
         <div className="flex items-center justify-center h-full">

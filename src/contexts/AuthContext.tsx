@@ -13,6 +13,7 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  permissionsReady: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -32,9 +33,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [sectionPermissions, setSectionPermissions] = useState<PermissionsMap>(emptyPermissions());
   const [loading, setLoading] = useState(true);
+  const [permissionsReady, setPermissionsReady] = useState(false);
   const loadingProfileRef = useRef<string | null>(null);
 
   const loadGranularPermissions = async (userId: string, role: string) => {
+    setPermissionsReady(false);
     const { data, error } = await supabase
       .from('user_permissions')
       .select('section, can_view, can_create, can_edit, can_delete')
@@ -42,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error || !data || data.length === 0) {
       setSectionPermissions(ROLE_TEMPLATES[role] || emptyPermissions());
+      setPermissionsReady(true);
       return;
     }
 
@@ -58,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     setSectionPermissions(perms);
+    setPermissionsReady(true);
   };
 
   const loadProfile = async (userId: string) => {
@@ -110,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setProfile(null);
           setSectionPermissions(emptyPermissions());
+          setPermissionsReady(false);
         }
       })();
     });
@@ -150,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     profile,
     loading,
+    permissionsReady,
     signIn,
     signUp,
     signOut,
@@ -161,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     branchId,
     reloadPermissions,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [user, profile, loading, sectionPermissions, can, reloadPermissions]);
+  }), [user, profile, loading, permissionsReady, sectionPermissions, can, reloadPermissions]);
 
   return (
     <AuthContext.Provider value={value}>
