@@ -106,9 +106,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
         const newUser = session?.user ?? null;
+
+        if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+          setUser(prev => {
+            if (prev?.id === newUser?.id) return prev;
+            return newUser;
+          });
+          return;
+        }
+
         setUser(newUser);
         if (newUser) {
           await loadProfile(newUser.id);

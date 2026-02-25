@@ -128,10 +128,11 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   };
 
   const userId = user?.id ?? null;
+  const userRole = useAuth().profile?.role ?? null;
 
   useEffect(() => {
     loadBranchData();
-  }, [userId, sectionPermissions]);
+  }, [userId, userRole]);
 
   const handleSetSelectedBranchFilter = (id: string | null) => {
     setSelectedBranchFilter(id);
