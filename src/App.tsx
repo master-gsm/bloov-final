@@ -55,18 +55,18 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center space-y-4">
+        <div className="min-h-screen flex items-center justify-center app-background p-4">
+          <div className="bg-white/85 backdrop-blur-md rounded-xl shadow-2xl p-8 max-w-md w-full text-center space-y-4 border border-violet-200/40">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
               <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 110 18A9 9 0 0112 3z" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900">حدث خطأ غير متوقع</h2>
-            <p className="text-gray-600 text-sm">{this.state.error?.message || 'Unknown error'}</p>
+            <h2 className="text-xl font-bold text-violet-900">حدث خطأ غير متوقع</h2>
+            <p className="text-violet-700/70 text-sm">{this.state.error?.message || 'Unknown error'}</p>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
-              className="px-6 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-medium"
+              className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-lg hover:from-violet-700 hover:to-purple-700 transition font-medium shadow-md"
             >
               المحاولة مجددا
             </button>
@@ -122,10 +122,10 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center login-background">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
+          <div className="w-16 h-16 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-violet-700 font-medium">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -146,7 +146,7 @@ function AppContent() {
       return (
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
-            <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div className="w-10 h-10 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
           </div>
         </div>
       );
@@ -161,8 +161,8 @@ function AppContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">لا توجد صلاحية</h3>
-            <p className="text-gray-500 text-sm">ليس لديك صلاحية للوصول لهذا القسم</p>
+            <h3 className="text-lg font-semibold text-violet-900 mb-1">لا توجد صلاحية</h3>
+            <p className="text-violet-600/70 text-sm">ليس لديك صلاحية للوصول لهذا القسم</p>
           </div>
         </div>
       );
