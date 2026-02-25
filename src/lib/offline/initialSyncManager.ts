@@ -99,6 +99,7 @@ class InitialSyncManager {
       if (error) throw error;
 
       const records = data || [];
+      await indexedDBManager.clearCachedTable(table);
       await indexedDBManager.cacheData(table, records);
 
       console.log(`[InitialSyncManager] Synced ${table}: ${records.length} records`);
@@ -109,6 +110,11 @@ class InitialSyncManager {
   }
 
   async cacheData(table: string, records: any[]): Promise<void> {
+    await indexedDBManager.cacheData(table, records);
+  }
+
+  async replaceTableCache(table: string, records: any[]): Promise<void> {
+    await indexedDBManager.clearCachedTable(table);
     await indexedDBManager.cacheData(table, records);
   }
 

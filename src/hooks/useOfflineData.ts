@@ -44,8 +44,8 @@ export function useOfflineData<T extends any = any>(
 
             if (serverError) throw serverError;
 
-            if (serverData && serverData.length > 0) {
-              await initialSyncManager.cacheData(table, serverData);
+            if (serverData) {
+              await initialSyncManager.replaceTableCache(table, serverData);
               setData(serverData);
               setIsFromCache(true);
             }
@@ -62,7 +62,7 @@ export function useOfflineData<T extends any = any>(
         if (serverError) throw serverError;
 
         if (serverData) {
-          await initialSyncManager.cacheData(table, serverData);
+          await initialSyncManager.replaceTableCache(table, serverData);
           setData(serverData);
           setIsFromCache(true);
         }
