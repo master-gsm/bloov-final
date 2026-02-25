@@ -1,11 +1,9 @@
-import { Minus, Plus, Trash2, ShoppingCart, User, ChevronDown, Tag } from 'lucide-react';
-import type { POSCartItem, POSEmployee, POSCustomer } from './types';
+import { Minus, Plus, Trash2, ShoppingCart, Tag } from 'lucide-react';
+import type { POSCartItem, POSCustomer } from './types';
 
 interface POSCartProps {
   items: POSCartItem[];
-  employees: POSEmployee[];
   customers: POSCustomer[];
-  selectedEmployee: string;
   walkinName: string;
   walkinPhone: string;
   lookedUpCustomer: POSCustomer | null;
@@ -16,7 +14,6 @@ interface POSCartProps {
   isRTL: boolean;
   onUpdateQty: (index: number, qty: number) => void;
   onRemoveItem: (index: number) => void;
-  onEmployeeChange: (id: string) => void;
   onPhoneChange: (phone: string) => void;
   onDiscountChange: (val: number) => void;
   onPaymentMethodChange: (method: string) => void;
@@ -27,9 +24,7 @@ interface POSCartProps {
 
 export function POSCart({
   items,
-  employees,
   customers,
-  selectedEmployee,
   walkinName,
   walkinPhone,
   lookedUpCustomer,
@@ -40,7 +35,6 @@ export function POSCart({
   isRTL,
   onUpdateQty,
   onRemoveItem,
-  onEmployeeChange,
   onPhoneChange,
   onDiscountChange,
   onPaymentMethodChange,
@@ -55,7 +49,7 @@ export function POSCart({
 
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const canCharge = items.length > 0 && selectedEmployee;
+  const canCharge = items.length > 0;
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -71,27 +65,6 @@ export function POSCart({
               {items.reduce((s, i) => s + i.quantity, 0)}
             </span>
           )}
-        </div>
-      </div>
-
-      {/* Employee Selector */}
-      <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
-        <div className="relative">
-          <User className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 ${isRTL ? 'right-3' : 'left-3'}`} />
-          <ChevronDown className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none ${isRTL ? 'left-3' : 'right-3'}`} />
-          <select
-            value={selectedEmployee}
-            onChange={e => onEmployeeChange(e.target.value)}
-            className={`w-full py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 appearance-none ${isRTL ? 'pr-9 pl-9 text-right' : 'pl-9 pr-9'}`}
-            dir={isRTL ? 'rtl' : 'ltr'}
-          >
-            <option value="">{isRTL ? 'اختر الموظف *' : 'Select Employee *'}</option>
-            {employees.map(e => (
-              <option key={e.id} value={e.id}>
-                {isRTL ? (e.full_name_ar || e.full_name) : e.full_name}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 

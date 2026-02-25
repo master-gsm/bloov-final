@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, List, RotateCcw } from 'lucide-react';
+import { X, List, RotateCcw, User, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOfflineData } from '../../hooks/useOfflineData';
@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { InvoicePrint } from '../InvoicePrint';
 import { POSProductGrid } from './POSProductGrid';
 import { POSCart } from './POSCart';
+import { POSEmployeeSelect } from './POSEmployeeSelect';
 import type { POSProduct, POSEmployee, POSCustomer, POSCartItem, CustomerLoyalty } from './types';
 
 interface POSViewProps {
@@ -27,7 +28,15 @@ export function POSView({ onClose }: POSViewProps) {
   const [customers, setCustomers] = useState<POSCustomer[]>([]);
 
   const [cartItems, setCartItems] = useState<POSCartItem[]>([]);
-  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [sessionEmployee, setSessionEmployee] = useState<POSEmployee | null>(() => {
+    try {
+      const stored = localStorage.getItem('pos_session_employee');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [showEmployeeSelect, setShowEmployeeSelect] = useState(false);
   const [walkinPhone, setWalkinPhone] = useState('');
   const [walkinName, setWalkinName] = useState('');
   const [lookedUpCustomer, setLookedUpCustomer] = useState<POSCustomer | null>(null);
@@ -59,6 +68,22 @@ export function POSView({ onClose }: POSViewProps) {
   useEffect(() => {
     loadInitialData();
   }, [user]);
+
+  useEffect(() => {
+    if (!empLoading && !sessionEmployee) {
+      setShowEmployeeSelect(true);
+    }
+  }, [empLoading]);
+
+  const handleEmployeeSelect = (emp: POSEmployee) => {
+    localStorage.setItem('pos_session_employee', JSON.stringify(emp));
+    setSessionEmployee(emp);
+    setShowEmployeeSelect(false);
+  };
+
+  const handleChangeEmployee = () => {
+    setShowEmployeeSelect(true);
+  };
 
   const loadInitialData = async () => {
     if (!user || !navigator.onLine) return;
@@ -165,8 +190,8 @@ export function POSView({ onClose }: POSViewProps) {
       setError(isRTL ? 'أضف منتجاً واحداً على الأقل' : 'Add at least one product');
       return;
     }
-    if (!selectedEmployee) {
-      setError(isRTL ? 'يجب اختيار الموظف المسؤول' : 'Select an employee');
+    if (!sessionEmployee) {
+      setShowEmployeeSelect(true);
       return;
     }
     if (paymentMethod === 'cash' && !openRegisterId && navigator.onLine) {
@@ -209,7 +234,7 @@ export function POSView({ onClose }: POSViewProps) {
         company_name: '',
         company_vat_number: '',
         company_address: '',
-        salesperson_id: selectedEmployee,
+        salesperson_id: sessionEmployee.id,
         created_by: user?.id,
         items: cartItems.map(item => ({
           product_id: item.product_id,
@@ -263,6 +288,18 @@ export function POSView({ onClose }: POSViewProps) {
             <h1 className="text-base font-bold text-gray-900">BLOOV POS</h1>
             <p className="text-xs text-gray-400">{isRTL ? 'نقطة البيع' : 'Point of Sale'}</p>
           </div>
+          {sessionEmployee && (
+            <button
+              onClick={handleChangeEmployee}
+              className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors"
+            >
+              <User className="w-3.5 h-3.5 text-gray-500" />
+              <span className="text-xs font-medium text-gray-700 max-w-[120px] truncate">
+                {isRTL ? (sessionEmployee.full_name_ar || sessionEmployee.full_name) : sessionEmployee.full_name}
+              </span>
+              <ChevronDown className="w-3 h-3 text-gray-400" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -306,9 +343,7 @@ export function POSView({ onClose }: POSViewProps) {
         <div className="border-l border-gray-200 overflow-hidden flex flex-col" style={{ flex: '0 0 35%', minWidth: '340px', maxWidth: '420px' }}>
           <POSCart
             items={cartItems}
-            employees={employees}
             customers={customers}
-            selectedEmployee={selectedEmployee}
             walkinName={walkinName}
             walkinPhone={walkinPhone}
             lookedUpCustomer={lookedUpCustomer}
@@ -319,7 +354,6 @@ export function POSView({ onClose }: POSViewProps) {
             isRTL={isRTL}
             onUpdateQty={handleUpdateQty}
             onRemoveItem={handleRemoveItem}
-            onEmployeeChange={setSelectedEmployee}
             onPhoneChange={handlePhoneChange}
             onDiscountChange={setSaleDiscount}
             onPaymentMethodChange={setPaymentMethod}
@@ -329,6 +363,20 @@ export function POSView({ onClose }: POSViewProps) {
           />
         </div>
       </div>
+
+      {/* Employee Select Screen */}
+      {showEmployeeSelect && (
+        <POSEmployeeSelect
+          employees={employees}
+          isRTL={isRTL}
+          loading={empLoading}
+          onSelect={handleEmployeeSelect}
+          onClose={() => {
+            if (sessionEmployee) setShowEmployeeSelect(false);
+            else onClose();
+          }}
+        />
+      )}
 
       {/* Print Modal */}
       {printingSale && (
