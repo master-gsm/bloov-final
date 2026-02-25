@@ -11,10 +11,47 @@ interface Partner {
   name_ar: string;
 }
 
+type ExpenseType = 'capital' | 'inventory' | 'asset' | 'operational';
+
+const EXPENSE_TYPE_MAP: Record<string, ExpenseType> = {
+  capital: 'capital',
+  'رأس مال': 'capital',
+  'رأسمال': 'capital',
+  'رأس_مال': 'capital',
+  ra2s_mal: 'capital',
+  inventory: 'inventory',
+  'مخزون': 'inventory',
+  'بضاعة': 'inventory',
+  stock: 'inventory',
+  asset: 'asset',
+  'أصل': 'asset',
+  'أصول': 'asset',
+  'أصل ثابت': 'asset',
+  'أصول ثابتة': 'asset',
+  'تجهيزات': 'asset',
+  equipment: 'asset',
+  operational: 'operational',
+  'تشغيلي': 'operational',
+  'تشغيل': 'operational',
+  operations: 'operational',
+  operating: 'operational',
+};
+
+const VALID_EXPENSE_TYPES: ExpenseType[] = ['capital', 'inventory', 'asset', 'operational'];
+
+function mapExpenseType(raw: string): ExpenseType | null {
+  const normalized = raw.trim().toLowerCase();
+  const mapped = EXPENSE_TYPE_MAP[normalized] || EXPENSE_TYPE_MAP[raw.trim()];
+  if (mapped) return mapped;
+  if ((VALID_EXPENSE_TYPES as string[]).includes(normalized)) return normalized as ExpenseType;
+  return null;
+}
+
 interface ImportRow {
   date: string | null;
   partner: string;
   type: string;
+  mappedType: ExpenseType | null;
   description: string;
   amount: number;
   _rowIndex: number;
@@ -76,9 +113,19 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
       }
     }
 
-    const type = String(row.type || '').trim();
-    if (!type) {
+    const typeRaw = String(row.type || '').trim();
+    let mappedType: ExpenseType | null = null;
+    if (!typeRaw) {
       errors.push(isRTL ? 'النوع مطلوب' : 'Type required');
+    } else {
+      mappedType = mapExpenseType(typeRaw);
+      if (!mappedType) {
+        errors.push(
+          isRTL
+            ? `نوع المصروف "${typeRaw}" غير صحيح. القيم المسموحة: capital, inventory, asset, operational (أو بالعربية: رأس مال، مخزون، أصل، تشغيلي)`
+            : `Invalid expense type "${typeRaw}". Allowed: capital, inventory, asset, operational`
+        );
+      }
     }
 
     const description = String(row.description || '').trim();
@@ -94,7 +141,8 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
     return {
       date: dateStr,
       partner: partnerName,
-      type,
+      type: typeRaw,
+      mappedType,
       description,
       amount: isNaN(amount) ? 0 : amount,
       _rowIndex: index + 2,
@@ -176,8 +224,8 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
 
       const recordsToInsert = validRows.map(row => ({
         branch_id: currentBranch.id,
-        category: row.type || 'capital',
-        expense_type: row.type,
+        category: row.mappedType || 'asset',
+        expense_type: row.mappedType || 'asset',
         description: row.description,
         amount: row.amount,
         expense_date: row.date || null,
@@ -242,6 +290,11 @@ export default function ExcelImport({ partners, onClose, onSuccess }: ImportModa
                   <li>{isRTL ? 'التاريخ بصيغة YYYY-MM-DD' : 'Date format: YYYY-MM-DD'}</li>
                   <li>{isRTL ? 'اسم الشريك يجب أن يكون مطابق للنظام' : 'Partner name must match system'}</li>
                   <li>{isRTL ? 'المبلغ يجب أن يكون رقم موجب' : 'Amount must be positive number'}</li>
+                  <li>
+                    {isRTL
+                      ? 'قيم النوع المسموحة: capital (رأس مال)، inventory (مخزون)، asset (أصل)، operational (تشغيلي)'
+                      : 'Allowed type values: capital, inventory, asset, operational (or Arabic equivalents)'}
+                  </li>
                 </ul>
               </div>
 
