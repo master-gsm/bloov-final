@@ -10,6 +10,7 @@ import { indexedDBManager } from '../lib/offline/indexedDBManager';
 import { enhancedSyncManager } from '../lib/offline/enhancedSyncManager';
 import { ShoppingCart, Plus, Search, Eye, Check, XCircle, X, Trash2, CreditCard, Printer, MessageCircle, Truck, Download, CreditCard as Edit, RotateCcw, Building2 } from 'lucide-react';
 import { InvoicePrint } from './InvoicePrint';
+import { Pagination } from './Pagination';
 import { shareInvoiceViaWhatsApp, downloadInvoicePDF } from '../lib/pdfGenerator';
 
 interface Product {
@@ -119,6 +120,11 @@ export function Sales() {
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [viewingSale, setViewingSale] = useState<Sale | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
@@ -139,6 +145,7 @@ export function Sales() {
   const [showDelivery, setShowDelivery] = useState(false);
   const [taxRate, setTaxRate] = useState(0.15);
   const [submitting, setSubmitting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [saleSource, setSaleSource] = useState<'store' | 'salla' | 'external'>('store');
   const [sallaShippingCost, setSallaShippingCost] = useState(0);
@@ -188,6 +195,11 @@ export function Sales() {
       unsubscribeSyncing();
     };
   }, []);
+
+  // Reload when page/pageSize changes
+  useEffect(() => {
+    loadSalesAndSettings();
+  }, [currentPage, pageSize]);
 
   const loadUserBranch = async () => {
     if (!user || !navigator.onLine) return;
@@ -240,16 +252,33 @@ export function Sales() {
   const loadSalesAndSettings = async () => {
     try {
       if (navigator.onLine) {
-        console.log('[Sales] Loading sales from server...');
+        console.log('[Sales] Loading sales from server with pagination...');
+
+        // Get total count first
+        const { count } = await supabase
+          .from('sales')
+          .select('*', { count: 'exact', head: true });
+
+        setTotalCount(count || 0);
+
+        // Load paginated data
+        const from = (currentPage - 1) * pageSize;
+        const to = from + pageSize - 1;
+
         const [salesRes, settingsRes] = await Promise.all([
-          supabase.from('sales').select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)').order('created_at', { ascending: false }),
+          supabase
+            .from('sales')
+            .select('*, customers(name, name_ar, phone), employees!salesperson_id(full_name, full_name_ar)')
+            .order('created_at', { ascending: false })
+            .range(from, to),
           supabase.from('settings').select('tax_rate').eq('id', 1).maybeSingle(),
         ]);
+
         if (salesRes.error) {
           console.error('[Sales] RLS/server error loading sales:', salesRes.error);
         }
         if (salesRes.data) {
-          console.log('[Sales] Loaded', salesRes.data.length, 'sales from server');
+          console.log('[Sales] Loaded', salesRes.data.length, 'sales from server (page', currentPage, ')');
           setSales(salesRes.data as any[]);
         } else {
           console.warn('[Sales] salesRes.data is null/empty — possible RLS block. Error:', salesRes.error);
@@ -260,7 +289,11 @@ export function Sales() {
         const cachedSales = await indexedDBManager.getCachedRecords('sales');
         if (cachedSales && cachedSales.length > 0) {
           console.log('[Sales] Loaded', cachedSales.length, 'sales from cache');
-          setSales(cachedSales as any[]);
+          setTotalCount(cachedSales.length);
+          // Apply pagination to cached data
+          const from = (currentPage - 1) * pageSize;
+          const to = from + pageSize;
+          setSales(cachedSales.slice(from, to) as any[]);
         }
       }
     } catch (err) {
@@ -1661,6 +1694,22 @@ export function Sales() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pagination */}
+      {!showForm && !viewingSale && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={Math.ceil(totalCount / pageSize)}
+          totalItems={totalCount}
+          pageSize={pageSize}
+          onPageChange={(page) => setCurrentPage(page)}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          loading={loading}
+        />
       )}
     </div>
   );
