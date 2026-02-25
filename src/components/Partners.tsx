@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { uploadFile, getFileUrl } from '../lib/fileUpload';
 import { AttachmentPreviewModal } from './AttachmentPreviewModal';
 import { PartnerReports } from './partners/PartnerReports';
+import PartnerSettlements from './partners/PartnerSettlements';
 import {
   Partner, PartnerAccount, PartnerWithdrawal, ProfitDistribution,
   PartnerSettlement, SetupExpense, EXPENSE_TYPES, MONTH_NAMES_AR, MONTH_NAMES_EN,
@@ -77,6 +78,7 @@ export function Partners() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<'overview' | 'settlements'>('overview');
   const [previewAttachment, setPreviewAttachment] = useState<{ url: string; type: string; name?: string; filePath?: string } | null>(null);
 
   const [showPartnerForm, setShowPartnerForm] = useState(false);
@@ -472,6 +474,35 @@ export function Partners() {
           </button>
         </div>
       </div>
+
+      {/* Tabs */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`flex-1 px-6 py-3 text-sm font-medium transition ${
+              activeTab === 'overview'
+                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {isRTL ? 'نظرة عامة' : 'Overview'}
+          </button>
+          <button
+            onClick={() => setActiveTab('settlements')}
+            className={`flex-1 px-6 py-3 text-sm font-medium transition ${
+              activeTab === 'settlements'
+                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {isRTL ? 'الحساب الجاري والتسويات' : 'Current Account & Settlements'}
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'overview' ? (
+        <div className="space-y-5">
 
       {/* Ownership Distribution */}
       <Section title={isRTL ? 'توزيع الملكية' : 'Ownership Distribution'} icon={PieChart}
@@ -1193,6 +1224,10 @@ export function Partners() {
         onClose={() => setPreviewAttachment(null)}
         isRTL={isRTL}
       />
+        </div>
+      ) : (
+        <PartnerSettlements />
+      )}
     </div>
   );
 }
