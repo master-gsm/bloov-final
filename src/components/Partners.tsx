@@ -84,12 +84,18 @@ export function Partners() {
   const [showPartnerForm, setShowPartnerForm] = useState(false);
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [showImportExcel, setShowImportExcel] = useState(false);
   const [showSettlementForm, setShowSettlementForm] = useState(false);
   const [showWithdrawalForm, setShowWithdrawalForm] = useState(false);
   const [showDistributeModal, setShowDistributeModal] = useState(false);
   const [deactivateConfirm, setDeactivateConfirm] = useState<string | null>(null);
   const [deleteExpenseConfirm, setDeleteExpenseConfirm] = useState<string | null>(null);
   const [voidSettlementConfirm, setVoidSettlementConfirm] = useState<string | null>(null);
+
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [importSubmitting, setImportSubmitting] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const [partnerName, setPartnerName] = useState('');
   const [partnerNameAr, setPartnerNameAr] = useState('');
@@ -181,6 +187,102 @@ export function Partners() {
   const activePartners = partners.filter(p => p.is_active);
   const totalOwnership = activePartners.reduce((s, p) => s + Number(p.ownership_percentage || 0), 0);
   const remainingOwnership = 100 - totalOwnership;
+
+  // Partner payment totals: SUM(amount) GROUP BY partner_id
+  const partnerTotals = expenses.reduce<Record<string, number>>((acc, e) => {
+    if (e.partner_id) {
+      acc[e.partner_id] = (acc[e.partner_id] || 0) + Number(e.amount);
+    }
+    return acc;
+  }, {});
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFile(file);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = ev.target?.result;
+        const wb = XLSX.read(data, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: any[] = XLSX.utils.sheet_to_json(ws);
+
+        const validated = rows.map((row, idx) => {
+          const errors: string[] = [];
+          const dateStr = String(row.date || '').trim();
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) errors.push(isRTL ? 'تاريخ غير صحيح' : 'Invalid date');
+
+          const partnerName = String(row.partner || '').trim();
+          const foundPartner = partners.find(
+            p => p.name.toLowerCase() === partnerName.toLowerCase() || p.name_ar === partnerName
+          );
+          if (!partnerName) errors.push(isRTL ? 'الشريك مطلوب' : 'Partner required');
+          else if (!foundPartner) errors.push(isRTL ? `الشريك "${partnerName}" غير موجود` : `Partner not found`);
+
+          const amt = parseFloat(row.amount);
+          if (isNaN(amt) || amt <= 0) errors.push(isRTL ? 'المبلغ يجب أن يكون موجب' : 'Amount must be positive');
+
+          if (!String(row.type || '').trim()) errors.push(isRTL ? 'النوع مطلوب' : 'Type required');
+          if (!String(row.description || '').trim()) errors.push(isRTL ? 'الوصف مطلوب' : 'Description required');
+
+          return {
+            _row: idx + 2,
+            _valid: errors.length === 0,
+            _errors: errors,
+            _partnerId: foundPartner?.id,
+            date: dateStr,
+            partner: partnerName,
+            type: String(row.type || '').trim(),
+            description: String(row.description || '').trim(),
+            amount: isNaN(amt) ? 0 : amt,
+          };
+        });
+
+        setImportPreview(validated);
+      } catch (err) {
+        alert(isRTL ? 'خطأ في قراءة الملف' : 'Error reading file');
+      }
+    };
+    reader.readAsBinaryString(file);
+    // reset so same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handleImportConfirm = async () => {
+    const valid = importPreview.filter(r => r._valid);
+    if (valid.length === 0) return;
+    setImportSubmitting(true);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) throw new Error('Not authenticated');
+
+      const records = valid.map(row => ({
+        branch_id: currentBranchId || null,
+        expense_type: row.type,
+        description: row.description,
+        amount: row.amount,
+        expense_date: row.date,
+        payment_method: 'cash',
+        partner_id: row._partnerId,
+        created_by: authUser.id,
+        notes: `Imported: ${importFile?.name || ''}`,
+      }));
+
+      const { error: insertError } = await supabase.from('setup_expenses').insert(records);
+      if (insertError) throw insertError;
+
+      setShowImportExcel(false);
+      setImportFile(null);
+      setImportPreview([]);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || (isRTL ? 'خطأ في الاستيراد' : 'Import error'));
+    } finally {
+      setImportSubmitting(false);
+    }
+  };
 
   const openPartnerForm = (partner?: Partner) => {
     if (partner) {
@@ -713,12 +815,58 @@ export function Partners() {
         defaultOpen={false}
       >
         <div className="p-6 space-y-4">
+          {/* Partner Payment Summary Cards */}
+          {activePartners.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {activePartners.map((p, i) => {
+                const total = partnerTotals[p.id] || 0;
+                const colorBgs = ['bg-teal-50', 'bg-sky-50', 'bg-amber-50', 'bg-rose-50', 'bg-emerald-50'];
+                const colorBorders = ['border-teal-200', 'border-sky-200', 'border-amber-200', 'border-rose-200', 'border-emerald-200'];
+                const colorTexts = ['text-teal-700', 'text-sky-700', 'text-amber-700', 'text-rose-700', 'text-emerald-700'];
+                const colorAmounts = ['text-teal-900', 'text-sky-900', 'text-amber-900', 'text-rose-900', 'text-emerald-900'];
+                const idx = i % 5;
+                return (
+                  <div key={p.id} className={`${colorBgs[idx]} border ${colorBorders[idx]} rounded-xl p-4 flex items-center justify-between`}>
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium mb-0.5">
+                        {isRTL ? 'إجمالي مدفوعات' : 'Total Payments'}
+                      </p>
+                      <p className={`text-base font-bold ${colorTexts[idx]}`}>
+                        {isRTL ? p.name_ar : p.name}
+                      </p>
+                      <p className={`text-2xl font-extrabold ${colorAmounts[idx]} mt-1`}>
+                        {fmt(total)} <span className="text-sm font-medium">{isRTL ? 'ر.س' : 'SAR'}</span>
+                      </p>
+                    </div>
+                    <DollarSign className={`w-10 h-10 opacity-20 ${colorTexts[idx]}`} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {canEdit && (
-            <button onClick={() => { resetExpenseForm(); setShowExpenseForm(true); }}
-              className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition text-sm font-medium">
-              <Plus className="w-4 h-4" />
-              {isRTL ? 'إضافة مصروف' : 'Add Expense'}
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => { resetExpenseForm(); setShowExpenseForm(true); }}
+                className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition text-sm font-medium">
+                <Plus className="w-4 h-4" />
+                {isRTL ? 'إضافة مصروف' : 'Add Expense'}
+              </button>
+              <button
+                onClick={() => { setImportFile(null); setImportPreview([]); setShowImportExcel(true); }}
+                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm font-medium"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                {isRTL ? 'استيراد Excel' : 'Import Excel'}
+              </button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleImportFileChange}
+              />
+            </div>
           )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
@@ -1224,6 +1372,161 @@ export function Partners() {
         onClose={() => setPreviewAttachment(null)}
         isRTL={isRTL}
       />
+
+      {/* Excel Import Modal */}
+      {showImportExcel && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="bg-green-100 p-2 rounded-lg">
+                  <FileSpreadsheet className="w-5 h-5 text-green-700" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900">{isRTL ? 'استيراد من Excel' : 'Import from Excel'}</h3>
+                  <p className="text-xs text-gray-400">{isRTL ? 'يدعم xlsx, xls, csv' : 'Supports xlsx, xls, csv'}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowImportExcel(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Instructions */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800">
+                <p className="font-semibold mb-2">{isRTL ? 'الأعمدة المطلوبة:' : 'Required columns:'}</p>
+                <code className="font-mono bg-white px-2 py-0.5 rounded border border-blue-200 text-xs">
+                  date | partner | type | description | amount
+                </code>
+                <p className="mt-2 text-xs text-blue-600">
+                  {isRTL
+                    ? 'التاريخ بصيغة YYYY-MM-DD · اسم الشريك كما هو في النظام · المبلغ رقم موجب'
+                    : 'Date format: YYYY-MM-DD · Partner name as in system · Amount: positive number'}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {activePartners.map(p => (
+                    <span key={p.id} className="px-2 py-0.5 bg-white border border-blue-200 rounded-full text-xs font-medium">
+                      {isRTL ? p.name_ar : p.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Upload */}
+              {!importFile ? (
+                <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl p-10 cursor-pointer hover:border-green-400 hover:bg-green-50/30 transition-all">
+                  <FileSpreadsheet className="w-12 h-12 text-gray-300 mb-3" />
+                  <span className="text-sm font-medium text-gray-600">{isRTL ? 'اضغط لاختيار الملف' : 'Click to choose file'}</span>
+                  <span className="text-xs text-gray-400 mt-1">.xlsx · .xls · .csv</span>
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileChange} />
+                </label>
+              ) : (
+                <div className="space-y-4">
+                  {/* Stats row */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-gray-50 rounded-xl p-3 text-center">
+                      <p className="text-xs text-gray-500 mb-1">{isRTL ? 'الملف' : 'File'}</p>
+                      <p className="text-sm font-bold text-gray-800 truncate">{importFile.name}</p>
+                    </div>
+                    <div className="bg-green-50 rounded-xl p-3 text-center">
+                      <p className="text-xs text-gray-500 mb-1">{isRTL ? 'صحيح' : 'Valid'}</p>
+                      <p className="text-2xl font-extrabold text-green-700">
+                        {importPreview.filter(r => r._valid).length}
+                      </p>
+                    </div>
+                    <div className={`rounded-xl p-3 text-center ${importPreview.filter(r => !r._valid).length > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
+                      <p className="text-xs text-gray-500 mb-1">{isRTL ? 'خطأ' : 'Invalid'}</p>
+                      <p className={`text-2xl font-extrabold ${importPreview.filter(r => !r._valid).length > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                        {importPreview.filter(r => !r._valid).length}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Total amount */}
+                  <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 flex items-center justify-between">
+                    <span className="text-sm font-medium text-teal-700">{isRTL ? 'إجمالي المبالغ الصحيحة' : 'Total valid amount'}</span>
+                    <span className="text-xl font-extrabold text-teal-900">
+                      {fmt(importPreview.filter(r => r._valid).reduce((s, r) => s + r.amount, 0))} {isRTL ? 'ر.س' : 'SAR'}
+                    </span>
+                  </div>
+
+                  {/* Preview table */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto max-h-72">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-right text-xs text-gray-500">#</th>
+                            <th className="px-3 py-2 text-right text-xs text-gray-500">{isRTL ? 'التاريخ' : 'Date'}</th>
+                            <th className="px-3 py-2 text-right text-xs text-gray-500">{isRTL ? 'الشريك' : 'Partner'}</th>
+                            <th className="px-3 py-2 text-right text-xs text-gray-500">{isRTL ? 'النوع' : 'Type'}</th>
+                            <th className="px-3 py-2 text-right text-xs text-gray-500">{isRTL ? 'الوصف' : 'Description'}</th>
+                            <th className="px-3 py-2 text-right text-xs text-gray-500">{isRTL ? 'المبلغ' : 'Amount'}</th>
+                            <th className="px-3 py-2 text-right text-xs text-gray-500">{isRTL ? 'الحالة' : 'Status'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.map(row => (
+                            <tr key={row._row} className={`border-t border-gray-100 ${row._valid ? '' : 'bg-red-50'}`}>
+                              <td className="px-3 py-2 text-xs text-gray-400">{row._row}</td>
+                              <td className="px-3 py-2 text-xs">{row.date}</td>
+                              <td className="px-3 py-2 text-xs font-medium">{row.partner}</td>
+                              <td className="px-3 py-2 text-xs">{row.type}</td>
+                              <td className="px-3 py-2 text-xs text-gray-600">{row.description}</td>
+                              <td className="px-3 py-2 text-xs font-bold text-right">{fmt(row.amount)}</td>
+                              <td className="px-3 py-2 text-xs">
+                                {row._valid ? (
+                                  <span className="flex items-center gap-1 text-green-600">
+                                    <Check className="w-3 h-3" />
+                                    {isRTL ? 'صحيح' : 'OK'}
+                                  </span>
+                                ) : (
+                                  <div className="text-red-600">
+                                    {row._errors.map((e: string, i: number) => <p key={i}>{e}</p>)}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+              <button
+                onClick={() => { setImportFile(null); setImportPreview([]); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100"
+              >
+                {isRTL ? 'رفع ملف آخر' : 'Upload another'}
+              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setShowImportExcel(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100">
+                  {isRTL ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  onClick={handleImportConfirm}
+                  disabled={importSubmitting || importPreview.filter(r => r._valid).length === 0}
+                  className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {importSubmitting ? (
+                    <><div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />{isRTL ? 'جاري الاستيراد...' : 'Importing...'}</>
+                  ) : (
+                    <><FileSpreadsheet className="w-4 h-4" />{isRTL ? `استيراد ${importPreview.filter(r => r._valid).length} سجل` : `Import ${importPreview.filter(r => r._valid).length} records`}</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
         </div>
       ) : (
         <PartnerSettlements />
