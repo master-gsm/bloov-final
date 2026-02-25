@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bloov-accounting-v4';
+const CACHE_NAME = 'bloov-accounting-v5';
 
 const NEVER_CACHE = [
   'supabase.co',
@@ -12,78 +12,78 @@ const NEVER_CACHE_EXTENSIONS = [
 
 function shouldNeverCache(url) {
   const urlStr = url.toString();
-  if (NEVER_CACHE.some(pattern => urlStr.includes(pattern))) return true;
+  if (NEVER_CACHE.some(function(pattern) { return urlStr.includes(pattern); })) return true;
   if (url.pathname === '/' || url.pathname === '/index.html') return true;
-  if (NEVER_CACHE_EXTENSIONS.some(ext => url.pathname.endsWith(ext))) return true;
+  if (NEVER_CACHE_EXTENSIONS.some(function(ext) { return url.pathname.endsWith(ext); })) return true;
   return false;
 }
 
-self.addEventListener('install', (_event) => {
-});
-
-self.addEventListener('activate', (event) => {
+self.addEventListener('install', function(event) {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    }).then(() => self.clients.claim())
+    caches.open(CACHE_NAME).then(function(cache) {
+      return cache.addAll(['/']);
+    }).catch(function() {})
   );
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('activate', function(event) {
+  event.waitUntil(
+    caches.keys().then(function(cacheNames) {
+      return Promise.all(
+        cacheNames
+          .filter(function(name) { return name !== CACHE_NAME; })
+          .map(function(name) { return caches.delete(name); })
+      );
+    }).then(function() { return self.clients.claim(); })
+  );
+});
+
+self.addEventListener('fetch', function(event) {
   if (event.request.method !== 'GET') return;
 
-  const url = new URL(event.request.url);
-
-  if (shouldNeverCache(url)) {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return new Response(
-          JSON.stringify({ error: 'Offline', offline: true }),
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-      })
-    );
+  var url;
+  try {
+    url = new URL(event.request.url);
+  } catch (e) {
     return;
   }
 
-  const isAsset = url.pathname.match(/\.(js|css|woff2?|png|jpg|jpeg|svg|ico)(\?.*)?$/);
+  if (url.origin !== self.location.origin) return;
+
+  if (shouldNeverCache(url)) return;
+
+  var isAsset = /\.(js|css|woff2?|png|jpg|jpeg|svg|ico|webp|avif)(\?.*)?$/.test(url.pathname);
 
   if (isAsset) {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const cloned = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
+      caches.match(event.request).then(function(cached) {
+        var networkFetch = fetch(event.request).then(function(response) {
+          if (response && response.status === 200 && response.type === 'basic') {
+            var cloned = response.clone();
+            caches.open(CACHE_NAME).then(function(cache) { cache.put(event.request, cloned); });
           }
           return response;
-        })
-        .catch(() => caches.match(event.request))
+        }).catch(function() {
+          return cached;
+        });
+
+        return cached || networkFetch;
+      })
     );
     return;
   }
 
-  event.respondWith(fetch(event.request));
+  event.respondWith(
+    fetch(event.request).catch(function() {
+      return caches.match(event.request).then(function(cached) {
+        return cached || caches.match('/');
+      });
+    })
+  );
 });
 
-self.addEventListener('message', (event) => {
+self.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
-  }
-});
-
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-data') {
-    event.waitUntil(
-      self.clients.matchAll().then((clients) => {
-        clients.forEach((client) => {
-          client.postMessage({ type: 'BACKGROUND_SYNC', message: 'Starting background sync' });
-        });
-      })
-    );
   }
 });

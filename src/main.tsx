@@ -9,12 +9,11 @@ if ('serviceWorker' in navigator) {
       registrations.forEach((reg) => reg.unregister());
     });
   } else {
+    let reloading = false;
+
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').then((registration) => {
-        let updateAvailable = false;
-
         registration.addEventListener('updatefound', () => {
-          updateAvailable = true;
           const newWorker = registration.installing;
           if (!newWorker) return;
           newWorker.addEventListener('statechange', () => {
@@ -23,21 +22,13 @@ if ('serviceWorker' in navigator) {
             }
           });
         });
-
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (updateAvailable) {
-            window.location.reload();
-          }
-        });
-      }).catch((error) => {
-        console.error('ServiceWorker registration failed:', error);
-      });
+      }).catch(() => {});
     });
 
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      if (event.data?.type === 'BACKGROUND_SYNC') {
-        console.log('Background sync message received:', event.data.message);
-      }
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
     });
   }
 }

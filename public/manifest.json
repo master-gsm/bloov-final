@@ -1,27 +1,36 @@
 {
-  "name": "Bloov Accounting System",
-  "short_name": "Bloov",
+  "name": "نظام بلوف المحاسبي",
+  "short_name": "بلوف",
   "description": "نظام محاسبة بلوف - Comprehensive accounting system for small businesses",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "id": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1f2937",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "icons": [
     {
-      "src": "/لقطة_شاشة_2026-02-11_184526.png",
+      "src": "/image.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/لقطة_شاشة_2026-02-11_184526.png",
+      "src": "/image.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/image.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["business", "finance", "productivity"],
   "lang": "ar",
-  "dir": "rtl"
+  "dir": "rtl",
+  "prefer_related_applications": false
 }
