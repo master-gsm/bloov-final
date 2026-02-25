@@ -7,55 +7,39 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-interface CreateUserRequest {
-  username: string;
-  password: string;
-  fullName?: string;
-  role: "admin" | "accountant" | "viewer" | "observer";
-  permissions?: Record<string, boolean>;
-  branch_id?: string;
+function jsonRes(body: Record<string, unknown>, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("Missing environment variables");
+    if (!supabaseUrl || !serviceRoleKey) {
+      return jsonRes({ error: "Server misconfiguration" }, 500);
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonRes({ error: "Missing authorization header" }, 401);
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
-    if (!token) {
-      return new Response(
-        JSON.stringify({ error: "Invalid authorization token" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    if (!token || token === anonKey) {
+      return jsonRes({ error: "Missing user token" }, 401);
     }
 
     const {
@@ -64,16 +48,11 @@ Deno.serve(async (req: Request) => {
     } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !requestingUser) {
-      return new Response(
-        JSON.stringify({
-          error: "Unauthorized: Invalid or expired session",
-          details: authError?.message,
-        }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonRes({
+        error: "Unauthorized: Invalid or expired session",
+        details: authError?.message,
+        hint: "token_length=" + token.length,
+      }, 401);
     }
 
     const { data: userProfile, error: profileError } = await supabaseAdmin
@@ -88,48 +67,42 @@ Deno.serve(async (req: Request) => {
       !["admin", "super_admin"].includes(userProfile.role) ||
       !userProfile.is_active
     ) {
-      return new Response(
-        JSON.stringify({
-          error: "Forbidden: Admin access required",
-          details: profileError?.message,
-        }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonRes({ error: "Forbidden: Admin access required" }, 403);
     }
 
-    const { username, password, fullName, role, permissions, branch_id }: CreateUserRequest =
-      await req.json();
-
+    const body = await req.json();
+    const { username, password, fullName, role, permissions, branch_id } = body;
     const displayName = fullName || username;
 
     if (!username || !password || !role) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: username, password, role" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonRes({ error: "Missing required fields: username, password, role" }, 400);
     }
 
-    const userPermissions = permissions || {};
-
     if (!["admin", "accountant", "viewer", "observer"].includes(role)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid role" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonRes({ error: "Invalid role" }, 400);
     }
 
     const targetBranchId = branch_id || userProfile.branch_id;
-
     const email = `${username.toLowerCase()}@bloov.local`;
+
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+    const existingUser = existingUsers?.users?.find(
+      (u: { email?: string }) => u.email === email
+    );
+
+    if (existingUser) {
+      const { data: existingProfile } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("id", existingUser.id)
+        .maybeSingle();
+
+      if (!existingProfile) {
+        await supabaseAdmin.auth.admin.deleteUser(existingUser.id);
+      } else {
+        return jsonRes({ error: "A user with this username already exists" }, 400);
+      }
+    }
 
     const { data: newUser, error: createError } =
       await supabaseAdmin.auth.admin.createUser({
@@ -139,66 +112,41 @@ Deno.serve(async (req: Request) => {
       });
 
     if (createError) {
-      return new Response(
-        JSON.stringify({ error: createError.message }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonRes({ error: createError.message }, 400);
     }
 
     const { error: insertError } = await supabaseAdmin.from("users").insert({
       id: newUser.user.id,
       full_name: displayName,
-      role: role,
+      role,
       is_active: true,
-      permissions: userPermissions,
+      permissions: permissions || {},
       branch_id: targetBranchId,
     });
 
     if (insertError) {
       await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
-
-      return new Response(
-        JSON.stringify({
-          error: "Failed to create user profile",
-          details: insertError.message,
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonRes({
+        error: "Failed to create user profile",
+        details: insertError.message,
+      }, 500);
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        userId: newUser.user.id,
-        user: {
-          id: newUser.user.id,
-          email: newUser.user.email,
-          fullName: displayName,
-          role,
-          branch_id: targetBranchId,
-        },
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return jsonRes({
+      success: true,
+      userId: newUser.user.id,
+      user: {
+        id: newUser.user.id,
+        email: newUser.user.email,
+        fullName: displayName,
+        role,
+        branch_id: targetBranchId,
+      },
+    }, 200);
   } catch (error) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message || "Internal server error",
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    console.error("create-user error:", error);
+    return jsonRes({
+      error: error instanceof Error ? error.message : "Internal server error",
+    }, 500);
   }
 });
