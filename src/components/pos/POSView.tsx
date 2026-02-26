@@ -4,6 +4,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOfflineData } from '../../hooks/useOfflineData';
 import { supabase } from '../../lib/supabase';
+import { shareInvoiceViaWhatsApp } from '../../lib/pdfGenerator';
 import { InvoicePrint } from '../InvoicePrint';
 import { POSProductGrid } from './POSProductGrid';
 import { POSCart } from './POSCart';
@@ -277,6 +278,39 @@ export function POSView({ onClose }: POSViewProps) {
     setLoyaltyPoints(0);
   };
 
+  const handleWhatsApp = async () => {
+    if (!printingSale) return;
+    const phone = printingSale.customer_phone || printingSale.customers?.phone;
+    if (!phone) {
+      alert(isRTL ? 'لا يوجد رقم جوال للعميل' : 'No phone number available');
+      return;
+    }
+    try {
+      const { data: items } = await supabase
+        .from('sale_items')
+        .select('product_id, quantity, unit_price, discount, total, products(name, name_ar)')
+        .eq('sale_id', printingSale.id);
+      if (!items || items.length === 0) {
+        alert(isRTL ? 'لا توجد عناصر في الفاتورة' : 'No items found');
+        return;
+      }
+      const formatted = items.map(item => ({
+        product_id: item.product_id,
+        product_name: (item.products as any)?.name || (item.products as any)?.name_ar || '',
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount: item.discount,
+        total: item.total,
+      }));
+      await shareInvoiceViaWhatsApp(printingSale, formatted as any, phone);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      alert(isRTL
+        ? `خطأ في إرسال الفاتورة: ${err?.message || 'خطأ غير معروف'}`
+        : `Error sharing invoice: ${err?.message || 'Unknown error'}`);
+    }
+  };
+
   const handleCharge = async () => {
     if (cartItems.length === 0) {
       setError(isRTL ? 'أضف منتجاً واحداً على الأقل' : 'Add at least one product');
@@ -521,7 +555,7 @@ export function POSView({ onClose }: POSViewProps) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <InvoicePrint sale={printingSale} items={printItems} onClose={() => setPrintingSale(null)} />
+            <InvoicePrint sale={printingSale} items={printItems} onClose={() => setPrintingSale(null)} onWhatsApp={handleWhatsApp} />
           </div>
         </div>
       )}
