@@ -59,7 +59,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
   const visibleItems = menuItems.filter(item => can(item.id, 'view'));
 
   return (
-    <aside className="w-64 bg-dark-surface border-r border-dark-border text-mauve-50 h-[calc(100vh-73px)] overflow-y-auto flex-shrink-0">
+    <aside className="w-64 bg-white border-r border-lux-border h-[calc(100vh-65px)] overflow-y-auto flex-shrink-0">
       <nav className="p-3 space-y-0.5">
         {visibleItems.map((item) => {
           const Icon = item.icon;
@@ -71,12 +71,12 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
               onClick={() => setActiveSection(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 ${
                 isActive
-                  ? 'bg-accent/15 text-accent-light shadow-glow-sm border border-accent/20'
-                  : 'hover:bg-dark-hover text-mauve-300 hover:text-mauve-50 border border-transparent'
+                  ? 'bg-accent-light text-accent font-semibold shadow-soft-sm'
+                  : 'hover:bg-lux-hover text-secondary hover:text-primary'
               } ${isRTL ? 'flex-row-reverse' : ''}`}
             >
-              <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-accent-light' : ''}`} />
-              <span className="font-medium text-sm">{item.label}</span>
+              <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-accent' : 'text-muted'}`} />
+              <span className="text-sm">{item.label}</span>
             </button>
           );
         })}
