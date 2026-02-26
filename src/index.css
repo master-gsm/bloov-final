@@ -4,6 +4,31 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --theme-background: #F8FAFC;
+  --theme-surface: #FFFFFF;
+  --theme-surface-hover: #F1F5F9;
+  --theme-border: #E2E8F0;
+  --theme-border-muted: #CBD5E1;
+  --theme-text: #1E293B;
+  --theme-text-secondary: #475569;
+  --theme-text-muted: #94A3B8;
+  --theme-primary: #0EA5E9;
+  --theme-primary-hover: #0284C7;
+  --theme-primary-light: #E0F2FE;
+  --theme-accent: #0EA5E9;
+  --theme-accent-hover: #0284C7;
+  --theme-success: #10B981;
+  --theme-success-light: #D1FAE5;
+  --theme-warning: #F59E0B;
+  --theme-warning-light: #FEF3C7;
+  --theme-error: #EF4444;
+  --theme-error-light: #FEE2E2;
+  --theme-scrollbar-track: #F1F5F9;
+  --theme-scrollbar-thumb: #CBD5E1;
+  --theme-scrollbar-thumb-hover: #94A3B8;
+}
+
 @supports (padding: env(safe-area-inset-top)) {
   html {
     padding-top: env(safe-area-inset-top);

@@ -6,13 +6,14 @@ import { supabase } from '../lib/supabase';
 import {
   Settings as SettingsIcon, Globe, Building2, Shield, Save, Receipt,
   Truck, Heart, Bell, Package, CreditCard, FileText, QrCode, CheckCircle, Loader2,
-  AlertCircle, MessageSquare, TestTube, Info, Code2, User, ShieldOff
+  AlertCircle, MessageSquare, TestTube, Info, Code2, User, ShieldOff, Palette
 } from 'lucide-react';
 import { ResetTestDatabaseButton } from './ResetTestDatabaseButton';
+import { ThemeSettings } from './ThemeSettings';
 
 type SettingsMap = Record<string, string>;
 
-const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'testing', 'language', 'about'] as const;
+const TABS = ['business', 'tax', 'invoice', 'pos', 'inventory', 'loyalty', 'sms', 'testing', 'themes', 'language', 'about'] as const;
 type Tab = typeof TABS[number];
 
 export function Settings() {
@@ -122,6 +123,7 @@ export function Settings() {
     loyalty: { icon: Heart, label: 'Loyalty', labelAr: 'الولاء' },
     sms: { icon: MessageSquare, label: 'SMS Gateway', labelAr: 'الرسائل النصية' },
     testing: { icon: TestTube, label: 'Test Mode & Reset', labelAr: 'وضع التجربة والتنظيف' },
+    themes: { icon: Palette, label: 'Themes', labelAr: 'الثيمات' },
     language: { icon: Globe, label: 'Language', labelAr: 'اللغة والعرض' },
     about: { icon: Info, label: 'About', labelAr: 'نبذة عن البرنامج' },
   };
@@ -606,6 +608,18 @@ export function Settings() {
 
               <ResetTestDatabaseButton isRTL={isRTL} setBackupMessage={setBackupMessage} />
             </div>
+          </div>
+        )}
+
+        {activeTab === 'themes' && (
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'الثيمات' : 'Themes'}</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {isRTL ? 'اختر الثيم المناسب لك من بين 20 ثيم متنوع' : 'Choose your preferred theme from 20 diverse options'}
+              </p>
+            </div>
+            <ThemeSettings />
           </div>
         )}
 

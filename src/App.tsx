@@ -5,6 +5,7 @@ import { BranchProvider } from './contexts/BranchContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { OfflineFirstProvider } from './contexts/OfflineFirstContext';
 import { TestModeProvider } from './contexts/TestModeContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { LoginForm } from './components/LoginForm';
 import { ResetPassword } from './components/ResetPassword';
 import { Navbar } from './components/Navbar';
@@ -214,11 +215,13 @@ function App() {
         <BranchProvider>
           <LanguageProvider>
             <TestModeProvider>
-              <OfflineFirstProvider>
-                <AppErrorBoundary>
-                  <AppContent />
-                </AppErrorBoundary>
-              </OfflineFirstProvider>
+              <ThemeProvider>
+                <OfflineFirstProvider>
+                  <AppErrorBoundary>
+                    <AppContent />
+                  </AppErrorBoundary>
+                </OfflineFirstProvider>
+              </ThemeProvider>
             </TestModeProvider>
           </LanguageProvider>
         </BranchProvider>
