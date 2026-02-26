@@ -84,7 +84,7 @@ export function Navbar() {
             </div>
           </div>
 
-          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-2 overflow-x-auto ${isRTL ? 'flex-row-reverse' : ''}`}>
             <div className="relative">
               <button
                 onClick={() => setShowConnectionMenu(!showConnectionMenu)}
@@ -252,7 +252,7 @@ export function Navbar() {
 
             <button
               onClick={signOut}
-              className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover transition-all shadow-soft-sm hover:shadow-soft-md"
+              className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all shadow-soft-sm hover:shadow-soft-md"
             >
               <LogOut className="w-4 h-4" />
               <span className="text-sm font-medium hidden sm:inline">{t('auth.logout')}</span>
