@@ -8,7 +8,7 @@ import { InvoicePrint } from '../InvoicePrint';
 import { POSProductGrid } from './POSProductGrid';
 import { POSCart } from './POSCart';
 import { POSEmployeeSelect } from './POSEmployeeSelect';
-import type { POSProduct, POSEmployee, POSCustomer, POSCartItem, CustomerLoyalty } from './types';
+import type { POSProduct, POSEmployee, POSCustomer, POSCartItem } from './types';
 
 interface POSViewProps {
   onClose: () => void;
@@ -37,13 +37,28 @@ export function POSView({ onClose }: POSViewProps) {
     }
   });
   const [showEmployeeSelect, setShowEmployeeSelect] = useState(false);
+
   const [walkinPhone, setWalkinPhone] = useState('');
   const [walkinName, setWalkinName] = useState('');
   const [lookedUpCustomer, setLookedUpCustomer] = useState<POSCustomer | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [isLookingUp, setIsLookingUp] = useState(false);
+
   const [saleDiscount, setSaleDiscount] = useState(0);
+  const [saleNotes, setSaleNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [saleSource, setSaleSource] = useState<'store' | 'salla' | 'external'>('store');
+  const [buyerType, setBuyerType] = useState<'individual' | 'business'>('individual');
+  const [companyName, setCompanyName] = useState('');
+  const [companyVatNumber, setCompanyVatNumber] = useState('');
+  const [companyAddress, setCompanyAddress] = useState('');
+  const [deliveryCharge, setDeliveryCharge] = useState(0);
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [cardMessage, setCardMessage] = useState('');
+  const [showDelivery, setShowDelivery] = useState(false);
+  const [sallaShippingCost, setSallaShippingCost] = useState(0);
+  const [sallaPaymentFee, setSallaPaymentFee] = useState(0);
+
   const [taxRate, setTaxRate] = useState(0.15);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -180,7 +195,19 @@ export function POSView({ onClose }: POSViewProps) {
     setLookedUpCustomer(null);
     setSelectedCustomer('');
     setSaleDiscount(0);
+    setSaleNotes('');
     setPaymentMethod('cash');
+    setSaleSource('store');
+    setBuyerType('individual');
+    setCompanyName('');
+    setCompanyVatNumber('');
+    setCompanyAddress('');
+    setDeliveryCharge(0);
+    setDeliveryAddress('');
+    setCardMessage('');
+    setShowDelivery(false);
+    setSallaShippingCost(0);
+    setSallaPaymentFee(0);
     setError('');
     setLoyaltyPoints(0);
   };
@@ -198,12 +225,17 @@ export function POSView({ onClose }: POSViewProps) {
       setError(isRTL ? 'الصندوق مغلق - يرجى فتح الصندوق أولاً' : 'Cash register is closed');
       return;
     }
+    const isCredit = paymentMethod === 'credit';
+    if (isCredit && !selectedCustomer) {
+      setError(isRTL ? 'البيع الآجل يتطلب اختيار عميل مسجل' : 'Credit sales require a registered customer');
+      return;
+    }
     setError('');
     setSubmitting(true);
 
     try {
       const subtotal = cartItems.reduce((s, i) => s + i.total, 0);
-      const taxableAmount = subtotal - saleDiscount;
+      const taxableAmount = subtotal - saleDiscount + deliveryCharge;
       const vatAmount = Math.round(taxableAmount * taxRate * 100) / 100;
       const total = taxableAmount + vatAmount;
       const saleId = crypto.randomUUID();
@@ -213,27 +245,31 @@ export function POSView({ onClose }: POSViewProps) {
         id: saleId,
         idempotency_key: idempotencyKey,
         branch_id: userBranchId,
-        customer_id: selectedCustomer || '',
-        customer_name: !selectedCustomer ? walkinName : '',
-        customer_phone: !selectedCustomer ? walkinPhone : '',
+        customer_id: selectedCustomer && selectedCustomer.trim() !== '' ? selectedCustomer : '',
+        customer_name: !selectedCustomer || selectedCustomer.trim() === ''
+          ? (walkinName && walkinName.trim() !== '' ? walkinName : '')
+          : '',
+        customer_phone: !selectedCustomer || selectedCustomer.trim() === ''
+          ? (walkinPhone && walkinPhone.trim() !== '' ? walkinPhone : '')
+          : '',
         sale_date: new Date().toISOString(),
         subtotal,
         tax: vatAmount,
         discount: saleDiscount,
         total,
-        payment_status: paymentMethod === 'credit' ? 'unpaid' : 'paid',
+        payment_status: isCredit ? 'unpaid' : 'paid',
         payment_method: paymentMethod,
-        delivery_charge: 0,
-        delivery_address: '',
-        card_message: '',
-        notes: '',
-        source: 'store',
-        salla_shipping_cost: 0,
-        salla_payment_gateway_fee: 0,
-        buyer_type: 'individual',
-        company_name: '',
-        company_vat_number: '',
-        company_address: '',
+        delivery_charge: deliveryCharge,
+        delivery_address: deliveryAddress || '',
+        card_message: cardMessage || '',
+        notes: saleNotes || '',
+        source: saleSource,
+        salla_shipping_cost: saleSource === 'salla' ? sallaShippingCost : 0,
+        salla_payment_gateway_fee: saleSource === 'salla' ? sallaPaymentFee : 0,
+        buyer_type: buyerType,
+        company_name: buyerType === 'business' ? companyName : '',
+        company_vat_number: buyerType === 'business' ? companyVatNumber : '',
+        company_address: buyerType === 'business' ? companyAddress : '',
         salesperson_id: sessionEmployee.id,
         created_by: user?.id,
         items: cartItems.map(item => ({
@@ -349,13 +385,38 @@ export function POSView({ onClose }: POSViewProps) {
             lookedUpCustomer={lookedUpCustomer}
             isLookingUp={isLookingUp}
             saleDiscount={saleDiscount}
+            saleNotes={saleNotes}
+            saleSource={saleSource}
+            buyerType={buyerType}
+            companyName={companyName}
+            companyVatNumber={companyVatNumber}
+            companyAddress={companyAddress}
+            deliveryCharge={deliveryCharge}
+            deliveryAddress={deliveryAddress}
+            cardMessage={cardMessage}
+            showDelivery={showDelivery}
+            sallaShippingCost={sallaShippingCost}
+            sallaPaymentFee={sallaPaymentFee}
             taxRate={taxRate}
             paymentMethod={paymentMethod}
             isRTL={isRTL}
             onUpdateQty={handleUpdateQty}
             onRemoveItem={handleRemoveItem}
             onPhoneChange={handlePhoneChange}
+            onWalkinNameChange={setWalkinName}
             onDiscountChange={setSaleDiscount}
+            onNotesChange={setSaleNotes}
+            onSourceChange={setSaleSource}
+            onBuyerTypeChange={setBuyerType}
+            onCompanyNameChange={setCompanyName}
+            onCompanyVatNumberChange={setCompanyVatNumber}
+            onCompanyAddressChange={setCompanyAddress}
+            onDeliveryChargeChange={setDeliveryCharge}
+            onDeliveryAddressChange={setDeliveryAddress}
+            onCardMessageChange={setCardMessage}
+            onShowDeliveryChange={setShowDelivery}
+            onSallaShippingCostChange={setSallaShippingCost}
+            onSallaPaymentFeeChange={setSallaPaymentFee}
             onPaymentMethodChange={setPaymentMethod}
             onCharge={handleCharge}
             submitting={submitting}

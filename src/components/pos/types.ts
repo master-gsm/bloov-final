@@ -25,6 +25,7 @@ export interface POSEmployee {
   full_name_ar: string | null;
   employee_code: string;
   is_active: boolean | null;
+  commission_rate?: number | null;
 }
 
 export interface POSCartItem {
