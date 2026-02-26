@@ -140,7 +140,7 @@ export function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-accent text-white py-3.5 px-4 rounded-xl hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-soft-md hover:shadow-soft-lg"
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white py-3.5 px-4 rounded-xl hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-lg hover:shadow-xl"
             >
               <LogIn className="w-5 h-5" />
               {loading ? t('common.loading') : t('auth.signInButton')}
