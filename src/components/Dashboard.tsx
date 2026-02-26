@@ -77,37 +77,43 @@ export function Dashboard() {
       title: isRTL ? 'مبيعات المحل' : 'Store Sales',
       value: stats.storeSales,
       icon: ShoppingCart,
-      color: 'from-teal-500 to-teal-600'
+      color: 'from-accent to-mauve-700',
+      iconBg: 'bg-accent/15',
     },
     {
       title: isRTL ? 'مبيعات المتجر الإلكتروني' : 'Online Sales (Salla)',
       value: stats.sallaSales,
       icon: ShoppingCart,
-      color: 'from-blue-500 to-blue-600'
+      color: 'from-blue-500 to-blue-600',
+      iconBg: 'bg-blue-500/15',
     },
     {
       title: isRTL ? 'إجمالي الربح' : 'Gross Profit',
       value: stats.grossProfit,
       icon: DollarSign,
-      color: 'from-green-500 to-green-600'
+      color: 'from-green-500 to-green-600',
+      iconBg: 'bg-green-500/15',
     },
     {
       title: isRTL ? 'صافي النشاط' : 'Operating Net',
       value: stats.operatingNet,
       icon: TrendingUp,
-      color: stats.operatingNet >= 0 ? 'from-blue-500 to-blue-600' : 'from-red-500 to-red-600'
+      color: stats.operatingNet >= 0 ? 'from-blue-500 to-blue-600' : 'from-red-500 to-red-600',
+      iconBg: stats.operatingNet >= 0 ? 'bg-blue-500/15' : 'bg-red-500/15',
     },
     {
       title: isRTL ? 'صافي الربح المحاسبي' : 'Accounting Net',
       value: stats.accountingNet,
       icon: TrendingUp,
-      color: stats.accountingNet >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'
+      color: stats.accountingNet >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600',
+      iconBg: stats.accountingNet >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15',
     },
     {
       title: t('dashboard.inventory'),
       value: stats.inventoryValue,
       icon: Package,
-      color: 'from-orange-500 to-orange-600'
+      color: 'from-orange-500 to-orange-600',
+      iconBg: 'bg-orange-500/15',
     },
   ];
 
@@ -121,8 +127,8 @@ export function Dashboard() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
+          <div className="w-16 h-16 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-mauve-400">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -130,29 +136,32 @@ export function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="bg-gradient-to-r from-teal-600 to-teal-700 rounded-xl shadow-lg p-8 text-white">
-        <h2 className="text-3xl font-bold mb-2">
-          {isRTL ? 'مرحباً بك في BLOOV' : 'Welcome to BLOOV'}
-        </h2>
-        <p className="text-teal-100 text-lg">
-          {isRTL ? 'نظام محاسبي متكامل صُمم خصيصاً لـ BLOOV' : 'A comprehensive accounting system designed specifically for BLOOV'}
-        </p>
+      <div className="bg-dark-surface rounded-2xl shadow-dark-lg p-8 border border-dark-border relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-accent/8 to-transparent pointer-events-none"></div>
+        <div className="relative z-10">
+          <h2 className="text-3xl font-bold mb-2 text-mauve-50">
+            {isRTL ? 'مرحباً بك في BLOOV' : 'Welcome to BLOOV'}
+          </h2>
+          <p className="text-mauve-300 text-lg">
+            {isRTL ? 'نظام محاسبي متكامل صُمم خصيصاً لـ BLOOV' : 'A comprehensive accounting system designed specifically for BLOOV'}
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {statCards.map((card) => {
           const Icon = card.icon;
           return (
-            <div key={card.title} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div key={card.title} className="bg-dark-surface rounded-xl shadow-dark-sm border border-dark-border overflow-hidden hover:border-dark-elevated transition-all duration-200 group">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`p-3 rounded-lg bg-gradient-to-br ${card.color}`}>
-                    <Icon className="w-6 h-6 text-white" />
+                  <div className={`p-3 rounded-xl ${card.iconBg}`}>
+                    <Icon className="w-6 h-6 text-accent-light" />
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-gray-500 mb-1">{card.title}</h3>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(card.value)} <span className="text-sm font-normal text-gray-400">{isRTL ? 'ر.س' : 'SAR'}</span>
+                <h3 className="text-sm font-medium text-mauve-400 mb-1">{card.title}</h3>
+                <p className="text-2xl font-bold text-mauve-50">
+                  {formatCurrency(card.value)} <span className="text-sm font-normal text-muted">{isRTL ? 'ر.س' : 'SAR'}</span>
                 </p>
               </div>
             </div>
@@ -163,23 +172,23 @@ export function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AlertsPanel />
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-teal-600" />
+        <div className="bg-dark-surface rounded-xl shadow-dark-sm border border-dark-border p-6">
+          <h3 className="text-lg font-bold text-mauve-50 mb-4 flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-accent-light" />
             {t('dashboard.recentSales')}
           </h3>
           {recentSales.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-8 text-muted">
               <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-30" />
               <p>{isRTL ? 'لا توجد مبيعات بعد' : 'No recent sales'}</p>
             </div>
           ) : (
             <div className="space-y-3">
               {recentSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={sale.id} className="flex items-center justify-between p-3 bg-dark-hover/50 rounded-xl border border-dark-border/50">
                   <div>
-                    <p className="font-medium text-gray-900 text-sm">{sale.sale_number}</p>
-                    <p className="text-xs text-gray-400">
+                    <p className="font-medium text-mauve-50 text-sm">{sale.sale_number}</p>
+                    <p className="text-xs text-muted">
                       {sale.customers
                         ? (isRTL ? sale.customers.name_ar || sale.customers.name : sale.customers.name)
                         : (isRTL ? 'عميل نقدي' : 'Walk-in')}
@@ -187,7 +196,7 @@ export function Dashboard() {
                       {formatDate(sale.sale_date)}
                     </p>
                   </div>
-                  <p className="font-bold text-teal-600">{formatCurrency(sale.total)}</p>
+                  <p className="font-bold text-accent-light">{formatCurrency(sale.total)}</p>
                 </div>
               ))}
             </div>
@@ -195,15 +204,15 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-dark-surface rounded-xl shadow-dark-sm border border-dark-border p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-amber-600" />
+          <h3 className="text-lg font-bold text-mauve-50 flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-amber-400" />
             {isRTL ? 'حالة إقامات الموظفين' : 'Employee Residence Status'}
           </h3>
           <a
             href="#/employees"
-            className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
+            className="text-sm text-accent-light hover:text-accent-hover font-medium flex items-center gap-1 transition-colors"
           >
             {isRTL ? 'عرض الكل' : 'View All'}
             <ArrowRight className="w-4 h-4" />
@@ -211,32 +220,32 @@ export function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="bg-red-500/8 border border-red-500/20 rounded-xl p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <ShieldAlert className="w-6 h-6 text-red-600" />
+              <div className="p-2 bg-red-500/15 rounded-xl">
+                <ShieldAlert className="w-6 h-6 text-red-400" />
               </div>
               <div>
-                <p className="text-sm text-red-600 font-medium">
+                <p className="text-sm text-red-400 font-medium">
                   {isRTL ? 'إقامات منتهية' : 'Expired'}
                 </p>
-                <p className="text-2xl font-bold text-red-700">
+                <p className="text-2xl font-bold text-red-300">
                   {residenceStats.filter(r => r.residence_status === 'expired').length}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-100 rounded-lg">
-                <Clock className="w-6 h-6 text-amber-600" />
+              <div className="p-2 bg-amber-500/15 rounded-xl">
+                <Clock className="w-6 h-6 text-amber-400" />
               </div>
               <div>
-                <p className="text-sm text-amber-600 font-medium">
+                <p className="text-sm text-amber-400 font-medium">
                   {isRTL ? 'تنتهي خلال 30 يوم' : 'Expiring Soon'}
                 </p>
-                <p className="text-2xl font-bold text-amber-700">
+                <p className="text-2xl font-bold text-amber-300">
                   {residenceStats.filter(r => r.residence_status === 'expiring_soon').length}
                 </p>
               </div>
@@ -245,34 +254,34 @@ export function Dashboard() {
         </div>
 
         {residenceStats.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
+          <div className="text-center py-8 text-muted">
             <Users className="w-12 h-12 mx-auto mb-2 opacity-30" />
             <p>{isRTL ? 'جميع الإقامات سارية' : 'All residences are valid'}</p>
           </div>
         ) : (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-gray-700 mb-3">
+            <p className="text-sm font-medium text-mauve-300 mb-3">
               {isRTL ? 'الموظفون الأقرب للانتهاء:' : 'Employees with nearest expiry:'}
             </p>
             {residenceStats.map((emp) => (
-              <div key={emp.employee_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div key={emp.employee_id} className="flex items-center justify-between p-3 bg-dark-hover/50 rounded-xl border border-dark-border/50">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${
+                  <div className={`p-2 rounded-xl ${
                     emp.residence_status === 'expired'
-                      ? 'bg-red-100'
-                      : 'bg-amber-100'
+                      ? 'bg-red-500/15'
+                      : 'bg-amber-500/15'
                   }`}>
                     {emp.residence_status === 'expired' ? (
-                      <ShieldAlert className="w-4 h-4 text-red-600" />
+                      <ShieldAlert className="w-4 h-4 text-red-400" />
                     ) : (
-                      <Clock className="w-4 h-4 text-amber-600" />
+                      <Clock className="w-4 h-4 text-amber-400" />
                     )}
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900 text-sm">
+                    <p className="font-medium text-mauve-50 text-sm">
                       {isRTL ? emp.employee_name_ar || emp.employee_name : emp.employee_name}
                     </p>
-                    <p className="text-xs text-gray-500" dir="ltr">
+                    <p className="text-xs text-muted" dir="ltr">
                       {emp.iqama_number || '-'}
                     </p>
                   </div>
@@ -280,15 +289,15 @@ export function Dashboard() {
                 <div className="text-right">
                   <p className={`text-sm font-semibold ${
                     emp.residence_status === 'expired'
-                      ? 'text-red-600'
-                      : 'text-amber-600'
+                      ? 'text-red-400'
+                      : 'text-amber-400'
                   }`}>
                     {emp.residence_status === 'expired'
                       ? (isRTL ? `منتهية منذ ${Math.abs(emp.days_to_expiry)} يوم` : `${Math.abs(emp.days_to_expiry)}d ago`)
                       : (isRTL ? `${emp.days_to_expiry} يوم` : `${emp.days_to_expiry}d left`)
                     }
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted">
                     {new Date(emp.iqama_expiry_date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')}
                   </p>
                 </div>

@@ -45,13 +45,13 @@ export function Navbar() {
   const getConnectionColor = () => {
     switch (state) {
       case 'offline':
-        return 'text-red-600 bg-red-50 border-red-200 hover:bg-red-100';
+        return 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/15';
       case 'syncing':
-        return 'text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100';
+        return 'text-blue-400 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/15';
       case 'pending':
-        return 'text-yellow-600 bg-yellow-50 border-yellow-200 hover:bg-yellow-100';
+        return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15';
       default:
-        return 'text-green-600 bg-green-50 border-green-200 hover:bg-green-100';
+        return 'text-green-400 bg-green-500/10 border-green-500/20 hover:bg-green-500/15';
     }
   };
 
@@ -69,7 +69,7 @@ export function Navbar() {
   };
 
   return (
-    <nav className="bg-white/90 backdrop-blur-sm border-b border-violet-100/40 sticky top-0 z-50 shadow-md">
+    <nav className="bg-dark-surface/95 backdrop-blur-xl border-b border-dark-border sticky top-0 z-50 shadow-dark-md">
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -79,8 +79,8 @@ export function Navbar() {
               className="h-10 w-auto"
             />
             <div>
-              <h1 className="text-xl font-bold text-violet-900">{t('app.name')}</h1>
-              <p className="text-xs text-violet-600/70">{t('app.tagline')}</p>
+              <h1 className="text-xl font-bold text-mauve-50">{t('app.name')}</h1>
+              <p className="text-xs text-mauve-400">{t('app.tagline')}</p>
             </div>
           </div>
 
@@ -88,7 +88,7 @@ export function Navbar() {
             <div className="relative">
               <button
                 onClick={() => setShowConnectionMenu(!showConnectionMenu)}
-                className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${getConnectionColor()} min-w-[100px]`}
+                className={`relative flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${getConnectionColor()} min-w-[100px]`}
                 title={getConnectionLabel()}
               >
                 {state === 'offline' ? (
@@ -102,7 +102,7 @@ export function Navbar() {
                   {getConnectionLabel()}
                 </span>
                 {pendingOperationsCount > 0 && (
-                  <span className="absolute top-1 right-1 w-5 h-5 bg-yellow-400 text-yellow-900 text-xs font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute top-1 right-1 w-5 h-5 bg-yellow-500 text-dark-bg text-xs font-bold rounded-full flex items-center justify-center">
                     {pendingOperationsCount}
                   </span>
                 )}
@@ -115,38 +115,38 @@ export function Navbar() {
                     onClick={() => setShowConnectionMenu(false)}
                   />
                   <div
-                    className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-80 bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-violet-100/50 z-40`}
+                    className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-80 bg-dark-surface/98 backdrop-blur-xl rounded-xl shadow-dark-xl border border-dark-border z-40`}
                   >
                     <div className="p-4 space-y-3">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-violet-900">
+                        <h3 className="font-semibold text-mauve-50">
                           {isRTL ? 'حالة الاتصال' : 'Connection Status'}
                         </h3>
                       </div>
 
-                      <div className="bg-violet-50/50 rounded-lg p-3 flex items-center justify-between border border-violet-100/50">
-                        <span className="text-sm text-violet-700">
+                      <div className="bg-dark-hover rounded-xl p-3 flex items-center justify-between border border-dark-border">
+                        <span className="text-sm text-mauve-300">
                           {isRTL ? 'الحالة' : 'Status'}
                         </span>
                         <div className="flex items-center gap-2">
                           {state === 'offline' ? (
                             <>
-                              <WifiOff className="w-4 h-4 text-red-600" />
-                              <span className="font-medium text-red-600">
+                              <WifiOff className="w-4 h-4 text-red-400" />
+                              <span className="font-medium text-red-400">
                                 {isRTL ? 'غير متصل' : 'Offline'}
                               </span>
                             </>
                           ) : state === 'syncing' ? (
                             <>
-                              <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
-                              <span className="font-medium text-blue-600">
+                              <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
+                              <span className="font-medium text-blue-400">
                                 {isRTL ? 'جاري المزامنة' : 'Syncing'}
                               </span>
                             </>
                           ) : (
                             <>
-                              <Wifi className="w-4 h-4 text-green-600" />
-                              <span className="font-medium text-green-600">
+                              <Wifi className="w-4 h-4 text-green-400" />
+                              <span className="font-medium text-green-400">
                                 {isRTL ? 'متصل' : 'Online'}
                               </span>
                             </>
@@ -155,16 +155,16 @@ export function Navbar() {
                       </div>
 
                       {pendingOperationsCount > 0 && (
-                        <div className="bg-violet-50/50 rounded-lg p-3 border border-violet-100/50">
+                        <div className="bg-dark-hover rounded-xl p-3 border border-dark-border">
                           <div className="flex items-center justify-between">
-                            <span className="text-sm text-violet-700">
+                            <span className="text-sm text-mauve-300">
                               {isRTL ? 'عمليات معلقة' : 'Pending Operations'}
                             </span>
-                            <span className="font-bold text-violet-600">
+                            <span className="font-bold text-accent-light">
                               {pendingOperationsCount}
                             </span>
                           </div>
-                          <p className="text-xs text-violet-600/70 mt-1">
+                          <p className="text-xs text-muted mt-1">
                             {isRTL
                               ? 'سيتم مزامنتها عند الاتصال'
                               : 'Will sync when online'}
@@ -173,19 +173,19 @@ export function Navbar() {
                       )}
 
                       {syncError && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex gap-2">
-                          <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex gap-2">
+                          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="text-xs font-medium text-red-900">
+                            <p className="text-xs font-medium text-red-300">
                               {isRTL ? 'خطأ في المزامنة' : 'Sync Error'}
                             </p>
-                            <p className="text-xs text-red-700 mt-1">{syncError}</p>
+                            <p className="text-xs text-red-400/70 mt-1">{syncError}</p>
                           </div>
                         </div>
                       )}
 
                       {!isOnline && (
-                        <div className="bg-violet-50/50 rounded-lg p-3 text-xs text-violet-800 border border-violet-100/50">
+                        <div className="bg-dark-hover rounded-xl p-3 text-xs text-mauve-300 border border-dark-border">
                           {isRTL
                             ? 'تحقق من اتصالك. التغييرات ستتم مزامنتها تلقائياً عند الاتصال.'
                             : 'Check your connection. Changes will sync automatically when online.'}
@@ -197,29 +197,28 @@ export function Navbar() {
               )}
             </div>
 
-            {/* Branch Switcher - admin only */}
             {isAdmin && allBranches.length > 0 && (
               <div className="relative">
                 <button
                   onClick={() => setShowBranchMenu(!showBranchMenu)}
-                  className="flex items-center gap-2 px-3 py-2 text-violet-700 hover:bg-violet-50 rounded-lg border border-violet-200/50 transition text-sm"
+                  className="flex items-center gap-2 px-3 py-2 text-mauve-300 hover:bg-dark-hover rounded-xl border border-dark-border transition-all text-sm"
                 >
-                  <Building2 className="w-4 h-4 text-violet-600" />
+                  <Building2 className="w-4 h-4 text-accent-light" />
                   <span className="hidden sm:inline font-medium max-w-[120px] truncate">
                     {selectedBranchFilter
                       ? (allBranches.find(b => b.id === selectedBranchFilter)?.name || (isRTL ? 'فرع' : 'Branch'))
                       : (isRTL ? 'كل الفروع' : 'All Branches')}
                   </span>
-                  <ChevronDown className="w-4 h-4 text-violet-400" />
+                  <ChevronDown className="w-4 h-4 text-muted" />
                 </button>
                 {showBranchMenu && (
                   <>
                     <div className="fixed inset-0 z-30" onClick={() => setShowBranchMenu(false)} />
-                    <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-52 bg-white/95 backdrop-blur-sm rounded-xl shadow-xl border border-violet-100/50 z-40 overflow-hidden`}>
+                    <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-52 bg-dark-surface/98 backdrop-blur-xl rounded-xl shadow-dark-xl border border-dark-border z-40 overflow-hidden`}>
                       <div className="p-2">
                         <button
                           onClick={() => { setSelectedBranchFilter(null); setShowBranchMenu(false); }}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${!selectedBranchFilter ? 'bg-violet-100 text-violet-900 font-medium' : 'text-violet-700 hover:bg-violet-50'}`}
+                          className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all ${!selectedBranchFilter ? 'bg-accent/15 text-accent-light font-medium' : 'text-mauve-300 hover:bg-dark-hover'}`}
                         >
                           {isRTL ? 'كل الفروع' : 'All Branches'}
                         </button>
@@ -227,7 +226,7 @@ export function Navbar() {
                           <button
                             key={branch.id}
                             onClick={() => { setSelectedBranchFilter(branch.id); setShowBranchMenu(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${selectedBranchFilter === branch.id ? 'bg-violet-100 text-violet-900 font-medium' : 'text-violet-700 hover:bg-violet-50'}`}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all ${selectedBranchFilter === branch.id ? 'bg-accent/15 text-accent-light font-medium' : 'text-mauve-300 hover:bg-dark-hover'}`}
                           >
                             {branch.name}
                           </button>
@@ -243,7 +242,7 @@ export function Navbar() {
 
             <button
               onClick={toggleLanguage}
-              className="flex items-center gap-2 px-3 py-2 text-violet-700 hover:bg-violet-50 rounded-lg transition border border-violet-200/50"
+              className="flex items-center gap-2 px-3 py-2 text-mauve-300 hover:bg-dark-hover rounded-xl transition-all border border-dark-border"
             >
               <Globe className="w-5 h-5" />
               <span className="text-sm font-medium hidden sm:inline">
@@ -253,7 +252,7 @@ export function Navbar() {
 
             <button
               onClick={signOut}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-lg hover:from-violet-700 hover:to-purple-700 transition shadow-md"
+              className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover transition-all shadow-glow-sm hover:shadow-glow-md"
             >
               <LogOut className="w-5 h-5" />
               <span className="text-sm font-medium hidden sm:inline">{t('auth.logout')}</span>
