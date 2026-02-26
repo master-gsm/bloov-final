@@ -127,34 +127,41 @@ Deno.serve(async (req: Request) => {
       }
 
       if (sectionPermissions && typeof sectionPermissions === "object") {
-        for (const [section, perms] of Object.entries(sectionPermissions)) {
-          const p = perms as {
-            view: boolean;
-            create: boolean;
-            edit: boolean;
-            delete: boolean;
-          };
-          const { error: permError } = await supabaseAdmin
-            .from("user_permissions")
-            .upsert(
-              {
-                user_id: userId,
-                section,
-                can_view: p.view ?? false,
-                can_create: p.create ?? false,
-                can_edit: p.edit ?? false,
-                can_delete: p.delete ?? false,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "user_id,section" }
-            );
-
-          if (permError) {
-            return jsonResponse(
-              { error: `Permission update failed: ${permError.message}` },
-              400
-            );
+        const now = new Date().toISOString();
+        const permissionsToUpsert = Object.entries(sectionPermissions).map(
+          ([section, perms]) => {
+            const p = perms as {
+              view: boolean;
+              create: boolean;
+              edit: boolean;
+              delete: boolean;
+            };
+            return {
+              user_id: userId,
+              section,
+              can_view: p.view ?? false,
+              can_create: p.create ?? false,
+              can_edit: p.edit ?? false,
+              can_delete: p.delete ?? false,
+              created_at: now,
+              updated_at: now,
+            };
           }
+        );
+
+        const { error: permError } = await supabaseAdmin
+          .from("user_permissions")
+          .upsert(permissionsToUpsert, {
+            onConflict: "user_id,section",
+            ignoreDuplicates: false,
+          });
+
+        if (permError) {
+          console.error("Permission upsert error:", permError);
+          return jsonResponse(
+            { error: `Permission update failed: ${permError.message}` },
+            400
+          );
         }
       }
 
