@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Minus, Plus, Trash2, ShoppingCart, Tag, FileText, ChevronDown, ChevronUp, Truck, Building2, Globe } from 'lucide-react';
+import { Minus, Plus, Trash2, ShoppingCart, Tag, FileText, ChevronDown, ChevronUp, Truck, Building2, UserPlus } from 'lucide-react';
 import type { POSCartItem, POSCustomer } from './types';
 
 interface POSCartProps {
@@ -9,6 +9,7 @@ interface POSCartProps {
   walkinPhone: string;
   lookedUpCustomer: POSCustomer | null;
   isLookingUp: boolean;
+  creatingCustomer: boolean;
   saleDiscount: number;
   saleNotes: string;
   saleSource: 'store' | 'salla' | 'external';
@@ -29,6 +30,7 @@ interface POSCartProps {
   onRemoveItem: (index: number) => void;
   onPhoneChange: (phone: string) => void;
   onWalkinNameChange: (name: string) => void;
+  onAddNewCustomer: () => void;
   onDiscountChange: (val: number) => void;
   onNotesChange: (notes: string) => void;
   onSourceChange: (source: 'store' | 'salla' | 'external') => void;
@@ -55,6 +57,7 @@ export function POSCart({
   walkinPhone,
   lookedUpCustomer,
   isLookingUp,
+  creatingCustomer,
   saleDiscount,
   saleNotes,
   saleSource,
@@ -75,6 +78,7 @@ export function POSCart({
   onRemoveItem,
   onPhoneChange,
   onWalkinNameChange,
+  onAddNewCustomer,
   onDiscountChange,
   onNotesChange,
   onSourceChange,
@@ -144,22 +148,46 @@ export function POSCart({
               )}
             </div>
             {lookedUpCustomer && (
-              <div className="flex items-center gap-2 bg-teal-50 rounded-lg px-3 py-1.5">
-                <div className="w-2 h-2 bg-teal-500 rounded-full" />
-                <span className="text-xs font-medium text-teal-700">
+              <div className="flex items-center gap-2 bg-teal-50 rounded-xl px-3 py-2">
+                <div className="w-2 h-2 bg-teal-500 rounded-full flex-shrink-0" />
+                <span className="text-xs font-medium text-teal-700 flex-1">
                   {isRTL ? (lookedUpCustomer.name_ar || lookedUpCustomer.name) : lookedUpCustomer.name}
                 </span>
+                {lookedUpCustomer.tier && lookedUpCustomer.tier !== 'regular' && (
+                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-teal-100 text-teal-600">
+                    {lookedUpCustomer.tier}
+                  </span>
+                )}
               </div>
             )}
             {!lookedUpCustomer && (
-              <input
-                type="text"
-                value={walkinName}
-                onChange={e => onWalkinNameChange(e.target.value)}
-                placeholder={isRTL ? 'اسم العميل' : 'Customer name'}
-                className={inputCls}
-                dir={isRTL ? 'rtl' : 'ltr'}
-              />
+              <>
+                <input
+                  type="text"
+                  value={walkinName}
+                  onChange={e => onWalkinNameChange(e.target.value)}
+                  placeholder={isRTL ? 'اسم العميل' : 'Customer name'}
+                  className={inputCls}
+                  dir={isRTL ? 'rtl' : 'ltr'}
+                />
+                {walkinPhone.length >= 10 && walkinName.trim() && !isLookingUp && (
+                  <button
+                    onClick={onAddNewCustomer}
+                    disabled={creatingCustomer}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl text-sm font-semibold text-teal-700 transition-all active:scale-[0.98] disabled:opacity-50"
+                  >
+                    {creatingCustomer ? (
+                      <span className="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <UserPlus className="w-4 h-4" />
+                    )}
+                    {creatingCustomer
+                      ? (isRTL ? 'جاري الإضافة...' : 'Adding...')
+                      : (isRTL ? 'إضافة عميل جديد' : 'Add New Customer')
+                    }
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>

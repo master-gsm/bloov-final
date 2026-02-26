@@ -67,6 +67,7 @@ export function POSView({ onClose }: POSViewProps) {
   const [printingSale, setPrintingSale] = useState<any | null>(null);
   const [printItems, setPrintItems] = useState<any[]>([]);
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   useEffect(() => {
     if (!productsLoading) setProducts(rawProducts.filter((p: any) => p.is_active !== false));
@@ -185,6 +186,70 @@ export function POSView({ onClose }: POSViewProps) {
       }
     } finally {
       setIsLookingUp(false);
+    }
+  };
+
+  const handleAddNewCustomer = async () => {
+    if (!walkinPhone || walkinPhone.length < 10 || !walkinName.trim()) return;
+    setCreatingCustomer(true);
+    setError('');
+    try {
+      const existing = customers.find(c => c.phone === walkinPhone);
+      if (existing) {
+        setLookedUpCustomer(existing);
+        setSelectedCustomer(existing.id);
+        setWalkinName(existing.name);
+        return;
+      }
+
+      const { count } = await supabase
+        .from('customers')
+        .select('id', { count: 'exact', head: true });
+      const code = `CUST-${String((count || 0) + 1).padStart(4, '0')}`;
+
+      const { data: newCustomer, error: insertErr } = await supabase
+        .from('customers')
+        .insert({
+          code,
+          name: walkinName.trim(),
+          phone: walkinPhone.trim(),
+          branch_id: userBranchId,
+          created_by: user?.id,
+          is_active: true,
+        })
+        .select('id, name, name_ar, code, phone, tier')
+        .single();
+
+      if (insertErr) {
+        if (insertErr.message?.includes('idx_customers_phone_unique') || insertErr.message?.includes('duplicate')) {
+          const { data: existingRow } = await supabase
+            .from('customers')
+            .select('id, name, name_ar, code, phone, tier')
+            .eq('phone', walkinPhone.trim())
+            .maybeSingle();
+          if (existingRow) {
+            const c = existingRow as POSCustomer;
+            setCustomers(prev => prev.some(x => x.id === c.id) ? prev : [...prev, c]);
+            setLookedUpCustomer(c);
+            setSelectedCustomer(c.id);
+            setWalkinName(c.name);
+            return;
+          }
+        }
+        throw insertErr;
+      }
+
+      if (newCustomer) {
+        const c = newCustomer as POSCustomer;
+        setCustomers(prev => [...prev, c]);
+        setLookedUpCustomer(c);
+        setSelectedCustomer(c.id);
+        setWalkinName(c.name);
+      }
+    } catch (err: any) {
+      setError(err.message || (isRTL ? 'خطأ في إضافة العميل' : 'Error adding customer'));
+    } finally {
+      setCreatingCustomer(false);
     }
   };
 
@@ -384,6 +449,7 @@ export function POSView({ onClose }: POSViewProps) {
             walkinPhone={walkinPhone}
             lookedUpCustomer={lookedUpCustomer}
             isLookingUp={isLookingUp}
+            creatingCustomer={creatingCustomer}
             saleDiscount={saleDiscount}
             saleNotes={saleNotes}
             saleSource={saleSource}
@@ -404,6 +470,7 @@ export function POSView({ onClose }: POSViewProps) {
             onRemoveItem={handleRemoveItem}
             onPhoneChange={handlePhoneChange}
             onWalkinNameChange={setWalkinName}
+            onAddNewCustomer={handleAddNewCustomer}
             onDiscountChange={setSaleDiscount}
             onNotesChange={setSaleNotes}
             onSourceChange={setSaleSource}
