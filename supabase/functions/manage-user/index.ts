@@ -43,7 +43,11 @@ Deno.serve(async (req: Request) => {
     } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !requestingUser) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
+      console.error("Auth error:", authError?.message || "No user found");
+      return jsonResponse({
+        error: "Unauthorized",
+        details: authError?.message || "Token validation failed"
+      }, 401);
     }
 
     const { data: adminProfile, error: profileError } = await supabaseAdmin
