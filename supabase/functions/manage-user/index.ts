@@ -102,7 +102,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "update_user") {
-      const { newName, newRole, permissions, branch_id } = body;
+      const { newName, newRole, branch_id, sectionPermissions } = body;
       const updates: Record<string, unknown> = {};
       if (newName) updates.full_name = newName;
       if (
@@ -110,7 +110,6 @@ Deno.serve(async (req: Request) => {
         ["admin", "accountant", "viewer", "observer"].includes(newRole)
       )
         updates.role = newRole;
-      if (permissions !== undefined) updates.permissions = permissions;
       if (branch_id !== undefined) updates.branch_id = branch_id || null;
       updates.updated_at = new Date().toISOString();
 
@@ -121,6 +120,38 @@ Deno.serve(async (req: Request) => {
 
       if (updateError) {
         return jsonResponse({ error: updateError.message }, 400);
+      }
+
+      if (sectionPermissions && typeof sectionPermissions === "object") {
+        for (const [section, perms] of Object.entries(sectionPermissions)) {
+          const p = perms as {
+            view: boolean;
+            create: boolean;
+            edit: boolean;
+            delete: boolean;
+          };
+          const { error: permError } = await supabaseAdmin
+            .from("user_permissions")
+            .upsert(
+              {
+                user_id: userId,
+                section,
+                can_view: p.view ?? false,
+                can_create: p.create ?? false,
+                can_edit: p.edit ?? false,
+                can_delete: p.delete ?? false,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,section" }
+            );
+
+          if (permError) {
+            return jsonResponse(
+              { error: `Permission update failed: ${permError.message}` },
+              400
+            );
+          }
+        }
       }
 
       return jsonResponse({ success: true, message: "User updated" }, 200);

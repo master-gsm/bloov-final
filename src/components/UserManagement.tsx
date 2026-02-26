@@ -173,15 +173,19 @@ export function UserManagement() {
     if (!modalState.user) return;
     const userId = modalState.user.id;
 
+    const permissionsPayload: Record<string, { view: boolean; create: boolean; edit: boolean; delete: boolean }> = {};
+    for (const section of SECTIONS) {
+      permissionsPayload[section] = data.permissions[section];
+    }
+
     await callManageUser({
       action: 'update_user',
       userId,
       newName: data.fullName,
       newRole: data.role,
       branch_id: data.branch_id || null,
+      sectionPermissions: permissionsPayload,
     });
-
-    await savePermissions(userId, data.permissions);
 
     setSuccess(isRTL ? 'تم تحديث بيانات المستخدم بنجاح' : 'User updated successfully');
     setModalState({ type: null });
