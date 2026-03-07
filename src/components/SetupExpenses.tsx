@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload, X, Check } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload, X, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
