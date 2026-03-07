@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabase } from '../../lib/supabase';
-import { Users, ArrowRight, Plus, Calendar, FileText, AlertCircle, X } from 'lucide-react';
+import { Users, ArrowRight, Plus, AlertCircle, X, CheckCircle, AlertTriangle } from 'lucide-react';
 
 interface Partner {
   partner_id: string;
@@ -36,6 +36,14 @@ interface Settlement {
   created_by_name: string;
 }
 
+interface ModalState {
+  show: boolean;
+  type: 'confirm' | 'success' | 'error' | 'warning';
+  title: string;
+  message: string;
+  onConfirm?: () => void;
+}
+
 export default function PartnerSettlements() {
   const { language } = useLanguage();
   const isRTL = language === 'ar';
@@ -56,6 +64,21 @@ export default function PartnerSettlements() {
     notes: ''
   });
 
+  const [modal, setModal] = useState<ModalState>({
+    show: false,
+    type: 'confirm',
+    title: '',
+    message: ''
+  });
+
+  const showModal = (type: ModalState['type'], title: string, message: string, onConfirm?: () => void) => {
+    setModal({ show: true, type, title, message, onConfirm });
+  };
+
+  const hideModal = () => {
+    setModal(prev => ({ ...prev, show: false }));
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -73,10 +96,11 @@ export default function PartnerSettlements() {
       if (partnersError) throw partnersError;
       setPartners(partnersData || []);
 
-      // Fetch settlements history
+      // Fetch settlements history (exclude voided settlements)
       const { data: settlementsData, error: settlementsError } = await supabase
         .from('v_partner_settlements_history')
         .select('*')
+        .neq('status', 'voided')
         .limit(50);
 
       if (settlementsError) throw settlementsError;
@@ -93,12 +117,20 @@ export default function PartnerSettlements() {
     e.preventDefault();
 
     if (!formData.from_partner_id || !formData.to_partner_id || !formData.amount) {
-      alert(isRTL ? 'يرجى تعبئة جميع الحقول المطلوبة' : 'Please fill all required fields');
+      showModal(
+        'warning',
+        isRTL ? 'تنبيه' : 'Warning',
+        isRTL ? 'يرجى تعبئة جميع الحقول المطلوبة' : 'Please fill all required fields'
+      );
       return;
     }
 
     if (formData.from_partner_id === formData.to_partner_id) {
-      alert(isRTL ? 'لا يمكن التسوية من وإلى نفس الشريك' : 'Cannot settle from and to same partner');
+      showModal(
+        'warning',
+        isRTL ? 'تنبيه' : 'Warning',
+        isRTL ? 'لا يمكن التسوية من وإلى نفس الشريك' : 'Cannot settle from and to same partner'
+      );
       return;
     }
 
@@ -118,13 +150,21 @@ export default function PartnerSettlements() {
 
       if (error) throw error;
 
-      alert(isRTL ? 'تم إضافة التسوية بنجاح' : 'Settlement added successfully');
       setShowSettlementModal(false);
       resetForm();
       fetchData();
+      showModal(
+        'success',
+        isRTL ? 'تمت العملية بنجاح' : 'Success',
+        isRTL ? 'تمت إضافة التسوية بنجاح' : 'Settlement added successfully'
+      );
     } catch (error: any) {
       console.error('Error adding settlement:', error);
-      alert(error.message || (isRTL ? 'حدث خطأ أثناء إضافة التسوية' : 'Error adding settlement'));
+      showModal(
+        'error',
+        isRTL ? 'خطأ' : 'Error',
+        error.message || (isRTL ? 'حدث خطأ أثناء إضافة التسوية' : 'Error adding settlement')
+      );
     }
   };
 
@@ -141,24 +181,36 @@ export default function PartnerSettlements() {
   };
 
   const handleVoidSettlement = async (settlementId: string) => {
-    if (!confirm(isRTL ? 'هل أنت متأكد من إلغاء هذه التسوية؟' : 'Are you sure you want to void this settlement?')) {
-      return;
-    }
+    showModal(
+      'confirm',
+      isRTL ? 'تأكيد الإلغاء' : 'Confirm Void',
+      isRTL ? 'هل أنت متأكد من إلغاء هذه التسوية؟' : 'Are you sure you want to void this settlement?',
+      async () => {
+        hideModal();
+        try {
+          const { error } = await supabase
+            .from('partner_settlements')
+            .update({ status: 'voided' })
+            .eq('id', settlementId);
 
-    try {
-      const { error } = await supabase
-        .from('partner_settlements')
-        .update({ status: 'voided' })
-        .eq('id', settlementId);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      alert(isRTL ? 'تم إلغاء التسوية بنجاح' : 'Settlement voided successfully');
-      fetchData();
-    } catch (error: any) {
-      console.error('Error voiding settlement:', error);
-      alert(error.message || (isRTL ? 'حدث خطأ أثناء إلغاء التسوية' : 'Error voiding settlement'));
-    }
+          fetchData();
+          showModal(
+            'success',
+            isRTL ? 'تمت العملية بنجاح' : 'Success',
+            isRTL ? 'تم إلغاء التسوية بنجاح' : 'Settlement voided successfully'
+          );
+        } catch (error: any) {
+          console.error('Error voiding settlement:', error);
+          showModal(
+            'error',
+            isRTL ? 'خطأ' : 'Error',
+            error.message || (isRTL ? 'حدث خطأ أثناء إلغاء التسوية' : 'Error voiding settlement')
+          );
+        }
+      }
+    );
   };
 
   const handleFullSettlement = (fromPartner: Partner, toPartner: Partner) => {
@@ -420,7 +472,7 @@ export default function PartnerSettlements() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {settlements.map((settlement) => (
-                <tr key={settlement.id} className={`hover:bg-gray-50 ${settlement.status === 'voided' ? 'opacity-50 bg-red-50' : ''}`}>
+                <tr key={settlement.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {new Date(settlement.settlement_date).toLocaleDateString('ar-SA')}
                   </td>
@@ -440,20 +492,14 @@ export default function PartnerSettlements() {
                     {settlement.created_by_name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {settlement.status === 'voided' ? (
-                      <span className="text-red-600 font-medium">
-                        {isRTL ? 'ملغاة' : 'Voided'}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleVoidSettlement(settlement.id)}
-                        className="text-red-600 hover:text-red-800 flex items-center gap-1"
-                        title={isRTL ? 'إلغاء التسوية' : 'Void Settlement'}
-                      >
-                        <X className="h-4 w-4" />
-                        {isRTL ? 'إلغاء' : 'Void'}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleVoidSettlement(settlement.id)}
+                      className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                      title={isRTL ? 'إلغاء التسوية' : 'Void Settlement'}
+                    >
+                      <X className="h-4 w-4" />
+                      {isRTL ? 'إلغاء' : 'Void'}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -597,6 +643,80 @@ export default function PartnerSettlements() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Modal */}
+      {modal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className={`p-6 ${
+              modal.type === 'success' ? 'bg-green-50' :
+              modal.type === 'error' ? 'bg-red-50' :
+              modal.type === 'warning' ? 'bg-amber-50' :
+              'bg-blue-50'
+            }`}>
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-full ${
+                  modal.type === 'success' ? 'bg-green-100' :
+                  modal.type === 'error' ? 'bg-red-100' :
+                  modal.type === 'warning' ? 'bg-amber-100' :
+                  'bg-blue-100'
+                }`}>
+                  {modal.type === 'success' && <CheckCircle className="h-6 w-6 text-green-600" />}
+                  {modal.type === 'error' && <X className="h-6 w-6 text-red-600" />}
+                  {modal.type === 'warning' && <AlertTriangle className="h-6 w-6 text-amber-600" />}
+                  {modal.type === 'confirm' && <AlertTriangle className="h-6 w-6 text-blue-600" />}
+                </div>
+                <div>
+                  <h3 className={`text-lg font-bold ${
+                    modal.type === 'success' ? 'text-green-800' :
+                    modal.type === 'error' ? 'text-red-800' :
+                    modal.type === 'warning' ? 'text-amber-800' :
+                    'text-blue-800'
+                  }`}>
+                    {modal.title}
+                  </h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <p className="text-gray-700 text-base leading-relaxed">
+                {modal.message}
+              </p>
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3">
+              {modal.type === 'confirm' ? (
+                <>
+                  <button
+                    onClick={() => modal.onConfirm?.()}
+                    className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors"
+                  >
+                    {isRTL ? 'نعم، إلغاء' : 'Yes, Void'}
+                  </button>
+                  <button
+                    onClick={hideModal}
+                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                  >
+                    {isRTL ? 'تراجع' : 'Cancel'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={hideModal}
+                  className={`w-full px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                    modal.type === 'success' ? 'bg-green-600 hover:bg-green-700 text-white' :
+                    modal.type === 'error' ? 'bg-red-600 hover:bg-red-700 text-white' :
+                    'bg-amber-600 hover:bg-amber-700 text-white'
+                  }`}
+                >
+                  {isRTL ? 'حسناً' : 'OK'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
