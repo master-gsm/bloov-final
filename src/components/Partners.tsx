@@ -324,14 +324,21 @@ export function Partners() {
     setSubmitting(true);
 
     try {
-      for (const id of ids) {
-        const { error: updateError } = await supabase
-          .from('setup_expenses')
-          .update({ amount })
-          .eq('id', id);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error(isRTL ? 'الجلسة منتهية' : 'Session expired');
 
-        if (updateError) throw updateError;
-      }
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-expense-amount`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids, amount }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Update failed');
 
       setSelectedExpenseIds(new Set());
       setShowBulkAmountEdit(false);

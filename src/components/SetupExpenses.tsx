@@ -318,17 +318,21 @@ export default function SetupExpenses() {
 
   const executeBulkUpdate = async (ids: string[], newAmount: number) => {
     try {
-      for (const id of ids) {
-        const { error } = await supabase
-          .from('setup_expenses')
-          .update({ amount: newAmount })
-          .eq('id', id);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error(language === 'ar' ? 'الجلسة منتهية' : 'Session expired');
 
-        if (error) {
-          console.error('Error updating expense:', id, error);
-          throw error;
-        }
-      }
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-expense-amount`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids, amount: newAmount }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Update failed');
 
       setSelectedIds(new Set());
       setShowBulkEdit(false);
