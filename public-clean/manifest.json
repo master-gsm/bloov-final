@@ -1,0 +1,36 @@
+{
+  "name": "نظام بلوف المحاسبي",
+  "short_name": "بلوف",
+  "description": "نظام محاسبة بلوف - Comprehensive accounting system for small businesses",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#F6F3FB",
+  "theme_color": "#F6F3FB",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/image.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/image.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"],
+  "lang": "ar",
+  "dir": "rtl",
+  "prefer_related_applications": false
+}

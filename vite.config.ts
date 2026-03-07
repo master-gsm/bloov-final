@@ -14,6 +14,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  publicDir: 'public-clean',
   build: {
     target: ['es2020', 'safari13', 'chrome64', 'firefox67'],
     sourcemap: false,

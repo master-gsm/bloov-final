@@ -75,6 +75,13 @@ export function Partners() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ message, type });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  }, []);
   const [activeTab, setActiveTab] = useState<'overview' | 'settlements'>('overview');
   const [previewAttachment, setPreviewAttachment] = useState<{ url: string; type: string; name?: string; filePath?: string } | null>(null);
 
@@ -306,7 +313,7 @@ export function Partners() {
 
     const newAmount = parseFloat(bulkAmountValue);
     if (isNaN(newAmount) || newAmount < 0) {
-      alert(isRTL ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount');
+      showToast(isRTL ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount', 'error');
       return;
     }
 
@@ -345,7 +352,7 @@ export function Partners() {
       setShowBulkAmountEdit(false);
       setBulkAmountValue('');
       await loadData();
-      alert(isRTL ? 'تم تحديث المبالغ بنجاح' : 'Amounts updated successfully');
+      showToast(isRTL ? 'تم تحديث المبالغ بنجاح' : 'Amounts updated successfully', 'success');
     } catch (err: any) {
       setError(err.message || (isRTL ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'));
     } finally {
@@ -410,7 +417,7 @@ export function Partners() {
 
         setImportPreview(validated);
       } catch (err) {
-        alert(isRTL ? 'خطأ في قراءة الملف' : 'Error reading file');
+        showToast(isRTL ? 'خطأ في قراءة الملف' : 'Error reading file', 'error');
       }
     };
     reader.readAsBinaryString(file);
@@ -549,7 +556,7 @@ export function Partners() {
       setDeactivateConfirm(null);
       await loadData();
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message, 'error');
     }
   };
 
@@ -656,7 +663,7 @@ export function Partners() {
       if (!result?.success) throw new Error(result?.message || 'Failed');
       setDeleteExpenseConfirm(null);
       await loadData();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) { showToast(err.message, 'error'); }
   };
 
   const handleUpdateExpenseDate = async (id: string) => {
@@ -670,7 +677,7 @@ export function Partners() {
       setEditingExpenseDateId(null);
       setEditingExpenseDateVal('');
       await loadData();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) { showToast(err.message, 'error'); }
   };
 
   const handleSettlementSubmit = async (e: React.FormEvent) => {
@@ -714,7 +721,7 @@ export function Partners() {
       if (err) throw err;
       setVoidSettlementConfirm(null);
       await loadData();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) { showToast(err.message, 'error'); }
   };
 
   const handleViewAttachment = (path: string) => {
@@ -768,6 +775,21 @@ export function Partners() {
 
   return (
     <div className="p-6 space-y-5">
+      {toast && (
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-lg border backdrop-blur-sm transition-all duration-300 animate-[slideDown_0.3s_ease-out] ${
+          toast.type === 'success' ? 'bg-emerald-50/95 border-emerald-200 text-emerald-800' :
+          toast.type === 'error' ? 'bg-red-50/95 border-red-200 text-red-800' :
+          'bg-blue-50/95 border-blue-200 text-blue-800'
+        }`}>
+          {toast.type === 'success' ? <Check className="w-5 h-5 text-emerald-500 shrink-0" /> :
+           toast.type === 'error' ? <AlertCircle className="w-5 h-5 text-red-500 shrink-0" /> :
+           <AlertCircle className="w-5 h-5 text-blue-500 shrink-0" />}
+          <span className="text-sm font-medium">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="p-0.5 rounded-full hover:bg-black/5 transition shrink-0">
+            <X className="w-4 h-4 opacity-60" />
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
