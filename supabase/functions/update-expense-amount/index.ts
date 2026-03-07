@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
 
     if (authError || !user) {
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ error: "Unauthorized", details: authError?.message }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -52,7 +52,7 @@ Deno.serve(async (req: Request) => {
 
     if (userError || !userData) {
       return new Response(
-        JSON.stringify({ error: "User not found" }),
+        JSON.stringify({ error: "User not found", details: userError?.message }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const errors: string[] = [];
+    const results: { id: string; success: boolean; error?: string }[] = [];
 
     for (const id of ids) {
       const { error: rpcError } = await adminClient.rpc(
@@ -90,19 +90,40 @@ Deno.serve(async (req: Request) => {
       );
 
       if (rpcError) {
-        errors.push(`${id}: ${rpcError.message}`);
+        results.push({ id, success: false, error: rpcError.message });
+      } else {
+        const { data: verify } = await adminClient
+          .from("setup_expenses")
+          .select("amount")
+          .eq("id", id)
+          .maybeSingle();
+
+        results.push({
+          id,
+          success: verify?.amount !== undefined && Number(verify.amount) === amount,
+          error: verify?.amount !== undefined && Number(verify.amount) !== amount
+            ? `Amount is ${verify.amount}, expected ${amount}`
+            : undefined,
+        });
       }
     }
 
-    if (errors.length > 0) {
+    const allSuccess = results.every((r) => r.success);
+    const errors = results.filter((r) => !r.success);
+
+    if (!allSuccess) {
       return new Response(
-        JSON.stringify({ error: errors.join("; "), partial: errors.length < ids.length }),
+        JSON.stringify({
+          error: "Some updates failed",
+          details: errors,
+          results,
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
-      JSON.stringify({ success: true, updated: ids.length }),
+      JSON.stringify({ success: true, updated: ids.length, results }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
