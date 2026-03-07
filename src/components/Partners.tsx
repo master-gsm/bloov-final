@@ -91,6 +91,10 @@ export function Partners() {
   const [editingExpenseDateVal, setEditingExpenseDateVal] = useState('');
   const [voidSettlementConfirm, setVoidSettlementConfirm] = useState<string | null>(null);
 
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
+  const [showBulkAmountEdit, setShowBulkAmountEdit] = useState(false);
+  const [bulkAmountValue, setBulkAmountValue] = useState('');
+
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importSubmitting, setImportSubmitting] = useState(false);
@@ -273,6 +277,63 @@ export function Partners() {
 
   // Selected partner for detailed view
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+
+  const handleSelectAllExpenses = (checked: boolean) => {
+    if (checked) {
+      setSelectedExpenseIds(new Set(expenses.map(e => e.id)));
+    } else {
+      setSelectedExpenseIds(new Set());
+    }
+  };
+
+  const handleSelectOneExpense = (id: string, checked: boolean) => {
+    const newSet = new Set(selectedExpenseIds);
+    if (checked) {
+      newSet.add(id);
+    } else {
+      newSet.delete(id);
+    }
+    setSelectedExpenseIds(newSet);
+  };
+
+  const handleBulkExpenseAmountUpdate = async () => {
+    if (!bulkAmountValue || selectedExpenseIds.size === 0) return;
+
+    const newAmount = parseFloat(bulkAmountValue);
+    if (isNaN(newAmount) || newAmount < 0) {
+      alert(isRTL ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount');
+      return;
+    }
+
+    if (!confirm(isRTL
+      ? `هل أنت متأكد من تحديث المبلغ لـ ${selectedExpenseIds.size} مصروف؟`
+      : `Update amount for ${selectedExpenseIds.size} expenses?`)) {
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('setup_expenses')
+        .update({ amount: newAmount })
+        .in('id', Array.from(selectedExpenseIds));
+
+      if (updateError) throw updateError;
+
+      setSelectedExpenseIds(new Set());
+      setShowBulkAmountEdit(false);
+      setBulkAmountValue('');
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || (isRTL ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const selectedExpensesTotal = expenses
+    .filter(e => selectedExpenseIds.has(e.id))
+    .reduce((sum, e) => sum + Number(e.amount), 0);
 
   const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1157,10 +1218,77 @@ export function Partners() {
               );
             })}
           </div>
+          {/* Bulk Edit Toolbar */}
+          {canEdit && selectedExpenseIds.size > 0 && (
+            <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-teal-800 font-medium text-sm">
+                  {isRTL ? `تم تحديد ${selectedExpenseIds.size} مصروف` : `${selectedExpenseIds.size} selected`}
+                </span>
+                <span className="text-teal-600 text-xs">
+                  ({isRTL ? 'المجموع:' : 'Total:'} {fmt(selectedExpensesTotal)} {isRTL ? 'ر.س' : 'SAR'})
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {showBulkAmountEdit ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={bulkAmountValue}
+                      onChange={(e) => setBulkAmountValue(e.target.value)}
+                      placeholder={isRTL ? 'المبلغ الجديد' : 'New amount'}
+                      className="px-2 py-1 border border-teal-300 rounded w-32 text-sm"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleBulkExpenseAmountUpdate}
+                      disabled={!bulkAmountValue || submitting}
+                      className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => { setShowBulkAmountEdit(false); setBulkAmountValue(''); }}
+                      className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowBulkAmountEdit(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded hover:bg-teal-700 text-sm"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    {isRTL ? 'تعديل المبلغ' : 'Edit Amount'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedExpenseIds(new Set())}
+                  className="px-2 py-1.5 text-gray-500 hover:text-gray-700 text-sm"
+                >
+                  {isRTL ? 'إلغاء' : 'Clear'}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  {canEdit && (
+                    <th className="px-3 py-2.5 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={expenses.length > 0 && selectedExpenseIds.size === expenses.length}
+                        onChange={(e) => handleSelectAllExpenses(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                      />
+                    </th>
+                  )}
                   <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'التاريخ' : 'Date'}</th>
                   <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'الشريك' : 'Partner'}</th>
                   <th className="px-4 py-2.5 text-left text-xs text-gray-500">{isRTL ? 'النوع' : 'Type'}</th>
@@ -1171,11 +1299,21 @@ export function Partners() {
               </thead>
               <tbody>
                 {expenses.length === 0 ? (
-                  <tr><td colSpan={6} className="py-8 text-center text-gray-400 text-sm">{isRTL ? 'لا توجد مصاريف' : 'No expenses'}</td></tr>
+                  <tr><td colSpan={canEdit ? 7 : 6} className="py-8 text-center text-gray-400 text-sm">{isRTL ? 'لا توجد مصاريف' : 'No expenses'}</td></tr>
                 ) : expenses.map(expense => {
                   const p = partners.find(pp => pp.id === expense.partner_id);
                   return (
-                    <tr key={expense.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${!expense.expense_date ? 'bg-amber-50/30' : ''}`}>
+                    <tr key={expense.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${selectedExpenseIds.has(expense.id) ? 'bg-teal-50/50' : ''} ${!expense.expense_date ? 'bg-amber-50/30' : ''}`}>
+                      {canEdit && (
+                        <td className="px-3 py-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedExpenseIds.has(expense.id)}
+                            onChange={(e) => handleSelectOneExpense(expense.id, e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-2.5 text-xs">
                         {editingExpenseDateId === expense.id ? (
                           <div className="flex items-center gap-1">
