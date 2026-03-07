@@ -299,39 +299,47 @@ export default function SetupExpenses() {
       return;
     }
 
+    const idsToUpdate = Array.from(selectedIds);
+    const count = idsToUpdate.length;
+
     setConfirmModal({
       show: true,
       title: language === 'ar' ? 'تأكيد التحديث' : 'Confirm Update',
       message: language === 'ar'
-        ? `هل أنت متأكد من تحديث المبلغ إلى ${newAmount.toLocaleString('ar-SA')} ر.س لـ ${selectedIds.size} مصروف؟`
-        : `Are you sure you want to update the amount to ${newAmount.toLocaleString('en-US')} SAR for ${selectedIds.size} expense(s)?`,
+        ? `هل أنت متأكد من تحديث المبلغ إلى ${newAmount.toLocaleString('ar-SA')} ر.س لـ ${count} مصروف؟`
+        : `Are you sure you want to update the amount to ${newAmount.toLocaleString('en-US')} SAR for ${count} expense(s)?`,
       type: 'warning',
-      onConfirm: async () => {
+      onConfirm: () => {
         setConfirmModal(null);
-        try {
-          const { error } = await supabase
-            .from('setup_expenses')
-            .update({ amount: newAmount })
-            .in('id', Array.from(selectedIds));
-
-          if (error) throw error;
-
-          setSelectedIds(new Set());
-          setShowBulkEdit(false);
-          setBulkAmount('');
-          loadExpenses();
-        } catch (error: any) {
-          console.error('Error updating amounts:', error);
-          setConfirmModal({
-            show: true,
-            title: language === 'ar' ? 'خطأ' : 'Error',
-            message: error.message || (language === 'ar' ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'),
-            onConfirm: () => setConfirmModal(null),
-            type: 'danger'
-          });
-        }
+        executeBulkUpdate(idsToUpdate, newAmount);
       }
     });
+  };
+
+  const executeBulkUpdate = async (ids: string[], newAmount: number) => {
+    try {
+      for (const id of ids) {
+        const { error } = await supabase
+          .from('setup_expenses')
+          .update({ amount: newAmount })
+          .eq('id', id);
+
+        if (error) {
+          console.error('Error updating expense:', id, error);
+          throw error;
+        }
+      }
+
+      setSelectedIds(new Set());
+      setShowBulkEdit(false);
+      setBulkAmount('');
+      await loadExpenses();
+
+      alert(language === 'ar' ? 'تم تحديث المبالغ بنجاح' : 'Amounts updated successfully');
+    } catch (error: any) {
+      console.error('Error updating amounts:', error);
+      alert(error.message || (language === 'ar' ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'));
+    }
   };
 
   const selectedTotal = expenses
