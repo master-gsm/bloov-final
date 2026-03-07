@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Users, ArrowRight, Plus, AlertCircle, X, CheckCircle, AlertTriangle, Edit2, Calendar, DollarSign } from 'lucide-react';
+import { Users, ArrowRight, Plus, AlertCircle, X, CheckCircle, AlertTriangle, CreditCard as Edit2, Calendar, DollarSign } from 'lucide-react';
 
 interface Partner {
   partner_id: string;
