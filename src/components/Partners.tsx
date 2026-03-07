@@ -868,7 +868,13 @@ export function Partners() {
                           <Landmark className="w-3 h-3 text-amber-500" />
                           <span className="text-xs text-gray-400">{isRTL ? 'المدفوع فعلياً' : 'Actually Paid'}</span>
                         </div>
-                        <p className="text-sm font-bold text-gray-900">{fmt(Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0))}</p>
+                        {(() => {
+                          const baseCapital = Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0);
+                          const settPaid = settlementTotals[partner.id]?.paid || 0;
+                          const settReceived = settlementTotals[partner.id]?.received || 0;
+                          const actualPaid = baseCapital + settReceived - settPaid;
+                          return <p className="text-sm font-bold text-gray-900">{fmt(actualPaid)}</p>;
+                        })()}
                       </div>
                       <div className="bg-gray-50 rounded-lg p-2.5">
                         <div className="flex items-center gap-1 mb-0.5">
@@ -876,14 +882,13 @@ export function Partners() {
                           <span className="text-xs text-gray-400">{isRTL ? 'الحساب الجاري' : 'Current Acc.'}</span>
                         </div>
                         {(() => {
-                          const cap = Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0);
+                          const baseCapital = Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0);
                           const settPaid = settlementTotals[partner.id]?.paid || 0;
                           const settReceived = settlementTotals[partner.id]?.received || 0;
-                          const netSettlements = settReceived - settPaid;
-                          const total = cap + netSettlements;
+                          const actualPaid = baseCapital + settReceived - settPaid;
                           return (
-                            <p className={`text-sm font-bold ${total >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              {total >= 0 ? '+' : ''}{fmt(total)}
+                            <p className={`text-sm font-bold ${actualPaid >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {actualPaid >= 0 ? '+' : ''}{fmt(actualPaid)}
                             </p>
                           );
                         })()}
