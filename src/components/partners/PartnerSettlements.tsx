@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Users, ArrowRight, Plus, AlertCircle, X, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Users, ArrowRight, Plus, AlertCircle, X, CheckCircle, AlertTriangle, Edit2, Calendar, DollarSign } from 'lucide-react';
 
 interface Partner {
   partner_id: string;
@@ -44,9 +45,18 @@ interface ModalState {
   onConfirm?: () => void;
 }
 
+interface EditModalState {
+  show: boolean;
+  type: 'date' | 'amount';
+  settlementIds: string[];
+  value: string;
+}
+
 export default function PartnerSettlements() {
   const { language } = useLanguage();
+  const { can, user } = useAuth();
   const isRTL = language === 'ar';
+  const canEdit = can('partners', 'edit');
 
   const [partners, setPartners] = useState<Partner[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
@@ -71,12 +81,119 @@ export default function PartnerSettlements() {
     message: ''
   });
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [editModal, setEditModal] = useState<EditModalState>({
+    show: false,
+    type: 'date',
+    settlementIds: [],
+    value: ''
+  });
+
   const showModal = (type: ModalState['type'], title: string, message: string, onConfirm?: () => void) => {
     setModal({ show: true, type, title, message, onConfirm });
   };
 
   const hideModal = () => {
     setModal(prev => ({ ...prev, show: false }));
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === settlements.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(settlements.map(s => s.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const openEditModal = (type: 'date' | 'amount', ids?: string[]) => {
+    const targetIds = ids || Array.from(selectedIds);
+    if (targetIds.length === 0) {
+      showModal('warning', isRTL ? 'تنبيه' : 'Warning', isRTL ? 'يرجى تحديد تسوية واحدة على الأقل' : 'Please select at least one settlement');
+      return;
+    }
+
+    let defaultValue = '';
+    if (targetIds.length === 1) {
+      const settlement = settlements.find(s => s.id === targetIds[0]);
+      if (settlement) {
+        defaultValue = type === 'date' ? settlement.settlement_date : settlement.amount.toString();
+      }
+    } else {
+      defaultValue = type === 'date' ? new Date().toISOString().split('T')[0] : '';
+    }
+
+    setEditModal({
+      show: true,
+      type,
+      settlementIds: targetIds,
+      value: defaultValue
+    });
+  };
+
+  const handleBulkEdit = async () => {
+    if (!editModal.value) {
+      showModal('warning', isRTL ? 'تنبيه' : 'Warning', isRTL ? 'يرجى إدخال القيمة' : 'Please enter a value');
+      return;
+    }
+
+    const updateData = editModal.type === 'date'
+      ? { settlement_date: editModal.value }
+      : { amount: parseFloat(editModal.value) };
+
+    try {
+      for (const id of editModal.settlementIds) {
+        const settlement = settlements.find(s => s.id === id);
+        const oldValue = editModal.type === 'date' ? settlement?.settlement_date : settlement?.amount;
+
+        const { error } = await supabase
+          .from('partner_settlements')
+          .update(updateData)
+          .eq('id', id);
+
+        if (error) throw error;
+
+        await supabase.from('audit_logs').insert({
+          table_name: 'partner_settlements',
+          record_id: id,
+          action: 'update',
+          old_values: { [editModal.type === 'date' ? 'settlement_date' : 'amount']: oldValue },
+          new_values: updateData,
+          user_id: user?.id,
+          metadata: {
+            edit_type: editModal.type,
+            bulk_edit: editModal.settlementIds.length > 1
+          }
+        });
+      }
+
+      setEditModal({ show: false, type: 'date', settlementIds: [], value: '' });
+      setSelectedIds(new Set());
+      fetchData();
+      showModal(
+        'success',
+        isRTL ? 'تمت العملية بنجاح' : 'Success',
+        isRTL
+          ? `تم تعديل ${editModal.settlementIds.length} تسوية بنجاح`
+          : `Successfully updated ${editModal.settlementIds.length} settlement(s)`
+      );
+    } catch (error: any) {
+      console.error('Error updating settlements:', error);
+      showModal(
+        'error',
+        isRTL ? 'خطأ' : 'Error',
+        error.message || (isRTL ? 'حدث خطأ أثناء التعديل' : 'Error updating settlements')
+      );
+    }
   };
 
   useEffect(() => {
@@ -426,27 +543,69 @@ export default function PartnerSettlements() {
 
       {/* Settlements History */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {isRTL ? 'سجل التسويات' : 'Settlement History'}
-          </h3>
-          <button
-            onClick={() => {
-              resetForm();
-              setSettlementType('partial');
-              setShowSettlementModal(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="h-4 w-4" />
-            {isRTL ? 'تسوية جديدة' : 'New Settlement'}
-          </button>
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {isRTL ? 'سجل التسويات' : 'Settlement History'}
+            </h3>
+            <button
+              onClick={() => {
+                resetForm();
+                setSettlementType('partial');
+                setShowSettlementModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              {isRTL ? 'تسوية جديدة' : 'New Settlement'}
+            </button>
+          </div>
+
+          {canEdit && selectedIds.size > 0 && (
+            <div className="mt-4 flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+              <span className="text-sm text-blue-800 font-medium">
+                {isRTL ? `تم تحديد ${selectedIds.size} تسوية` : `${selectedIds.size} selected`}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => openEditModal('date')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 text-sm font-medium"
+                >
+                  <Calendar className="h-4 w-4" />
+                  {isRTL ? 'تعديل التاريخ' : 'Edit Date'}
+                </button>
+                <button
+                  onClick={() => openEditModal('amount')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 text-sm font-medium"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  {isRTL ? 'تعديل المبلغ' : 'Edit Amount'}
+                </button>
+              </div>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                {isRTL ? 'إلغاء التحديد' : 'Clear selection'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                {canEdit && (
+                  <th className="px-4 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={settlements.length > 0 && selectedIds.size === settlements.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                   {isRTL ? 'التاريخ' : 'Date'}
                 </th>
@@ -466,13 +625,23 @@ export default function PartnerSettlements() {
                   {isRTL ? 'بواسطة' : 'By'}
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  {isRTL ? 'إجراء' : 'Action'}
+                  {isRTL ? 'إجراءات' : 'Actions'}
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {settlements.map((settlement) => (
-                <tr key={settlement.id} className="hover:bg-gray-50">
+                <tr key={settlement.id} className={`hover:bg-gray-50 ${selectedIds.has(settlement.id) ? 'bg-blue-50' : ''}`}>
+                  {canEdit && (
+                    <td className="px-4 py-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(settlement.id)}
+                        onChange={() => toggleSelect(settlement.id)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {new Date(settlement.settlement_date).toLocaleDateString('ar-SA')}
                   </td>
@@ -492,14 +661,25 @@ export default function PartnerSettlements() {
                     {settlement.created_by_name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => handleVoidSettlement(settlement.id)}
-                      className="text-red-600 hover:text-red-800 flex items-center gap-1"
-                      title={isRTL ? 'إلغاء التسوية' : 'Void Settlement'}
-                    >
-                      <X className="h-4 w-4" />
-                      {isRTL ? 'إلغاء' : 'Void'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {canEdit && (
+                        <button
+                          onClick={() => openEditModal('date', [settlement.id])}
+                          className="text-blue-600 hover:text-blue-800 p-1"
+                          title={isRTL ? 'تعديل' : 'Edit'}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleVoidSettlement(settlement.id)}
+                        className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                        title={isRTL ? 'إلغاء التسوية' : 'Void Settlement'}
+                      >
+                        <X className="h-4 w-4" />
+                        {isRTL ? 'إلغاء' : 'Void'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -716,6 +896,81 @@ export default function PartnerSettlements() {
                   {isRTL ? 'حسناً' : 'OK'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editModal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6 border-b border-gray-200 bg-blue-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-full">
+                  {editModal.type === 'date' ? (
+                    <Calendar className="h-5 w-5 text-blue-600" />
+                  ) : (
+                    <DollarSign className="h-5 w-5 text-blue-600" />
+                  )}
+                </div>
+                <h3 className="text-lg font-bold text-blue-800">
+                  {editModal.type === 'date'
+                    ? (isRTL ? 'تعديل التاريخ' : 'Edit Date')
+                    : (isRTL ? 'تعديل المبلغ' : 'Edit Amount')}
+                </h3>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                {editModal.settlementIds.length === 1
+                  ? (isRTL ? 'تعديل تسوية واحدة' : 'Editing 1 settlement')
+                  : (isRTL ? `تعديل ${editModal.settlementIds.length} تسويات` : `Editing ${editModal.settlementIds.length} settlements`)}
+              </p>
+
+              {editModal.type === 'date' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {isRTL ? 'التاريخ الجديد' : 'New Date'}
+                  </label>
+                  <input
+                    type="date"
+                    value={editModal.value}
+                    onChange={(e) => setEditModal({ ...editModal, value: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-lg"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {isRTL ? 'المبلغ الجديد' : 'New Amount'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editModal.value}
+                    onChange={(e) => setEditModal({ ...editModal, value: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-lg"
+                    placeholder={isRTL ? 'أدخل المبلغ' : 'Enter amount'}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={handleBulkEdit}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+              >
+                {isRTL ? 'حفظ التعديلات' : 'Save Changes'}
+              </button>
+              <button
+                onClick={() => setEditModal({ show: false, type: 'date', settlementIds: [], value: '' })}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+              >
+                {isRTL ? 'إلغاء' : 'Cancel'}
+              </button>
             </div>
           </div>
         </div>
