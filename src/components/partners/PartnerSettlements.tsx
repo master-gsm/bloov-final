@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Users, ArrowRight, Plus, AlertCircle, X, CheckCircle, AlertTriangle, CreditCard as Edit2, Calendar, DollarSign } from 'lucide-react';
+import { Users, ArrowRight, Plus, AlertCircle, X, CheckCircle, AlertTriangle, Pencil, Calendar, DollarSign } from 'lucide-react';
 
 interface Partner {
   partner_id: string;
@@ -54,9 +54,9 @@ interface EditModalState {
 
 export default function PartnerSettlements() {
   const { language } = useLanguage();
-  const { can, user } = useAuth();
+  const { can, user, isAdmin } = useAuth();
   const isRTL = language === 'ar';
-  const canEdit = can('partners', 'edit');
+  const canEdit = isAdmin || can('partners', 'edit');
 
   const [partners, setPartners] = useState<Partner[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
@@ -668,7 +668,7 @@ export default function PartnerSettlements() {
                           className="text-blue-600 hover:text-blue-800 p-1"
                           title={isRTL ? 'تعديل' : 'Edit'}
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Pencil className="h-4 w-4" />
                         </button>
                       )}
                       <button
