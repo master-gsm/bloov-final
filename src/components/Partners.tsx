@@ -871,8 +871,7 @@ export function Partners() {
                         {(() => {
                           const baseCapital = Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0);
                           const settPaid = settlementTotals[partner.id]?.paid || 0;
-                          const settReceived = settlementTotals[partner.id]?.received || 0;
-                          const actualPaid = baseCapital + settReceived - settPaid;
+                          const actualPaid = baseCapital + settPaid;
                           return <p className="text-sm font-bold text-gray-900">{fmt(actualPaid)}</p>;
                         })()}
                       </div>
@@ -885,14 +884,13 @@ export function Partners() {
                           const baseCapital = Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0);
                           const settPaid = settlementTotals[partner.id]?.paid || 0;
                           const settReceived = settlementTotals[partner.id]?.received || 0;
-                          const actualPaid = baseCapital + settReceived - settPaid;
                           const totalWithdrawals = withdrawals
                             .filter(w => w.partner_id === partner.id)
                             .reduce((sum, w) => sum + Number(w.amount), 0);
                           const totalDistributions = distributions
                             .filter(d => d.partner_id === partner.id)
                             .reduce((sum, d) => sum + Number(d.amount), 0);
-                          const currentBalance = actualPaid - totalWithdrawals + totalDistributions;
+                          const currentBalance = baseCapital + settReceived - settPaid - totalWithdrawals + totalDistributions;
                           return (
                             <p className={`text-sm font-bold ${currentBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                               {currentBalance >= 0 ? '+' : ''}{fmt(currentBalance)}
