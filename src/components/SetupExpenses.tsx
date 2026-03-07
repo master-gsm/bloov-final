@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, CreditCard as Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload, X, Check } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload, X, Check, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -67,6 +67,13 @@ export default function SetupExpenses() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [bulkAmount, setBulkAmount] = useState('');
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: 'warning' | 'danger';
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     branch_id: '',
@@ -216,6 +223,7 @@ export default function SetupExpenses() {
       is_amortizable: expense.is_amortizable,
       amortization_months: expense.amortization_months,
       notes: expense.notes || '',
+      partner_id: (expense as any).partner_id || '',
     });
     setShowForm(true);
   };
@@ -276,38 +284,54 @@ export default function SetupExpenses() {
     setSelectedIds(newSet);
   };
 
-  const handleBulkAmountUpdate = async () => {
+  const handleBulkAmountUpdate = () => {
     if (!bulkAmount || selectedIds.size === 0) return;
 
     const newAmount = parseFloat(bulkAmount);
     if (isNaN(newAmount) || newAmount < 0) {
-      alert(language === 'ar' ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount');
+      setConfirmModal({
+        show: true,
+        title: language === 'ar' ? 'خطأ' : 'Error',
+        message: language === 'ar' ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount',
+        onConfirm: () => setConfirmModal(null),
+        type: 'warning'
+      });
       return;
     }
 
-    if (!confirm(language === 'ar'
-      ? `هل أنت متأكد من تحديث المبلغ لـ ${selectedIds.size} مصروف؟`
-      : `Are you sure you want to update amount for ${selectedIds.size} expenses?`)) {
-      return;
-    }
+    setConfirmModal({
+      show: true,
+      title: language === 'ar' ? 'تأكيد التحديث' : 'Confirm Update',
+      message: language === 'ar'
+        ? `هل أنت متأكد من تحديث المبلغ إلى ${newAmount.toLocaleString('ar-SA')} ر.س لـ ${selectedIds.size} مصروف؟`
+        : `Are you sure you want to update the amount to ${newAmount.toLocaleString('en-US')} SAR for ${selectedIds.size} expense(s)?`,
+      type: 'warning',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          const { error } = await supabase
+            .from('setup_expenses')
+            .update({ amount: newAmount })
+            .in('id', Array.from(selectedIds));
 
-    try {
-      const { error } = await supabase
-        .from('setup_expenses')
-        .update({ amount: newAmount })
-        .in('id', Array.from(selectedIds));
+          if (error) throw error;
 
-      if (error) throw error;
-
-      alert(language === 'ar' ? 'تم تحديث المبالغ بنجاح' : 'Amounts updated successfully');
-      setSelectedIds(new Set());
-      setShowBulkEdit(false);
-      setBulkAmount('');
-      loadExpenses();
-    } catch (error: any) {
-      console.error('Error updating amounts:', error);
-      alert(error.message || (language === 'ar' ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'));
-    }
+          setSelectedIds(new Set());
+          setShowBulkEdit(false);
+          setBulkAmount('');
+          loadExpenses();
+        } catch (error: any) {
+          console.error('Error updating amounts:', error);
+          setConfirmModal({
+            show: true,
+            title: language === 'ar' ? 'خطأ' : 'Error',
+            message: error.message || (language === 'ar' ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'),
+            onConfirm: () => setConfirmModal(null),
+            type: 'danger'
+          });
+        }
+      }
+    });
   };
 
   const selectedTotal = expenses
@@ -790,6 +814,47 @@ export default function SetupExpenses() {
             loadExpenses();
           }}
         />
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal?.show && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className={`px-6 py-4 ${confirmModal.type === 'danger' ? 'bg-red-50' : 'bg-amber-50'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${confirmModal.type === 'danger' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                  <AlertTriangle className={`w-6 h-6 ${confirmModal.type === 'danger' ? 'text-red-600' : 'text-amber-600'}`} />
+                </div>
+                <h3 className={`text-lg font-semibold ${confirmModal.type === 'danger' ? 'text-red-900' : 'text-amber-900'}`}>
+                  {confirmModal.title}
+                </h3>
+              </div>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-gray-700 text-base leading-relaxed">
+                {confirmModal.message}
+              </p>
+            </div>
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 font-medium transition-colors"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className={`px-5 py-2.5 text-white rounded-xl font-medium transition-colors ${
+                  confirmModal.type === 'danger'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                {language === 'ar' ? 'تأكيد' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
