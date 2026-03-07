@@ -886,9 +886,16 @@ export function Partners() {
                           const settPaid = settlementTotals[partner.id]?.paid || 0;
                           const settReceived = settlementTotals[partner.id]?.received || 0;
                           const actualPaid = baseCapital + settReceived - settPaid;
+                          const totalWithdrawals = withdrawals
+                            .filter(w => w.partner_id === partner.id)
+                            .reduce((sum, w) => sum + Number(w.amount), 0);
+                          const totalDistributions = distributions
+                            .filter(d => d.partner_id === partner.id)
+                            .reduce((sum, d) => sum + Number(d.amount), 0);
+                          const currentBalance = actualPaid - totalWithdrawals + totalDistributions;
                           return (
-                            <p className={`text-sm font-bold ${actualPaid >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              {actualPaid >= 0 ? '+' : ''}{fmt(actualPaid)}
+                            <p className={`text-sm font-bold ${currentBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {currentBalance >= 0 ? '+' : ''}{fmt(currentBalance)}
                             </p>
                           );
                         })()}
