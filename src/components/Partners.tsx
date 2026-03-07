@@ -193,6 +193,92 @@ export function Partners() {
     return acc;
   }, {});
 
+  // Calculate settlements totals per partner
+  const settlementTotals = settlements.reduce<Record<string, { paid: number; received: number }>>((acc, s) => {
+    if (s.status === 'active') {
+      if (s.from_partner_id) {
+        if (!acc[s.from_partner_id]) acc[s.from_partner_id] = { paid: 0, received: 0 };
+        acc[s.from_partner_id].paid += Number(s.amount);
+      }
+      if (s.to_partner_id) {
+        if (!acc[s.to_partner_id]) acc[s.to_partner_id] = { paid: 0, received: 0 };
+        acc[s.to_partner_id].received += Number(s.amount);
+      }
+    }
+    return acc;
+  }, {});
+
+  // Get all operations for a specific partner (expenses + settlements)
+  const getPartnerOperations = (partnerId: string) => {
+    const ops: Array<{
+      id: string;
+      type: 'expense' | 'settlement_paid' | 'settlement_received';
+      date: string | null;
+      description: string;
+      descriptionAr: string | null;
+      amount: number;
+      expenseType?: string;
+      otherPartner?: { name: string; name_ar: string };
+      attachment?: string | null;
+    }> = [];
+
+    // Add expenses
+    expenses
+      .filter(e => e.partner_id === partnerId)
+      .forEach(e => {
+        ops.push({
+          id: e.id,
+          type: 'expense',
+          date: e.expense_date,
+          description: e.description,
+          descriptionAr: e.description_ar,
+          amount: Number(e.amount),
+          expenseType: e.expense_type,
+          attachment: e.attachment,
+        });
+      });
+
+    // Add settlements paid (from this partner)
+    settlements
+      .filter(s => s.from_partner_id === partnerId && s.status === 'active')
+      .forEach(s => {
+        ops.push({
+          id: s.id,
+          type: 'settlement_paid',
+          date: s.settlement_date,
+          description: s.description,
+          descriptionAr: s.description_ar,
+          amount: Number(s.amount),
+          otherPartner: s.to_partner,
+        });
+      });
+
+    // Add settlements received (to this partner)
+    settlements
+      .filter(s => s.to_partner_id === partnerId && s.status === 'active')
+      .forEach(s => {
+        ops.push({
+          id: s.id,
+          type: 'settlement_received',
+          date: s.settlement_date,
+          description: s.description,
+          descriptionAr: s.description_ar,
+          amount: Number(s.amount),
+          otherPartner: s.from_partner,
+        });
+      });
+
+    // Sort by date descending
+    return ops.sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      return dateB - dateA;
+    });
+  };
+
+  // Selected partner for detailed view
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+
   const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -785,29 +871,61 @@ export function Partners() {
                       <div className="bg-gray-50 rounded-lg p-2.5">
                         <div className="flex items-center gap-1 mb-0.5">
                           <Landmark className="w-3 h-3 text-amber-500" />
-                          <span className="text-xs text-gray-400">{isRTL ? 'رأس المال' : 'Capital'}</span>
+                          <span className="text-xs text-gray-400">{isRTL ? 'المدفوع فعلياً' : 'Actually Paid'}</span>
                         </div>
-                        <p className="text-sm font-bold text-gray-900">{fmt(Number(account?.capital_contribution ?? partner.capital_contribution))}</p>
+                        <p className="text-sm font-bold text-gray-900">{fmt(Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0))}</p>
                       </div>
-                      {account && (
-                        <div className="bg-gray-50 rounded-lg p-2.5">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <DollarSign className="w-3 h-3 text-emerald-500" />
-                            <span className="text-xs text-gray-400">{isRTL ? 'الحساب الجاري' : 'Current Acc.'}</span>
-                          </div>
-                          {(() => {
-                            const cap = Number(account.capital_contribution);
-                            const bal = Number(account.current_account_balance);
-                            const total = cap + bal;
-                            return (
-                              <p className={`text-sm font-bold ${total >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                {total >= 0 ? '+' : ''}{fmt(total)}
-                              </p>
-                            );
-                          })()}
+                      <div className="bg-gray-50 rounded-lg p-2.5">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <DollarSign className="w-3 h-3 text-emerald-500" />
+                          <span className="text-xs text-gray-400">{isRTL ? 'الحساب الجاري' : 'Current Acc.'}</span>
                         </div>
-                      )}
+                        {(() => {
+                          const cap = Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0);
+                          const settPaid = settlementTotals[partner.id]?.paid || 0;
+                          const settReceived = settlementTotals[partner.id]?.received || 0;
+                          const netSettlements = settReceived - settPaid;
+                          const total = cap + netSettlements;
+                          return (
+                            <p className={`text-sm font-bold ${total >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {total >= 0 ? '+' : ''}{fmt(total)}
+                            </p>
+                          );
+                        })()}
+                      </div>
                     </div>
+
+                    {/* Settlement summary row */}
+                    {(settlementTotals[partner.id]?.paid > 0 || settlementTotals[partner.id]?.received > 0) && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-500">{isRTL ? 'التسويات:' : 'Settlements:'}</span>
+                          <div className="flex items-center gap-3">
+                            {settlementTotals[partner.id]?.paid > 0 && (
+                              <span className="text-red-600">
+                                {isRTL ? 'دفع' : 'Paid'}: {fmt(settlementTotals[partner.id].paid)}
+                              </span>
+                            )}
+                            {settlementTotals[partner.id]?.received > 0 && (
+                              <span className="text-green-600">
+                                {isRTL ? 'استلم' : 'Rcvd'}: {fmt(settlementTotals[partner.id].received)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* View operations button */}
+                    <button
+                      onClick={() => setSelectedPartnerId(selectedPartnerId === partner.id ? null : partner.id)}
+                      className="mt-3 w-full text-xs text-center py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium transition"
+                    >
+                      {selectedPartnerId === partner.id
+                        ? (isRTL ? 'إخفاء العمليات' : 'Hide Operations')
+                        : (isRTL ? 'عرض العمليات' : 'View Operations')
+                      }
+                    </button>
                   </div>
                 </div>
               );
@@ -819,6 +937,108 @@ export function Partners() {
               </div>
             )}
           </div>
+
+          {/* Selected Partner Operations */}
+          {selectedPartnerId && (() => {
+            const partner = partners.find(p => p.id === selectedPartnerId);
+            const operations = getPartnerOperations(selectedPartnerId);
+            if (!partner) return null;
+
+            return (
+              <div className="mt-4 bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${BG_DOTS[partners.indexOf(partner) % BG_DOTS.length]}`} />
+                    <h4 className="font-bold text-gray-900">
+                      {isRTL ? `عمليات ${partner.name_ar}` : `${partner.name}'s Operations`}
+                    </h4>
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                      {operations.length} {isRTL ? 'عملية' : 'ops'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedPartnerId(null)}
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-4 h-4 text-gray-400" />
+                  </button>
+                </div>
+
+                {operations.length === 0 ? (
+                  <div className="p-8 text-center text-gray-400 text-sm">
+                    {isRTL ? 'لا توجد عمليات لهذا الشريك' : 'No operations for this partner'}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">{isRTL ? 'التاريخ' : 'Date'}</th>
+                          <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">{isRTL ? 'النوع' : 'Type'}</th>
+                          <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">{isRTL ? 'الوصف' : 'Description'}</th>
+                          <th className="px-4 py-2 text-right text-xs text-gray-500 font-medium">{isRTL ? 'المبلغ' : 'Amount'}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white">
+                        {operations.map((op, idx) => (
+                          <tr key={`${op.type}-${op.id}`} className={`border-t border-gray-100 ${idx % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
+                            <td className="px-4 py-2.5 text-xs text-gray-600">{fmtDate(op.date, isRTL)}</td>
+                            <td className="px-4 py-2.5">
+                              {op.type === 'expense' ? (
+                                <span className="text-xs px-2 py-0.5 bg-teal-100 text-teal-700 rounded font-medium">
+                                  {isRTL ? EXPENSE_TYPES[op.expenseType as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[op.expenseType as keyof typeof EXPENSE_TYPES]?.en}
+                                </span>
+                              ) : op.type === 'settlement_paid' ? (
+                                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded font-medium">
+                                  {isRTL ? `تسوية إلى ${op.otherPartner?.name_ar || op.otherPartner?.name}` : `Settlement to ${op.otherPartner?.name}`}
+                                </span>
+                              ) : (
+                                <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded font-medium">
+                                  {isRTL ? `تسوية من ${op.otherPartner?.name_ar || op.otherPartner?.name}` : `Settlement from ${op.otherPartner?.name}`}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-sm text-gray-700">
+                              {isRTL ? (op.descriptionAr || op.description) : op.description}
+                            </td>
+                            <td className={`px-4 py-2.5 text-right font-bold text-sm ${
+                              op.type === 'settlement_paid' ? 'text-red-700' :
+                              op.type === 'settlement_received' ? 'text-green-700' :
+                              'text-teal-800'
+                            }`}>
+                              {op.type === 'settlement_paid' ? '-' : op.type === 'settlement_received' ? '+' : ''}
+                              {fmt(op.amount)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-100">
+                        <tr>
+                          <td colSpan={3} className="px-4 py-2 text-right font-bold text-gray-700 text-sm">
+                            {isRTL ? 'صافي الحساب:' : 'Net Balance:'}
+                          </td>
+                          <td className="px-4 py-2 text-right font-bold text-sm">
+                            {(() => {
+                              const total = operations.reduce((sum, op) => {
+                                if (op.type === 'settlement_paid') return sum - op.amount;
+                                if (op.type === 'settlement_received') return sum + op.amount;
+                                return sum + op.amount;
+                              }, 0);
+                              return (
+                                <span className={total >= 0 ? 'text-green-700' : 'text-red-700'}>
+                                  {total >= 0 ? '+' : ''}{fmt(total)}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Withdrawals Mini-Table */}
           {withdrawals.length > 0 && (
