@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload } from 'lucide-react';
+import { Plus, Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload, X, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import ExcelImport from './partners/ExcelImport';
 
 interface SetupExpense {
@@ -60,6 +61,12 @@ export default function SetupExpenses() {
   const [editingExpense, setEditingExpense] = useState<SetupExpense | null>(null);
   const [partnerTotals, setPartnerTotals] = useState<Record<string, number>>({});
   const { language } = useLanguage();
+  const { isAdmin, can } = useAuth();
+  const canEdit = isAdmin || can('partners', 'edit');
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkAmount, setBulkAmount] = useState('');
 
   const [formData, setFormData] = useState({
     branch_id: '',
@@ -250,6 +257,62 @@ export default function SetupExpenses() {
   };
 
   const totalSetupExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(expenses.map(e => e.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    const newSet = new Set(selectedIds);
+    if (checked) {
+      newSet.add(id);
+    } else {
+      newSet.delete(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const handleBulkAmountUpdate = async () => {
+    if (!bulkAmount || selectedIds.size === 0) return;
+
+    const newAmount = parseFloat(bulkAmount);
+    if (isNaN(newAmount) || newAmount < 0) {
+      alert(language === 'ar' ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount');
+      return;
+    }
+
+    if (!confirm(language === 'ar'
+      ? `هل أنت متأكد من تحديث المبلغ لـ ${selectedIds.size} مصروف؟`
+      : `Are you sure you want to update amount for ${selectedIds.size} expenses?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('setup_expenses')
+        .update({ amount: newAmount })
+        .in('id', Array.from(selectedIds));
+
+      if (error) throw error;
+
+      alert(language === 'ar' ? 'تم تحديث المبالغ بنجاح' : 'Amounts updated successfully');
+      setSelectedIds(new Set());
+      setShowBulkEdit(false);
+      setBulkAmount('');
+      loadExpenses();
+    } catch (error: any) {
+      console.error('Error updating amounts:', error);
+      alert(error.message || (language === 'ar' ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'));
+    }
+  };
+
+  const selectedTotal = expenses
+    .filter(e => selectedIds.has(e.id))
+    .reduce((sum, e) => sum + Number(e.amount), 0);
 
   if (loading) {
     return (
@@ -555,11 +618,80 @@ export default function SetupExpenses() {
         </div>
       )}
 
+      {/* Bulk Edit Toolbar */}
+      {canEdit && selectedIds.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <span className="text-blue-800 font-medium">
+              {language === 'ar'
+                ? `تم تحديد ${selectedIds.size} مصروف`
+                : `${selectedIds.size} expenses selected`}
+            </span>
+            <span className="text-blue-600 text-sm">
+              ({language === 'ar' ? 'المجموع:' : 'Total:'} {selectedTotal.toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US', { minimumFractionDigits: 2 })} {language === 'ar' ? 'ر.س' : 'SAR'})
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {showBulkEdit ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={bulkAmount}
+                  onChange={(e) => setBulkAmount(e.target.value)}
+                  placeholder={language === 'ar' ? 'المبلغ الجديد' : 'New amount'}
+                  className="px-3 py-1.5 border border-blue-300 rounded-lg w-40 text-sm"
+                  autoFocus
+                />
+                <button
+                  onClick={handleBulkAmountUpdate}
+                  disabled={!bulkAmount}
+                  className="p-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => { setShowBulkEdit(false); setBulkAmount(''); }}
+                  className="p-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowBulkEdit(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              >
+                <Edit2 className="w-4 h-4" />
+                {language === 'ar' ? 'تعديل المبلغ' : 'Edit Amount'}
+              </button>
+            )}
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-2 text-gray-600 hover:text-gray-800 text-sm"
+            >
+              {language === 'ar' ? 'إلغاء التحديد' : 'Clear Selection'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                {canEdit && (
+                  <th className="px-4 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={expenses.length > 0 && selectedIds.size === expenses.length}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {language === 'ar' ? 'التاريخ' : 'Date'}
                 </th>
@@ -582,7 +714,17 @@ export default function SetupExpenses() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {expenses.map((expense) => (
-                <tr key={expense.id} className="hover:bg-gray-50">
+                <tr key={expense.id} className={`hover:bg-gray-50 ${selectedIds.has(expense.id) ? 'bg-blue-50' : ''}`}>
+                  {canEdit && (
+                    <td className="px-4 py-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(expense.id)}
+                        onChange={(e) => handleSelectOne(expense.id, e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {new Date(expense.expense_date).toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US')}
                   </td>
