@@ -13,12 +13,7 @@ import {
   PartnerSettlement, SetupExpense, EXPENSE_TYPES, MONTH_NAMES_AR, MONTH_NAMES_EN,
   mapExpenseType,
 } from './partners/types';
-import {
-  Users, Plus, DollarSign, X, ShieldAlert, FileSpreadsheet,
-  Camera, Eye, Paperclip, ArrowRightLeft, Ban, Edit3, Check, AlertTriangle, AlertCircle,
-  PieChart, Percent, TrendingUp, UserPlus, Save, ChevronDown, ChevronUp,
-  ToggleLeft, ToggleRight, Landmark, Banknote, CalendarDays,
-} from 'lucide-react';
+import { Users, Plus, DollarSign, X, ShieldAlert, FileSpreadsheet, Camera, Eye, Paperclip, ArrowRightLeft, Ban, CreditCard as Edit3, Check, AlertTriangle, AlertCircle, PieChart, Percent, TrendingUp, UserPlus, Save, ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Landmark, Banknote, CalendarDays } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const PARTNER_COLORS = ['teal', 'sky', 'amber', 'rose', 'emerald'] as const;
