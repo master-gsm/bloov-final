@@ -296,7 +296,12 @@ export function Partners() {
     setSelectedExpenseIds(newSet);
   };
 
-  const handleBulkExpenseAmountUpdate = async () => {
+  const [pendingBulkUpdate, setPendingBulkUpdate] = useState<{
+    ids: string[];
+    amount: number;
+  } | null>(null);
+
+  const handleBulkExpenseAmountUpdate = () => {
     if (!bulkAmountValue || selectedExpenseIds.size === 0) return;
 
     const newAmount = parseFloat(bulkAmountValue);
@@ -305,25 +310,34 @@ export function Partners() {
       return;
     }
 
-    if (!confirm(isRTL
-      ? `هل أنت متأكد من تحديث المبلغ لـ ${selectedExpenseIds.size} مصروف؟`
-      : `Update amount for ${selectedExpenseIds.size} expenses?`)) {
-      return;
-    }
+    setPendingBulkUpdate({
+      ids: Array.from(selectedExpenseIds),
+      amount: newAmount
+    });
+  };
 
+  const executeBulkExpenseUpdate = async () => {
+    if (!pendingBulkUpdate) return;
+
+    const { ids, amount } = pendingBulkUpdate;
+    setPendingBulkUpdate(null);
     setSubmitting(true);
-    try {
-      const { error: updateError } = await supabase
-        .from('setup_expenses')
-        .update({ amount: newAmount })
-        .in('id', Array.from(selectedExpenseIds));
 
-      if (updateError) throw updateError;
+    try {
+      for (const id of ids) {
+        const { error: updateError } = await supabase
+          .from('setup_expenses')
+          .update({ amount })
+          .eq('id', id);
+
+        if (updateError) throw updateError;
+      }
 
       setSelectedExpenseIds(new Set());
       setShowBulkAmountEdit(false);
       setBulkAmountValue('');
       await loadData();
+      alert(isRTL ? 'تم تحديث المبالغ بنجاح' : 'Amounts updated successfully');
     } catch (err: any) {
       setError(err.message || (isRTL ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'));
     } finally {
@@ -1991,6 +2005,46 @@ export function Partners() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Update Confirmation Modal */}
+      {pendingBulkUpdate && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 bg-amber-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-amber-100">
+                  <AlertTriangle className="w-6 h-6 text-amber-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-amber-900">
+                  {isRTL ? 'تأكيد التحديث' : 'Confirm Update'}
+                </h3>
+              </div>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-gray-700 text-base leading-relaxed">
+                {isRTL
+                  ? `هل أنت متأكد من تحديث المبلغ إلى ${pendingBulkUpdate.amount.toLocaleString('ar-SA')} ر.س لـ ${pendingBulkUpdate.ids.length} مصروف؟`
+                  : `Are you sure you want to update the amount to ${pendingBulkUpdate.amount.toLocaleString('en-US')} SAR for ${pendingBulkUpdate.ids.length} expense(s)?`}
+              </p>
+            </div>
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setPendingBulkUpdate(null)}
+                className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 font-medium"
+              >
+                {isRTL ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={executeBulkExpenseUpdate}
+                disabled={submitting}
+                className="px-5 py-2.5 text-white bg-amber-600 hover:bg-amber-700 rounded-xl font-medium disabled:opacity-50"
+              >
+                {submitting ? (isRTL ? 'جاري التحديث...' : 'Updating...') : (isRTL ? 'تأكيد' : 'Confirm')}
+              </button>
             </div>
           </div>
         </div>
