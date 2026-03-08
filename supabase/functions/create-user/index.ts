@@ -1,5 +1,21 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
+function usernameToSlug(username: string): string {
+  const normalized = username.toLowerCase().trim();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(normalized);
+  let hash = 0;
+  for (let i = 0; i < data.length; i++) {
+    hash = ((hash << 5) - hash + data[i]) | 0;
+  }
+  const hashStr = Math.abs(hash).toString(36);
+  const safeChars = normalized.replace(/[^a-z0-9]/g, "");
+  if (safeChars.length >= 3) {
+    return safeChars.slice(0, 20) + "_" + hashStr;
+  }
+  return "user_" + hashStr + "_" + Date.now().toString(36);
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -83,12 +99,23 @@ Deno.serve(async (req: Request) => {
     }
 
     const targetBranchId = branch_id || userProfile.branch_id;
-    const email = `${username.toLowerCase()}@bloov.local`;
+    const emailSlug = usernameToSlug(username);
+    const email = `${emailSlug}@bloov.local`;
 
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(
       (u: { email?: string }) => u.email === email
     );
+
+    const { data: existingByUsername } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("username", username.trim().toLowerCase())
+      .maybeSingle();
+
+    if (existingByUsername) {
+      return jsonRes({ error: "اسم المستخدم موجود مسبقاً / Username already exists" }, 400);
+    }
 
     if (existingUser) {
       const { data: existingProfile } = await supabaseAdmin
@@ -118,6 +145,7 @@ Deno.serve(async (req: Request) => {
     const { error: insertError } = await supabaseAdmin.from("users").insert({
       id: newUser.user.id,
       full_name: displayName,
+      username: username.trim().toLowerCase(),
       role,
       is_active: true,
       permissions: permissions || {},

@@ -4,6 +4,22 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { LogIn, ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
+function usernameToSlug(username: string): string {
+  const normalized = username.toLowerCase().trim();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(normalized);
+  let hash = 0;
+  for (let i = 0; i < data.length; i++) {
+    hash = ((hash << 5) - hash + data[i]) | 0;
+  }
+  const hashStr = Math.abs(hash).toString(36);
+  const safeChars = normalized.replace(/[^a-z0-9]/g, '');
+  if (safeChars.length >= 3) {
+    return safeChars.slice(0, 20) + '_' + hashStr;
+  }
+  return 'user_' + hashStr + '_' + Date.now().toString(36);
+}
+
 export function LoginForm() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,9 +39,13 @@ export function LoginForm() {
     setLoading(true);
 
     try {
-      const email = username.includes('@')
-        ? username.toLowerCase()
-        : `${username.toLowerCase()}@bloov.local`;
+      let email: string;
+      if (username.includes('@')) {
+        email = username.toLowerCase();
+      } else {
+        const slug = usernameToSlug(username);
+        email = `${slug}@bloov.local`;
+      }
       await signIn(email, password);
     } catch (err) {
       setError(isRTL ? 'اسم المستخدم أو كلمة المرور غير صحيحة' : 'Invalid username or password');
@@ -107,7 +127,7 @@ export function LoginForm() {
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full px-4 py-3 bg-lux-bg border border-lux-border rounded-xl text-primary focus:ring-2 focus:ring-accent/20 focus:border-accent/40 transition-all placeholder:text-muted"
                   placeholder={isRTL ? 'اسم المستخدم أو البريد الإلكتروني' : 'Username or Email'}
-                  dir="ltr"
+                  dir="auto"
                 />
               </div>
 

@@ -80,10 +80,10 @@ export function AddUserModal({ branches, onClose, onSubmit }: AddUserModalProps)
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'اسم المستخدم (للدخول)' : 'Username (for login)'}</label>
               <input type="text" required value={username}
-                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                onChange={(e) => setUsername(e.target.value.trim())}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                placeholder={isRTL ? 'اسم المستخدم' : 'Username'} dir="ltr" />
-              <p className="mt-1 text-xs text-gray-400">{isRTL ? 'أحرف إنجليزية وأرقام فقط' : 'Letters, numbers, dots, hyphens only'}</p>
+                placeholder={isRTL ? 'مثال: أحمد أو ahmed' : 'e.g. ahmed'} dir="auto" />
+              <p className="mt-1 text-xs text-gray-400">{isRTL ? 'يمكن استخدام العربية أو الإنجليزية' : 'Arabic or English allowed'}</p>
             </div>
           </div>
 
