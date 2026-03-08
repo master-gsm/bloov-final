@@ -132,7 +132,7 @@ export function UserManagement() {
     if (error) throw new Error(error.message);
   };
 
-  const handleCreate = async (data: { username: string; password: string; role: string; branch_id: string; permissions: PermissionsMap }) => {
+  const handleCreate = async (data: { username: string; fullName: string; password: string; role: string; branch_id: string; permissions: PermissionsMap }) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Not authenticated');
 
@@ -149,7 +149,7 @@ export function UserManagement() {
         body: JSON.stringify({
           username: data.username,
           password: data.password,
-          fullName: data.username,
+          fullName: data.fullName,
           role: data.role,
           branch_id: data.branch_id || undefined,
           permissions: {},

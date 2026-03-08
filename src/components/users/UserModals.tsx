@@ -21,12 +21,13 @@ interface UserRecord {
 interface AddUserModalProps {
   branches: Branch[];
   onClose: () => void;
-  onSubmit: (data: { username: string; password: string; role: string; branch_id: string; permissions: PermissionsMap }) => Promise<void>;
+  onSubmit: (data: { username: string; fullName: string; password: string; role: string; branch_id: string; permissions: PermissionsMap }) => Promise<void>;
 }
 
 export function AddUserModal({ branches, onClose, onSubmit }: AddUserModalProps) {
   const { isRTL } = useLanguage();
   const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('viewer');
   const [branchId, setBranchId] = useState('');
@@ -44,7 +45,7 @@ export function AddUserModal({ branches, onClose, onSubmit }: AddUserModalProps)
     setError('');
     setSubmitting(true);
     try {
-      await onSubmit({ username, password, role, branch_id: branchId, permissions });
+      await onSubmit({ username, fullName: fullName.trim() || username, password, role, branch_id: branchId, permissions });
     } catch (err) {
       setError(err instanceof Error ? err.message : (isRTL ? 'حدث خطأ' : 'An error occurred'));
     } finally {
@@ -69,20 +70,29 @@ export function AddUserModal({ branches, onClose, onSubmit }: AddUserModalProps)
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'اسم المستخدم' : 'Username'}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'الاسم الكامل' : 'Full Name'}</label>
+              <input type="text" value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                placeholder={isRTL ? 'مثال: سامي الرفاعي' : 'e.g. John Smith'} />
+              <p className="mt-1 text-xs text-gray-400">{isRTL ? 'يمكن استخدام العربية أو الإنجليزية' : 'Arabic or English allowed'}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'اسم المستخدم (للدخول)' : 'Username (for login)'}</label>
               <input type="text" required value={username}
                 onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 placeholder={isRTL ? 'اسم المستخدم' : 'Username'} dir="ltr" />
               <p className="mt-1 text-xs text-gray-400">{isRTL ? 'أحرف إنجليزية وأرقام فقط' : 'Letters, numbers, dots, hyphens only'}</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'كلمة المرور' : 'Password'}</label>
-              <input type="password" required value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                placeholder="********" minLength={6} />
-            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'كلمة المرور' : 'Password'}</label>
+            <input type="password" required value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              placeholder="********" minLength={6} />
           </div>
 
           <div>
