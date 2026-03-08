@@ -1,7 +1,7 @@
 export const SECTIONS = [
   'dashboard', 'sales', 'purchases', 'expenses', 'fixedassets',
   'products', 'inventory', 'customers', 'suppliers', 'partners',
-  'employees', 'branches', 'salla', 'cashregister', 'reports',
+  'employees', 'custody', 'branches', 'salla', 'cashregister', 'reports',
   'journal', 'backup', 'systemhealth', 'users', 'settings',
 ] as const;
 
@@ -49,6 +49,7 @@ export const ROLE_TEMPLATES: Record<string, PermissionsMap> = {
     cashregister: { view: true, create: true, edit: true, delete: false },
     reports: { view: true, create: false, edit: false, delete: false },
     journal: { view: true, create: true, edit: true, delete: false },
+    custody: { view: true, create: true, edit: true, delete: false },
   },
   observer: viewOnlyPermissions(),
   viewer: {
@@ -73,6 +74,7 @@ export const SECTION_LABELS: Record<Section, { ar: string; en: string }> = {
   suppliers: { ar: 'الموردين', en: 'Suppliers' },
   partners: { ar: 'الشركاء', en: 'Partners' },
   employees: { ar: 'الموظفين والرواتب', en: 'Employees & Salaries' },
+  custody: { ar: 'عهدة الموظفين', en: 'Employee Custody' },
   branches: { ar: 'الفروع', en: 'Branches' },
   salla: { ar: 'سلة', en: 'Salla' },
   cashregister: { ar: 'الصندوق', en: 'Cash Register' },

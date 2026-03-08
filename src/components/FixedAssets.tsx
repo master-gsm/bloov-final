@@ -46,6 +46,13 @@ interface Supplier {
   name: string;
 }
 
+interface OpenCustody {
+  id: string;
+  custody_number: string;
+  employee_name: string;
+  remaining_balance: number;
+}
+
 const ASSET_CATEGORIES = [
   { value: 'Equipment', label_en: 'Equipment', label_ar: 'المعدات' },
   { value: 'Furniture', label_en: 'Furniture', label_ar: 'الأثاث' },
@@ -67,6 +74,9 @@ export default function FixedAssets() {
   const [expandedAsset, setExpandedAsset] = useState<string | null>(null);
   const [depreciationEntries, setDepreciationEntries] = useState<DepreciationEntry[]>([]);
   const [depLoading, setDepLoading] = useState(false);
+  const [openCustodies, setOpenCustodies] = useState<OpenCustody[]>([]);
+  const [selectedCustodyId, setSelectedCustodyId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const { language } = useLanguage();
   const isRTL = language === 'ar';
 
@@ -86,7 +96,13 @@ export default function FixedAssets() {
 
   useEffect(() => {
     loadData();
+    loadOpenCustodies();
   }, []);
+
+  const loadOpenCustodies = async () => {
+    const { data } = await supabase.rpc('get_employee_open_custodies');
+    setOpenCustodies(data || []);
+  };
 
   const loadData = async () => {
     try {
@@ -176,8 +192,27 @@ export default function FixedAssets() {
         p_up_to_date: new Date().toISOString().split('T')[0],
       });
 
+      if (!editingAsset && paymentMethod === 'custody' && selectedCustodyId) {
+        const { error: settlementError } = await supabase.rpc('add_custody_settlement_atomic', {
+          p_custody_id: selectedCustodyId,
+          p_settlement_type: 'asset',
+          p_amount: parseFloat(formData.purchase_cost),
+          p_description: formData.asset_name,
+          p_description_ar: formData.asset_name_ar || formData.asset_name,
+          p_reference_type: 'fixed_asset',
+          p_reference_id: null,
+          p_notes: formData.notes || null,
+        });
+        if (settlementError) {
+          console.error('Error creating custody settlement:', settlementError);
+        }
+        loadOpenCustodies();
+      }
+
       setShowForm(false);
       setEditingAsset(null);
+      setPaymentMethod('cash');
+      setSelectedCustodyId('');
       resetForm();
       loadData();
     } catch (error: any) {
@@ -479,6 +514,44 @@ export default function FixedAssets() {
                     ))}
                   </select>
                 </div>
+
+                {!editingAsset && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isRTL ? 'طريقة الدفع' : 'Payment Method'}
+                    </label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => { setPaymentMethod(e.target.value); if (e.target.value !== 'custody') setSelectedCustodyId(''); }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    >
+                      <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
+                      <option value="bank_transfer">{isRTL ? 'تحويل بنكي' : 'Bank Transfer'}</option>
+                      {openCustodies.length > 0 && <option value="custody">{isRTL ? 'من عهدة موظف' : 'From Employee Custody'}</option>}
+                    </select>
+                  </div>
+                )}
+
+                {!editingAsset && paymentMethod === 'custody' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isRTL ? 'اختر العهدة' : 'Select Custody'}
+                    </label>
+                    <select
+                      value={selectedCustodyId}
+                      onChange={(e) => setSelectedCustodyId(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">{isRTL ? 'اختر العهدة' : 'Select Custody'}</option>
+                      {openCustodies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.employee_name} - {c.custody_number} ({isRTL ? 'متبقي:' : 'Remaining:'} {Number(c.remaining_balance).toLocaleString()})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {formData.purchase_cost && formData.useful_life_months && (

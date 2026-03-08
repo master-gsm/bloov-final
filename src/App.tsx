@@ -31,6 +31,7 @@ import Backup from './components/Backup';
 import FixedAssets from './components/FixedAssets';
 import JournalEntries from './components/JournalEntries';
 import SystemHealth from './components/SystemHealth';
+import EmployeeCustody from './components/EmployeeCustody';
 import { supabase } from './lib/supabase';
 import type { Section } from './lib/permissions';
 
@@ -174,6 +175,7 @@ function AppContent() {
       case 'products': return <Products />;
       case 'partners': return <Partners />;
       case 'employees': return <Employees />;
+      case 'custody': return <EmployeeCustody />;
       case 'sales': return <Sales />;
       case 'purchases': return <Purchases />;
       case 'expenses': return <Expenses />;

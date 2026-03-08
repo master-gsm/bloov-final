@@ -73,6 +73,8 @@ export function Purchases() {
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [selectedCustodyId, setSelectedCustodyId] = useState('');
+  const [openCustodies, setOpenCustodies] = useState<any[]>([]);
   const [purchaseNotes, setPurchaseNotes] = useState('');
   const [purchaseDiscount, setPurchaseDiscount] = useState(0);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -154,16 +156,18 @@ export function Purchases() {
       const to = from + pageSize - 1;
       purchasesQuery = purchasesQuery.range(from, to);
 
-      const [purchasesRes, productsRes, suppliersRes] = await Promise.all([
+      const [purchasesRes, productsRes, suppliersRes, custodiesRes] = await Promise.all([
         purchasesQuery,
         supabase.from('products').select('id, name, name_ar, purchase_price, sku').eq('is_active', true),
         supabase.from('suppliers').select('id, name, name_ar, code, vat_status').eq('is_active', true),
+        supabase.rpc('get_employee_open_custodies'),
       ]);
 
       if (purchasesRes.data) setPurchases(purchasesRes.data as any[]);
       if (purchasesRes.count !== null) setTotalCount(purchasesRes.count);
       if (productsRes.data) setProducts(productsRes.data);
       if (suppliersRes.data) setSuppliers(suppliersRes.data);
+      if (custodiesRes.data) setOpenCustodies(custodiesRes.data);
     } catch (err) {
       console.error('Error loading data:', err);
     } finally {
@@ -280,6 +284,21 @@ export function Purchases() {
 
         const { error: itemsError } = await supabase.from('purchase_items').insert(items);
         if (itemsError) throw itemsError;
+
+        if (paymentMethod === 'custody' && selectedCustodyId) {
+          const { error: custodyError } = await supabase.rpc('add_custody_settlement_atomic', {
+            p_custody_id: selectedCustodyId,
+            p_settlement_type: 'purchase',
+            p_amount: total,
+            p_account_code: '1131',
+            p_description: `Purchase ${purchaseNumber}`,
+            p_description_ar: `مشتريات ${purchaseNumber}`,
+            p_settlement_date: new Date().toISOString().split('T')[0],
+            p_reference_type: 'purchases',
+            p_reference_id: purchaseId,
+          });
+          if (custodyError) console.error('Custody settlement error:', custodyError);
+        }
       } else {
         await addPendingOperation('purchases', 'insert', purchaseData);
 
@@ -293,6 +312,8 @@ export function Purchases() {
       setShowForm(false);
       setPurchaseItems([]);
       setSelectedSupplier('');
+      setPaymentMethod('cash');
+      setSelectedCustodyId('');
       setPurchaseNotes('');
       setPurchaseDiscount(0);
       setAttachmentFile(null);
@@ -463,12 +484,32 @@ export function Purchases() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'طريقة الدفع' : 'Payment'}</label>
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm">
+                <select value={paymentMethod} onChange={(e) => { setPaymentMethod(e.target.value); if (e.target.value !== 'custody') setSelectedCustodyId(''); }} disabled={!canEdit} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm">
                   <option value="cash">{isRTL ? 'نقدي' : 'Cash'}</option>
                   <option value="transfer">{isRTL ? 'تحويل' : 'Transfer'}</option>
                   <option value="check">{isRTL ? 'شيك' : 'Check'}</option>
+                  {openCustodies.length > 0 && <option value="custody">{isRTL ? 'من عهدة موظف' : 'From Employee Custody'}</option>}
                 </select>
               </div>
+
+              {paymentMethod === 'custody' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'اختر العهدة' : 'Select Custody'}</label>
+                  <select
+                    value={selectedCustodyId}
+                    onChange={(e) => setSelectedCustodyId(e.target.value)}
+                    disabled={!canEdit}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                  >
+                    <option value="">{isRTL ? 'اختر العهدة' : 'Select Custody'}</option>
+                    {openCustodies.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.employee_name} - {c.custody_number} ({isRTL ? 'متبقي:' : 'Remaining:'} {Number(c.remaining_balance).toLocaleString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

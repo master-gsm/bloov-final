@@ -21,6 +21,7 @@ import {
   Landmark,
   BookOpen,
   ShieldCheck,
+  HandCoins,
 } from 'lucide-react';
 import type { Section } from '../lib/permissions';
 
@@ -45,6 +46,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'suppliers', icon: Truck, label: t('nav.suppliers') },
     { id: 'partners', icon: UsersRound, label: t('nav.partners') },
     { id: 'employees', icon: DollarSign, label: isRTL ? 'الموظفين والرواتب' : 'Employees & Salaries' },
+    { id: 'custody', icon: HandCoins, label: isRTL ? 'عهدة الموظفين' : 'Employee Custody' },
     { id: 'branches', icon: Building2, label: isRTL ? 'الفروع' : 'Branches' },
     { id: 'salla', icon: Store, label: isRTL ? 'سلة' : 'Salla' },
     { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
