@@ -39,14 +39,29 @@ export function LoginForm() {
     setLoading(true);
 
     try {
-      let email: string;
+      let emailToUse: string;
       if (username.includes('@')) {
-        email = username.toLowerCase();
+        emailToUse = username.toLowerCase();
       } else {
-        const slug = usernameToSlug(username);
-        email = `${slug}@bloov.local`;
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id')
+          .eq('username', username.toLowerCase().trim())
+          .maybeSingle();
+
+        if (userData) {
+          const { data: authUser } = await supabase.rpc('get_auth_email_by_user_id', { user_id: userData.id });
+          if (authUser) {
+            emailToUse = authUser;
+          } else {
+            emailToUse = `${username.toLowerCase().trim()}@bloov.local`;
+          }
+        } else {
+          const slug = usernameToSlug(username);
+          emailToUse = `${slug}@bloov.local`;
+        }
       }
-      await signIn(email, password);
+      await signIn(emailToUse, password);
     } catch (err) {
       setError(isRTL ? 'اسم المستخدم أو كلمة المرور غير صحيحة' : 'Invalid username or password');
     } finally {
