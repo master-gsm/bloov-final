@@ -96,6 +96,12 @@ export function Partners() {
   const [deleteExpenseConfirm, setDeleteExpenseConfirm] = useState<string | null>(null);
   const [editingExpenseDateId, setEditingExpenseDateId] = useState<string | null>(null);
   const [editingExpenseDateVal, setEditingExpenseDateVal] = useState('');
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null);
+  const [inlineEditDate, setInlineEditDate] = useState('');
+  const [inlineEditDesc, setInlineEditDesc] = useState('');
+  const [inlineEditDescAr, setInlineEditDescAr] = useState('');
+  const [inlineEditAmount, setInlineEditAmount] = useState('');
+  const [inlineEditSaving, setInlineEditSaving] = useState(false);
   const [voidSettlementConfirm, setVoidSettlementConfirm] = useState<string | null>(null);
 
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
@@ -678,6 +684,78 @@ export function Partners() {
       setEditingExpenseDateVal('');
       await loadData();
     } catch (err: any) { showToast(err.message, 'error'); }
+  };
+
+  const startInlineEdit = (expense: SetupExpense) => {
+    setInlineEditId(expense.id);
+    setInlineEditDate(expense.expense_date || '');
+    setInlineEditDesc(expense.description || '');
+    setInlineEditDescAr(expense.description_ar || '');
+    setInlineEditAmount(String(expense.amount));
+    setEditingExpenseDateId(null);
+    setEditingExpenseDateVal('');
+  };
+
+  const cancelInlineEdit = () => {
+    setInlineEditId(null);
+    setInlineEditDate('');
+    setInlineEditDesc('');
+    setInlineEditDescAr('');
+    setInlineEditAmount('');
+    setInlineEditSaving(false);
+  };
+
+  const saveInlineEdit = async () => {
+    if (!inlineEditId) return;
+    const newAmount = parseFloat(inlineEditAmount);
+    if (isNaN(newAmount) || newAmount < 0) {
+      showToast(isRTL ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount', 'error');
+      return;
+    }
+
+    setInlineEditSaving(true);
+    try {
+      const expense = expenses.find(e => e.id === inlineEditId);
+      if (!expense) throw new Error('Expense not found');
+
+      const amountChanged = Number(expense.amount) !== newAmount;
+
+      const { error: descErr } = await supabase
+        .from('setup_expenses')
+        .update({
+          expense_date: inlineEditDate || null,
+          description: inlineEditDesc,
+          description_ar: inlineEditDescAr,
+        })
+        .eq('id', inlineEditId);
+      if (descErr) throw descErr;
+
+      if (amountChanged) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error(isRTL ? 'الجلسة منتهية' : 'Session expired');
+
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-expense-amount`;
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ ids: [inlineEditId], amount: newAmount }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Amount update failed');
+      }
+
+      cancelInlineEdit();
+      await loadData();
+      showToast(isRTL ? 'تم تحديث العملية بنجاح' : 'Expense updated successfully', 'success');
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setInlineEditSaving(false);
+    }
   };
 
   const handleSettlementSubmit = async (e: React.FormEvent) => {
@@ -1346,8 +1424,9 @@ export function Partners() {
                   <tr><td colSpan={canEdit ? 7 : 6} className="py-8 text-center text-gray-400 text-sm">{isRTL ? 'لا توجد مصاريف' : 'No expenses'}</td></tr>
                 ) : expenses.map(expense => {
                   const p = partners.find(pp => pp.id === expense.partner_id);
+                  const isEditing = inlineEditId === expense.id;
                   return (
-                    <tr key={expense.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${selectedExpenseIds.has(expense.id) ? 'bg-teal-50/50' : ''} ${!expense.expense_date ? 'bg-amber-50/30' : ''}`}>
+                    <tr key={expense.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${isEditing ? 'bg-blue-50/40' : ''} ${selectedExpenseIds.has(expense.id) ? 'bg-teal-50/50' : ''} ${!expense.expense_date && !isEditing ? 'bg-amber-50/30' : ''}`}>
                       {canEdit && (
                         <td className="px-3 py-2.5 text-center">
                           <input
@@ -1355,43 +1434,23 @@ export function Partners() {
                             checked={selectedExpenseIds.has(expense.id)}
                             onChange={(e) => handleSelectOneExpense(expense.id, e.target.checked)}
                             className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                            disabled={isEditing}
                           />
                         </td>
                       )}
                       <td className="px-4 py-2.5 text-xs">
-                        {editingExpenseDateId === expense.id ? (
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="date"
-                              value={editingExpenseDateVal}
-                              onChange={e => setEditingExpenseDateVal(e.target.value)}
-                              className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-32"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleUpdateExpenseDate(expense.id)}
-                              className="p-1 text-green-600 hover:bg-green-50 rounded"
-                              disabled={!editingExpenseDateVal}
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => { setEditingExpenseDateId(null); setEditingExpenseDateVal(''); }}
-                              className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={inlineEditDate}
+                            onChange={e => setInlineEditDate(e.target.value)}
+                            className="border border-blue-300 rounded px-1.5 py-1 text-xs w-32 focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                          />
                         ) : (
-                          <button
-                            onClick={() => canEdit ? (setEditingExpenseDateId(expense.id), setEditingExpenseDateVal(expense.expense_date || '')) : undefined}
-                            className={`flex items-center gap-1 group ${!expense.expense_date ? 'text-amber-600 font-medium' : 'text-gray-600'} ${canEdit ? 'hover:text-blue-600 cursor-pointer' : 'cursor-default'}`}
-                            title={canEdit ? (isRTL ? 'انقر لتعديل التاريخ' : 'Click to edit date') : undefined}
-                          >
+                          <span className={`flex items-center gap-1 ${!expense.expense_date ? 'text-amber-600 font-medium' : 'text-gray-600'}`}>
                             {!expense.expense_date && <CalendarDays className="w-3 h-3" />}
                             {fmtDate(expense.expense_date, isRTL)}
-                            {canEdit && <Edit3 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-50 ml-0.5" />}
-                          </button>
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-sm font-medium">{p ? (isRTL ? p.name_ar : p.name) : '-'}</td>
@@ -1400,32 +1459,103 @@ export function Partners() {
                           {isRTL ? EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.en}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-sm text-gray-700">
-                        {isRTL ? (expense.description_ar || expense.description) : expense.description}
+                      <td className="px-4 py-2.5">
+                        {isEditing ? (
+                          <div className="space-y-1">
+                            <input
+                              type="text"
+                              value={inlineEditDesc}
+                              onChange={e => setInlineEditDesc(e.target.value)}
+                              placeholder={isRTL ? 'الوصف (EN)' : 'Description'}
+                              className="border border-blue-300 rounded px-2 py-1 text-xs w-full focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                            />
+                            <input
+                              type="text"
+                              value={inlineEditDescAr}
+                              onChange={e => setInlineEditDescAr(e.target.value)}
+                              placeholder={isRTL ? 'الوصف (عربي)' : 'Description (AR)'}
+                              className="border border-blue-300 rounded px-2 py-1 text-xs w-full focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                              dir="rtl"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-700">
+                            {isRTL ? (expense.description_ar || expense.description) : expense.description}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-bold text-teal-800 text-sm">{fmt(Number(expense.amount))}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={inlineEditAmount}
+                            onChange={e => setInlineEditAmount(e.target.value)}
+                            className="border border-blue-300 rounded px-2 py-1 text-xs w-28 text-right font-bold focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                          />
+                        ) : (
+                          <span className="font-bold text-teal-800 text-sm">{fmt(Number(expense.amount))}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          {expense.attachment && (
-                            <button onClick={() => handleViewAttachment(expense.attachment!)} className="p-1 text-blue-500 hover:bg-blue-50 rounded">
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {canEdit && (
-                            deleteExpenseConfirm === expense.id ? (
-                              <div className="flex gap-1">
-                                <button onClick={() => handleDeleteExpense(expense.id)} className="px-2 py-0.5 text-xs bg-red-600 text-white rounded">
-                                  {isRTL ? 'تأكيد' : 'OK'}
-                                </button>
-                                <button onClick={() => setDeleteExpenseConfirm(null)} className="px-2 py-0.5 text-xs bg-gray-200 rounded">
-                                  {isRTL ? 'إلغاء' : 'No'}
-                                </button>
-                              </div>
-                            ) : (
-                              <button onClick={() => setDeleteExpenseConfirm(expense.id)} className="p-1 text-red-400 hover:bg-red-50 rounded">
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={saveInlineEdit}
+                                disabled={inlineEditSaving}
+                                className="p-1.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-md disabled:opacity-50 transition"
+                                title={isRTL ? 'حفظ' : 'Save'}
+                              >
+                                {inlineEditSaving ? (
+                                  <span className="block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <button
+                                onClick={cancelInlineEdit}
+                                disabled={inlineEditSaving}
+                                className="p-1.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition"
+                                title={isRTL ? 'إلغاء' : 'Cancel'}
+                              >
                                 <X className="w-3.5 h-3.5" />
                               </button>
-                            )
+                            </>
+                          ) : (
+                            <>
+                              {expense.attachment && (
+                                <button onClick={() => handleViewAttachment(expense.attachment!)} className="p-1 text-blue-500 hover:bg-blue-50 rounded">
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {canEdit && (
+                                <>
+                                  <button
+                                    onClick={() => startInlineEdit(expense)}
+                                    className="p-1 text-blue-500 hover:bg-blue-50 rounded"
+                                    title={isRTL ? 'تعديل' : 'Edit'}
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  {deleteExpenseConfirm === expense.id ? (
+                                    <div className="flex gap-1">
+                                      <button onClick={() => handleDeleteExpense(expense.id)} className="px-2 py-0.5 text-xs bg-red-600 text-white rounded">
+                                        {isRTL ? 'تأكيد' : 'OK'}
+                                      </button>
+                                      <button onClick={() => setDeleteExpenseConfirm(null)} className="px-2 py-0.5 text-xs bg-gray-200 rounded">
+                                        {isRTL ? 'إلغاء' : 'No'}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={() => setDeleteExpenseConfirm(expense.id)} className="p-1 text-red-400 hover:bg-red-50 rounded">
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
