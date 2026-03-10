@@ -84,7 +84,7 @@ export function Navbar() {
             </div>
           </div>
 
-          <div className={`flex items-center gap-2 overflow-x-auto ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-2 overflow-x-auto h-10 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <div className="relative">
               <button
                 onClick={() => setShowConnectionMenu(!showConnectionMenu)}

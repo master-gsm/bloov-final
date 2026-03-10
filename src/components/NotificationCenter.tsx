@@ -104,10 +104,10 @@ export function NotificationBell() {
   const badgeColor = criticalCount > 0 ? 'bg-red-500' : 'bg-amber-400';
 
   return (
-    <div className="relative">
+    <div className="relative flex-shrink-0">
       <button
         onClick={() => setOpen(v => !v)}
-        className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+        className="relative flex items-center justify-center w-10 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
         title={isRTL ? 'التنبيهات' : 'Alerts'}
       >
         <Bell className={`w-5 h-5 ${totalCount > 0 ? 'text-gray-700' : 'text-gray-400'}`} />
@@ -121,7 +121,7 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-40 flex flex-col max-h-[80vh]`}>
+          <div className={`absolute top-full ${isRTL ? 'left-0' : 'right-0'} mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-40 flex flex-col max-h-[80vh]`}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-teal-600" />
