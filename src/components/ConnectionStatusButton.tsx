@@ -62,7 +62,7 @@ export function ConnectionStatusButton() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative flex-shrink-0">
       <button
         onClick={() => setShowPopover(!showPopover)}
         className={`flex items-center gap-2 px-3 py-2 rounded-lg transition ${
@@ -81,6 +81,9 @@ export function ConnectionStatusButton() {
         ) : (
           <Wifi className={`w-5 h-5 ${getStatusColor()}`} />
         )}
+        <span className={`text-sm font-medium ${getStatusColor()}`}>
+          {getStatusLabel()}
+        </span>
         {pendingOperationsCount > 0 && (
           <span className="text-xs font-bold text-gray-900 bg-yellow-300 px-2 py-0.5 rounded-full">
             {pendingOperationsCount}
@@ -89,9 +92,9 @@ export function ConnectionStatusButton() {
       </button>
 
       {showPopover && (
-        <div
-          className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50`}
-        >
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowPopover(false)} />
+          <div className={`fixed ${isRTL ? 'left-4' : 'right-4'} top-16 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50`}>
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">
@@ -221,14 +224,8 @@ export function ConnectionStatusButton() {
               )}
             </div>
           </div>
-        </div>
-      )}
-
-      {showPopover && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setShowPopover(false)}
-        />
+          </div>
+        </>
       )}
     </div>
   );
