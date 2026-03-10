@@ -39,35 +39,63 @@ export function Settings() {
     loadSettings();
   }, [canViewSettings]);
 
+  const BOOLEAN_KEYS = [
+    'sms_enabled', 'ai_enabled', 'show_tax_on_invoice', 'zatca_enabled',
+    'auto_print_invoice', 'barcode_enabled', 'whatsapp_notifications',
+    'delivery_enabled', 'event_orders_enabled', 'stock_alert_enabled',
+    'allow_negative_stock', 'loyalty_enabled',
+  ];
+
+  const NUMERIC_KEYS = [
+    'tax_rate', 'default_delivery_charge', 'low_stock_threshold',
+    'loyalty_points_per_sar', 'loyalty_redemption_rate',
+  ];
+
+  const ALL_SETTING_KEYS = [
+    'company_name', 'company_name_ar', 'business_name', 'business_name_ar',
+    'business_type', 'business_type_ar', 'commercial_register',
+    'business_phone', 'business_whatsapp', 'business_address', 'business_address_ar',
+    'business_city', 'business_city_ar', 'currency',
+    'tax_number', 'tax_rate', 'show_tax_on_invoice',
+    'zatca_enabled', 'zatca_mode', 'zatca_otp', 'invoice_type',
+    'invoice_prefix', 'auto_print_invoice', 'barcode_enabled',
+    'invoice_notes', 'invoice_notes_ar', 'receipt_footer', 'receipt_footer_ar',
+    'default_payment_method', 'whatsapp_notifications',
+    'delivery_enabled', 'default_delivery_charge', 'event_orders_enabled',
+    'stock_alert_enabled', 'low_stock_threshold', 'allow_negative_stock',
+    'loyalty_enabled', 'loyalty_points_per_sar', 'loyalty_redemption_rate',
+    'salla_api_key', 'sms_api_key', 'sms_sender_id', 'sms_provider_url',
+    'sms_provider_name', 'sms_enabled',
+    'ai_enabled', 'ai_api_key', 'ai_model', 'ai_provider',
+  ];
+
   const loadSettings = async () => {
     try {
-      const { data: globalSettings, error: gsError } = await supabase
+      const { data: row, error } = await supabase
         .from('settings')
         .select('*')
         .eq('id', 1)
         .maybeSingle();
 
-      if (gsError) throw gsError;
+      if (error) throw error;
 
       const map: SettingsMap = {};
 
-      if (globalSettings) {
-        if (globalSettings.salla_api_key) map['salla_api_key'] = globalSettings.salla_api_key;
-        if (globalSettings.business_whatsapp) map['business_whatsapp'] = globalSettings.business_whatsapp;
-        if (globalSettings.sms_api_key) map['sms_api_key'] = globalSettings.sms_api_key;
-        if (globalSettings.sms_sender_id) map['sms_sender_id'] = globalSettings.sms_sender_id;
-        if (globalSettings.sms_provider_url) map['sms_provider_url'] = globalSettings.sms_provider_url;
-        if (globalSettings.sms_provider_name) map['sms_provider_name'] = globalSettings.sms_provider_name;
-        map['sms_enabled'] = globalSettings.sms_enabled ? 'true' : 'false';
-        if (globalSettings.ai_api_key) map['ai_api_key'] = globalSettings.ai_api_key;
-        if (globalSettings.ai_model) map['ai_model'] = globalSettings.ai_model;
-        if (globalSettings.ai_provider) map['ai_provider'] = globalSettings.ai_provider;
-        map['ai_enabled'] = globalSettings.ai_enabled ? 'true' : 'false';
-        if (globalSettings.tax_rate) map['tax_rate'] = globalSettings.tax_rate.toString();
+      if (row) {
+        for (const key of ALL_SETTING_KEYS) {
+          const val = (row as Record<string, unknown>)[key];
+          if (val === null || val === undefined) continue;
+          if (BOOLEAN_KEYS.includes(key)) {
+            map[key] = val ? 'true' : 'false';
+          } else {
+            map[key] = String(val);
+          }
+        }
       }
 
       setSettings(map);
     } catch (err) {
+      console.error('Failed to load settings:', err);
     } finally {
       setLoading(false);
     }
@@ -81,33 +109,34 @@ export function Settings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const globalSettingsKeys = ['salla_api_key', 'business_whatsapp', 'sms_api_key', 'sms_sender_id', 'sms_provider_url', 'sms_provider_name', 'sms_enabled', 'ai_enabled', 'ai_api_key', 'ai_model', 'ai_provider', 'tax_rate'];
-      const globalSettingsUpdate: any = {};
+      const updatePayload: Record<string, unknown> = {};
 
-      Object.entries(settings).forEach(([key, value]) => {
-        if (globalSettingsKeys.includes(key)) {
-          if (key === 'sms_enabled' || key === 'ai_enabled') {
-            globalSettingsUpdate[key] = value === 'true';
-          } else if (key === 'tax_rate') {
-            globalSettingsUpdate[key] = parseFloat(value) || 0.15;
-          } else {
-            globalSettingsUpdate[key] = value;
-          }
+      for (const key of ALL_SETTING_KEYS) {
+        const value = settings[key];
+        if (value === undefined) continue;
+
+        if (BOOLEAN_KEYS.includes(key)) {
+          updatePayload[key] = value === 'true';
+        } else if (NUMERIC_KEYS.includes(key)) {
+          updatePayload[key] = parseFloat(value) || 0;
+        } else {
+          updatePayload[key] = value;
         }
-      });
-
-      if (Object.keys(globalSettingsUpdate).length > 0) {
-        globalSettingsUpdate.updated_at = new Date().toISOString();
-
-        await supabase
-          .from('settings')
-          .update(globalSettingsUpdate)
-          .eq('id', 1);
       }
+
+      updatePayload.updated_at = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('settings')
+        .update(updatePayload)
+        .eq('id', 1);
+
+      if (error) throw error;
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
+      console.error('Failed to save settings:', err);
     } finally {
       setSaving(false);
     }
@@ -173,6 +202,28 @@ export function Settings() {
           <option key={opt.value} value={opt.value}>{isRTL ? opt.labelAr : opt.label}</option>
         ))}
       </select>
+    </div>
+  );
+
+  const renderSectionSaveButton = () => (
+    <div className="flex justify-end pt-4">
+      <button
+        onClick={saveSettings}
+        disabled={saving}
+        className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium transition text-sm ${
+          saved
+            ? 'bg-green-600 text-white'
+            : 'bg-teal-600 text-white hover:bg-teal-700'
+        } disabled:opacity-50`}
+      >
+        {saving ? (
+          <><Loader2 className="w-4 h-4 animate-spin" /> {isRTL ? 'جاري الحفظ...' : 'Saving...'}</>
+        ) : saved ? (
+          <><CheckCircle className="w-4 h-4" /> {isRTL ? 'تم الحفظ' : 'Saved'}</>
+        ) : (
+          <><Save className="w-4 h-4" /> {isRTL ? 'حفظ' : 'Save'}</>
+        )}
+      </button>
     </div>
   );
 
@@ -261,165 +312,184 @@ export function Settings() {
 
       <div className="space-y-6">
         {activeTab === 'business' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'معلومات الشركة' : 'Company Information'}</h3>
-              {renderInput('company_name', 'Company Name', 'اسم الشركة', { dir: 'ltr' })}
-              {renderInput('company_name_ar', 'Company Name (Arabic)', 'اسم الشركة (عربي)', { dir: 'rtl' })}
-              {renderInput('business_name', 'Business/Brand Name', 'اسم المحل/العلامة التجارية', { dir: 'ltr' })}
-              {renderInput('business_name_ar', 'Business Name (Arabic)', 'اسم المحل (عربي)', { dir: 'rtl' })}
-              {renderInput('business_type', 'Business Type', 'نوع النشاط', { dir: 'ltr' })}
-              {renderInput('business_type_ar', 'Business Type (Arabic)', 'نوع النشاط (عربي)', { dir: 'rtl' })}
-              {renderInput('commercial_register', 'Commercial Register', 'السجل التجاري', { dir: 'ltr' })}
-            </div>
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'معلومات التواصل' : 'Contact Information'}</h3>
-              {renderInput('business_phone', 'Phone', 'رقم الهاتف', { dir: 'ltr' })}
-              <div>
-                {renderInput('business_whatsapp', 'WhatsApp Number', 'رقم واتساب للتواصل', { dir: 'ltr', placeholder: '966501234567' })}
-                <p className="text-xs text-gray-500 mt-1">
-                  {isRTL
-                    ? 'سيظهر في الفواتير المرسلة للعملاء. استخدم الرقم بصيغة دولية (مثال: 966501234567)'
-                    : 'Will appear in invoices sent to customers. Use international format (e.g., 966501234567)'}
-                </p>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'معلومات الشركة' : 'Company Information'}</h3>
+                {renderInput('company_name', 'Company Name', 'اسم الشركة', { dir: 'ltr' })}
+                {renderInput('company_name_ar', 'Company Name (Arabic)', 'اسم الشركة (عربي)', { dir: 'rtl' })}
+                {renderInput('business_name', 'Business/Brand Name', 'اسم المحل/العلامة التجارية', { dir: 'ltr' })}
+                {renderInput('business_name_ar', 'Business Name (Arabic)', 'اسم المحل (عربي)', { dir: 'rtl' })}
+                {renderInput('business_type', 'Business Type', 'نوع النشاط', { dir: 'ltr' })}
+                {renderInput('business_type_ar', 'Business Type (Arabic)', 'نوع النشاط (عربي)', { dir: 'rtl' })}
+                {renderInput('commercial_register', 'Commercial Register', 'السجل التجاري', { dir: 'ltr' })}
               </div>
-              {renderInput('business_address', 'Address', 'العنوان', { dir: 'ltr' })}
-              {renderInput('business_address_ar', 'Address (Arabic)', 'العنوان (عربي)', { dir: 'rtl' })}
-              {renderInput('business_city', 'City', 'المدينة', { dir: 'ltr' })}
-              {renderInput('business_city_ar', 'City (Arabic)', 'المدينة (عربي)', { dir: 'rtl' })}
-              {renderSelect('currency', 'Currency', 'العملة', [
-                { value: 'SAR', label: 'Saudi Riyal (SAR)', labelAr: 'ريال سعودي (SAR)' },
-                { value: 'AED', label: 'UAE Dirham (AED)', labelAr: 'درهم إماراتي (AED)' },
-                { value: 'USD', label: 'US Dollar (USD)', labelAr: 'دولار أمريكي (USD)' },
-              ])}
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'معلومات التواصل' : 'Contact Information'}</h3>
+                {renderInput('business_phone', 'Phone', 'رقم الهاتف', { dir: 'ltr' })}
+                <div>
+                  {renderInput('business_whatsapp', 'WhatsApp Number', 'رقم واتساب للتواصل', { dir: 'ltr', placeholder: '966501234567' })}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {isRTL
+                      ? 'سيظهر في الفواتير المرسلة للعملاء. استخدم الرقم بصيغة دولية (مثال: 966501234567)'
+                      : 'Will appear in invoices sent to customers. Use international format (e.g., 966501234567)'}
+                  </p>
+                </div>
+                {renderInput('business_address', 'Address', 'العنوان', { dir: 'ltr' })}
+                {renderInput('business_address_ar', 'Address (Arabic)', 'العنوان (عربي)', { dir: 'rtl' })}
+                {renderInput('business_city', 'City', 'المدينة', { dir: 'ltr' })}
+                {renderInput('business_city_ar', 'City (Arabic)', 'المدينة (عربي)', { dir: 'rtl' })}
+                {renderSelect('currency', 'Currency', 'العملة', [
+                  { value: 'SAR', label: 'Saudi Riyal (SAR)', labelAr: 'ريال سعودي (SAR)' },
+                  { value: 'AED', label: 'UAE Dirham (AED)', labelAr: 'درهم إماراتي (AED)' },
+                  { value: 'USD', label: 'US Dollar (USD)', labelAr: 'دولار أمريكي (USD)' },
+                ])}
+              </div>
             </div>
+            {renderSectionSaveButton()}
           </div>
         )}
 
         {activeTab === 'tax' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2.5 bg-green-100 rounded-lg">
-                  <FileText className="w-5 h-5 text-green-600" />
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2.5 bg-green-100 rounded-lg">
+                    <FileText className="w-5 h-5 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'الضريبة' : 'Tax Settings'}</h3>
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'الضريبة' : 'Tax Settings'}</h3>
+                {renderInput('tax_number', 'Tax Number (VAT)', 'الرقم الضريبي', { dir: 'ltr', placeholder: '300000000000003' })}
+                {renderInput('tax_rate', 'Tax Rate (%)', 'نسبة الضريبة (%)', { type: 'number', dir: 'ltr' })}
+                {renderToggle('show_tax_on_invoice', 'Show Tax on Invoice', 'عرض الضريبة في الفاتورة')}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <p className="text-sm text-amber-800 font-medium">{isRTL ? 'ملاحظة' : 'Note'}</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    {isRTL
+                      ? 'الرقم الضريبي سيظهر في جميع الفواتير وفي رمز QR الخاص بهيئة الزكاة والضريبة.'
+                      : 'The tax number will appear on all invoices and in the ZATCA QR code.'}
+                  </p>
+                </div>
               </div>
-              {renderInput('tax_number', 'Tax Number (VAT)', 'الرقم الضريبي', { dir: 'ltr', placeholder: '300000000000003' })}
-              {renderInput('tax_rate', 'Tax Rate (%)', 'نسبة الضريبة (%)', { type: 'number', dir: 'ltr' })}
-              {renderToggle('show_tax_on_invoice', 'Show Tax on Invoice', 'عرض الضريبة في الفاتورة')}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-800 font-medium">{isRTL ? 'ملاحظة' : 'Note'}</p>
-                <p className="text-xs text-amber-700 mt-1">
-                  {isRTL
-                    ? 'الرقم الضريبي سيظهر في جميع الفواتير وفي رمز QR الخاص بهيئة الزكاة والضريبة.'
-                    : 'The tax number will appear on all invoices and in the ZATCA QR code.'}
-                </p>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2.5 bg-teal-100 rounded-lg">
-                  <QrCode className="w-5 h-5 text-teal-600" />
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2.5 bg-teal-100 rounded-lg">
+                    <QrCode className="w-5 h-5 text-teal-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'هيئة الزكاة والضريبة والجمارك' : 'ZATCA Integration'}</h3>
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'هيئة الزكاة والضريبة والجمارك' : 'ZATCA Integration'}</h3>
-              </div>
-              {renderToggle('zatca_enabled', 'Enable ZATCA', 'تفعيل الربط مع الهيئة',
-                'Connect to ZATCA for e-invoicing compliance', 'الربط مع هيئة الزكاة والضريبة والجمارك للفوترة الإلكترونية')}
-              {renderSelect('zatca_mode', 'ZATCA Mode', 'وضع الربط', [
-                { value: 'sandbox', label: 'Sandbox (Testing)', labelAr: 'اختبار (Sandbox)' },
-                { value: 'simulation', label: 'Simulation', labelAr: 'محاكاة (Simulation)' },
-                { value: 'production', label: 'Production', labelAr: 'إنتاج (Production)' },
-              ])}
-              {renderInput('zatca_otp', 'ZATCA OTP', 'رمز التحقق OTP', { dir: 'ltr' })}
-              {renderSelect('invoice_type', 'Invoice Type', 'نوع الفاتورة', [
-                { value: 'simplified', label: 'Simplified Tax Invoice', labelAr: 'فاتورة ضريبية مبسطة' },
-                { value: 'standard', label: 'Standard Tax Invoice', labelAr: 'فاتورة ضريبية' },
-              ])}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800 font-medium">{isRTL ? 'متطلبات الفوترة الإلكترونية' : 'E-invoicing Requirements'}</p>
-                <ul className="text-xs text-blue-700 mt-2 space-y-1 list-disc list-inside">
-                  <li>{isRTL ? 'اسم الشركة ورقم السجل التجاري' : 'Company name and commercial register'}</li>
-                  <li>{isRTL ? 'الرقم الضريبي (VAT)' : 'Tax number (VAT)'}</li>
-                  <li>{isRTL ? 'عنوان الشركة والمدينة' : 'Company address and city'}</li>
-                  <li>{isRTL ? 'رمز QR يحتوي على بيانات ZATCA' : 'QR code with ZATCA data'}</li>
-                </ul>
+                {renderToggle('zatca_enabled', 'Enable ZATCA', 'تفعيل الربط مع الهيئة',
+                  'Connect to ZATCA for e-invoicing compliance', 'الربط مع هيئة الزكاة والضريبة والجمارك للفوترة الإلكترونية')}
+                {renderSelect('zatca_mode', 'ZATCA Mode', 'وضع الربط', [
+                  { value: 'sandbox', label: 'Sandbox (Testing)', labelAr: 'اختبار (Sandbox)' },
+                  { value: 'simulation', label: 'Simulation', labelAr: 'محاكاة (Simulation)' },
+                  { value: 'production', label: 'Production', labelAr: 'إنتاج (Production)' },
+                ])}
+                {renderInput('zatca_otp', 'ZATCA OTP', 'رمز التحقق OTP', { dir: 'ltr' })}
+                {renderSelect('invoice_type', 'Invoice Type', 'نوع الفاتورة', [
+                  { value: 'simplified', label: 'Simplified Tax Invoice', labelAr: 'فاتورة ضريبية مبسطة' },
+                  { value: 'standard', label: 'Standard Tax Invoice', labelAr: 'فاتورة ضريبية' },
+                ])}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800 font-medium">{isRTL ? 'متطلبات الفوترة الإلكترونية' : 'E-invoicing Requirements'}</p>
+                  <ul className="text-xs text-blue-700 mt-2 space-y-1 list-disc list-inside">
+                    <li>{isRTL ? 'اسم الشركة ورقم السجل التجاري' : 'Company name and commercial register'}</li>
+                    <li>{isRTL ? 'الرقم الضريبي (VAT)' : 'Tax number (VAT)'}</li>
+                    <li>{isRTL ? 'عنوان الشركة والمدينة' : 'Company address and city'}</li>
+                    <li>{isRTL ? 'رمز QR يحتوي على بيانات ZATCA' : 'QR code with ZATCA data'}</li>
+                  </ul>
+                </div>
               </div>
             </div>
+            {renderSectionSaveButton()}
           </div>
         )}
 
         {activeTab === 'invoice' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'إعدادات الفاتورة' : 'Invoice Settings'}</h3>
-              {renderInput('invoice_prefix', 'Invoice Prefix', 'بادئة رقم الفاتورة', { dir: 'ltr', placeholder: 'BLV' })}
-              {renderToggle('auto_print_invoice', 'Auto Print Invoice', 'طباعة الفاتورة تلقائياً',
-                'Automatically print invoice after sale', 'طباعة الفاتورة تلقائياً بعد إتمام البيع')}
-              {renderToggle('barcode_enabled', 'Enable Barcode/QR', 'تفعيل الباركود/QR',
-                'Show QR code on invoices', 'عرض رمز QR في الفواتير')}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'إعدادات الفاتورة' : 'Invoice Settings'}</h3>
+                {renderInput('invoice_prefix', 'Invoice Prefix', 'بادئة رقم الفاتورة', { dir: 'ltr', placeholder: 'BLV' })}
+                {renderToggle('auto_print_invoice', 'Auto Print Invoice', 'طباعة الفاتورة تلقائياً',
+                  'Automatically print invoice after sale', 'طباعة الفاتورة تلقائياً بعد إتمام البيع')}
+                {renderToggle('barcode_enabled', 'Enable Barcode/QR', 'تفعيل الباركود/QR',
+                  'Show QR code on invoices', 'عرض رمز QR في الفواتير')}
+              </div>
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'نص الفاتورة' : 'Invoice Text'}</h3>
+                {renderInput('invoice_notes', 'Invoice Notes (English)', 'ملاحظات الفاتورة (إنجليزي)', { dir: 'ltr' })}
+                {renderInput('invoice_notes_ar', 'Invoice Notes (Arabic)', 'ملاحظات الفاتورة (عربي)', { dir: 'rtl' })}
+                {renderInput('receipt_footer', 'Receipt Footer (English)', 'تذييل الإيصال (إنجليزي)', { dir: 'ltr' })}
+                {renderInput('receipt_footer_ar', 'Receipt Footer (Arabic)', 'تذييل الإيصال (عربي)', { dir: 'rtl' })}
+              </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'نص الفاتورة' : 'Invoice Text'}</h3>
-              {renderInput('invoice_notes', 'Invoice Notes (English)', 'ملاحظات الفاتورة (إنجليزي)', { dir: 'ltr' })}
-              {renderInput('invoice_notes_ar', 'Invoice Notes (Arabic)', 'ملاحظات الفاتورة (عربي)', { dir: 'rtl' })}
-              {renderInput('receipt_footer', 'Receipt Footer (English)', 'تذييل الإيصال (إنجليزي)', { dir: 'ltr' })}
-              {renderInput('receipt_footer_ar', 'Receipt Footer (Arabic)', 'تذييل الإيصال (عربي)', { dir: 'rtl' })}
-            </div>
+            {renderSectionSaveButton()}
           </div>
         )}
 
         {activeTab === 'pos' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'نقاط البيع' : 'Point of Sale'}</h3>
-              {renderSelect('default_payment_method', 'Default Payment Method', 'طريقة الدفع الافتراضية', [
-                { value: 'cash', label: 'Cash', labelAr: 'نقدي' },
-                { value: 'card', label: 'Card', labelAr: 'بطاقة' },
-                { value: 'transfer', label: 'Bank Transfer', labelAr: 'تحويل بنكي' },
-              ])}
-              {renderToggle('whatsapp_notifications', 'WhatsApp Notifications', 'إشعارات واتساب',
-                'Send invoice via WhatsApp', 'إرسال الفاتورة عبر واتساب')}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'نقاط البيع' : 'Point of Sale'}</h3>
+                {renderSelect('default_payment_method', 'Default Payment Method', 'طريقة الدفع الافتراضية', [
+                  { value: 'cash', label: 'Cash', labelAr: 'نقدي' },
+                  { value: 'card', label: 'Card', labelAr: 'بطاقة' },
+                  { value: 'transfer', label: 'Bank Transfer', labelAr: 'تحويل بنكي' },
+                ])}
+                {renderToggle('whatsapp_notifications', 'WhatsApp Notifications', 'إشعارات واتساب',
+                  'Send invoice via WhatsApp', 'إرسال الفاتورة عبر واتساب')}
+              </div>
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'التوصيل والمناسبات' : 'Delivery & Events'}</h3>
+                {renderToggle('delivery_enabled', 'Enable Delivery', 'تفعيل التوصيل')}
+                {renderInput('default_delivery_charge', 'Default Delivery Charge', 'رسوم التوصيل الافتراضية', { type: 'number', dir: 'ltr' })}
+                {renderToggle('event_orders_enabled', 'Enable Event Orders', 'تفعيل طلبات المناسبات',
+                  'Allow orders for weddings, birthdays, etc.', 'السماح بطلبات حفلات الزفاف وأعياد الميلاد وغيرها')}
+              </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'التوصيل والمناسبات' : 'Delivery & Events'}</h3>
-              {renderToggle('delivery_enabled', 'Enable Delivery', 'تفعيل التوصيل')}
-              {renderInput('default_delivery_charge', 'Default Delivery Charge', 'رسوم التوصيل الافتراضية', { type: 'number', dir: 'ltr' })}
-              {renderToggle('event_orders_enabled', 'Enable Event Orders', 'تفعيل طلبات المناسبات',
-                'Allow orders for weddings, birthdays, etc.', 'السماح بطلبات حفلات الزفاف وأعياد الميلاد وغيرها')}
-            </div>
+            {renderSectionSaveButton()}
           </div>
         )}
 
         {activeTab === 'inventory' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'إعدادات المخزون' : 'Inventory Settings'}</h3>
-              {renderToggle('stock_alert_enabled', 'Low Stock Alerts', 'تنبيهات المخزون المنخفض',
-                'Notify when stock is below threshold', 'التنبيه عندما ينخفض المخزون عن الحد الأدنى')}
-              {renderInput('low_stock_threshold', 'Low Stock Threshold', 'حد المخزون المنخفض', { type: 'number', dir: 'ltr' })}
-              {renderToggle('allow_negative_stock', 'Allow Negative Stock', 'السماح بمخزون سالب',
-                'Allow sales when stock is zero', 'السماح بالبيع عندما يكون المخزون صفراً')}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'إعدادات المخزون' : 'Inventory Settings'}</h3>
+                {renderToggle('stock_alert_enabled', 'Low Stock Alerts', 'تنبيهات المخزون المنخفض',
+                  'Notify when stock is below threshold', 'التنبيه عندما ينخفض المخزون عن الحد الأدنى')}
+                {renderInput('low_stock_threshold', 'Low Stock Threshold', 'حد المخزون المنخفض', { type: 'number', dir: 'ltr' })}
+                {renderToggle('allow_negative_stock', 'Allow Negative Stock', 'السماح بمخزون سالب',
+                  'Allow sales when stock is zero', 'السماح بالبيع عندما يكون المخزون صفراً')}
+              </div>
             </div>
+            {renderSectionSaveButton()}
           </div>
         )}
 
         {activeTab === 'loyalty' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'برنامج الولاء' : 'Loyalty Program'}</h3>
-              {renderToggle('loyalty_enabled', 'Enable Loyalty Program', 'تفعيل برنامج الولاء',
-                'Earn points on purchases', 'كسب نقاط على المشتريات')}
-              {renderInput('loyalty_points_per_sar', 'Points per SAR', 'نقاط لكل ريال', { type: 'number', dir: 'ltr' })}
-              {renderInput('loyalty_redemption_rate', 'Points for 1 SAR Discount', 'نقاط مقابل 1 ريال خصم', { type: 'number', dir: 'ltr' })}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">{isRTL ? 'برنامج الولاء' : 'Loyalty Program'}</h3>
+                {renderToggle('loyalty_enabled', 'Enable Loyalty Program', 'تفعيل برنامج الولاء',
+                  'Earn points on purchases', 'كسب نقاط على المشتريات')}
+                {renderInput('loyalty_points_per_sar', 'Points per SAR', 'نقاط لكل ريال', { type: 'number', dir: 'ltr' })}
+                {renderInput('loyalty_redemption_rate', 'Points for 1 SAR Discount', 'نقاط مقابل 1 ريال خصم', { type: 'number', dir: 'ltr' })}
+              </div>
             </div>
+            {renderSectionSaveButton()}
           </div>
         )}
 
         {activeTab === 'sms' && (
-          <div className="grid grid-cols-1 gap-6">
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6">
+            <div className="bg-gradient-to-r from-blue-50 to-teal-50 border border-blue-200 rounded-xl p-6">
               <div className="flex items-start gap-3">
                 <MessageSquare className="w-6 h-6 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div>
@@ -517,6 +587,8 @@ export function Settings() {
                 </div>
               </div>
             </div>
+            </div>
+            {renderSectionSaveButton()}
           </div>
         )}
 
