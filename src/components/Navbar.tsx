@@ -115,7 +115,7 @@ export function Navbar() {
                     onClick={() => setShowConnectionMenu(false)}
                   />
                   <div
-                    className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-80 bg-white rounded-xl shadow-soft-xl border border-lux-border z-40`}
+                    className={`fixed ${isRTL ? 'left-auto right-4' : 'right-4'} top-16 w-80 bg-white rounded-xl shadow-soft-xl border border-lux-border z-40`}
                   >
                     <div className="p-4 space-y-3">
                       <div className="flex items-center justify-between mb-2">
@@ -214,7 +214,7 @@ export function Navbar() {
                 {showBranchMenu && (
                   <>
                     <div className="fixed inset-0 z-30" onClick={() => setShowBranchMenu(false)} />
-                    <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-52 bg-white rounded-xl shadow-soft-xl border border-lux-border z-40 overflow-hidden`}>
+                    <div className={`fixed ${isRTL ? 'left-auto' : ''} top-16 w-52 bg-white rounded-xl shadow-soft-xl border border-lux-border z-40 overflow-hidden`} style={{ right: isRTL ? 'auto' : '200px' }}>
                       <div className="p-2">
                         <button
                           onClick={() => { setSelectedBranchFilter(null); setShowBranchMenu(false); }}
