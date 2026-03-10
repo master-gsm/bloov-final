@@ -18,5 +18,16 @@ export default defineConfig({
   build: {
     target: ['es2020', 'safari13', 'chrome64', 'firefox67'],
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-pdf': ['jspdf', 'html2canvas'],
+          'vendor-xlsx': ['xlsx'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
   },
 });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Component } from 'react';
+import { useState, useEffect, useRef, Component, lazy, Suspense } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BranchProvider } from './contexts/BranchContext';
@@ -11,29 +11,30 @@ import { ResetPassword } from './components/ResetPassword';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { TestModeAlert } from './components/TestModeAlert';
-import { Dashboard } from './components/Dashboard';
-import { Products } from './components/Products';
-import { Partners } from './components/Partners';
-import { Employees } from './components/Employees';
-import { UserManagement } from './components/UserManagement';
-import { Sales } from './components/Sales';
-import { Purchases } from './components/Purchases';
-import Expenses from './components/Expenses';
-import { Customers } from './components/Customers';
-import { Suppliers } from './components/Suppliers';
-import { Inventory } from './components/Inventory';
-import { Reports } from './components/Reports';
-import { Settings } from './components/Settings';
-import { CashRegister } from './components/CashRegister';
-import { SallaOrders } from './components/SallaOrders';
-import Branches from './components/Branches';
-import Backup from './components/Backup';
-import FixedAssets from './components/FixedAssets';
-import JournalEntries from './components/JournalEntries';
-import SystemHealth from './components/SystemHealth';
-import EmployeeCustody from './components/EmployeeCustody';
 import { supabase } from './lib/supabase';
 import type { Section } from './lib/permissions';
+
+const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const Products = lazy(() => import('./components/Products').then(m => ({ default: m.Products })));
+const Partners = lazy(() => import('./components/Partners').then(m => ({ default: m.Partners })));
+const Employees = lazy(() => import('./components/Employees').then(m => ({ default: m.Employees })));
+const UserManagement = lazy(() => import('./components/UserManagement').then(m => ({ default: m.UserManagement })));
+const Sales = lazy(() => import('./components/Sales').then(m => ({ default: m.Sales })));
+const Purchases = lazy(() => import('./components/Purchases').then(m => ({ default: m.Purchases })));
+const Expenses = lazy(() => import('./components/Expenses'));
+const Customers = lazy(() => import('./components/Customers').then(m => ({ default: m.Customers })));
+const Suppliers = lazy(() => import('./components/Suppliers').then(m => ({ default: m.Suppliers })));
+const Inventory = lazy(() => import('./components/Inventory').then(m => ({ default: m.Inventory })));
+const Reports = lazy(() => import('./components/Reports').then(m => ({ default: m.Reports })));
+const Settings = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
+const CashRegister = lazy(() => import('./components/CashRegister').then(m => ({ default: m.CashRegister })));
+const SallaOrders = lazy(() => import('./components/SallaOrders').then(m => ({ default: m.SallaOrders })));
+const Branches = lazy(() => import('./components/Branches'));
+const Backup = lazy(() => import('./components/Backup'));
+const FixedAssets = lazy(() => import('./components/FixedAssets'));
+const JournalEntries = lazy(() => import('./components/JournalEntries'));
+const SystemHealth = lazy(() => import('./components/SystemHealth'));
+const EmployeeCustody = lazy(() => import('./components/EmployeeCustody'));
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -143,15 +144,18 @@ function AppContent() {
     }
   };
 
+  const SectionLoader = () => (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <p className="mt-3 text-secondary text-sm">{t('common.loading')}</p>
+      </div>
+    </div>
+  );
+
   const renderSection = () => {
     if (!permissionsReady) {
-      return (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto"></div>
-          </div>
-        </div>
-      );
+      return <SectionLoader />;
     }
 
     if (!can(activeSection as Section, 'view')) {
@@ -170,30 +174,38 @@ function AppContent() {
       );
     }
 
-    switch (activeSection) {
-      case 'dashboard': return <Dashboard />;
-      case 'products': return <Products />;
-      case 'partners': return <Partners />;
-      case 'employees': return <Employees />;
-      case 'custody': return <EmployeeCustody />;
-      case 'sales': return <Sales />;
-      case 'purchases': return <Purchases />;
-      case 'expenses': return <Expenses />;
-      case 'fixedassets': return <FixedAssets />;
-      case 'inventory': return <Inventory />;
-      case 'customers': return <Customers />;
-      case 'suppliers': return <Suppliers />;
-      case 'branches': return <Branches />;
-      case 'salla': return <SallaOrders />;
-      case 'cashregister': return <CashRegister />;
-      case 'reports': return <Reports />;
-      case 'journal': return <JournalEntries />;
-      case 'backup': return <Backup />;
-      case 'systemhealth': return <SystemHealth />;
-      case 'users': return <UserManagement />;
-      case 'settings': return <Settings />;
-      default: return <Dashboard />;
-    }
+    const renderComponent = () => {
+      switch (activeSection) {
+        case 'dashboard': return <Dashboard />;
+        case 'products': return <Products />;
+        case 'partners': return <Partners />;
+        case 'employees': return <Employees />;
+        case 'custody': return <EmployeeCustody />;
+        case 'sales': return <Sales />;
+        case 'purchases': return <Purchases />;
+        case 'expenses': return <Expenses />;
+        case 'fixedassets': return <FixedAssets />;
+        case 'inventory': return <Inventory />;
+        case 'customers': return <Customers />;
+        case 'suppliers': return <Suppliers />;
+        case 'branches': return <Branches />;
+        case 'salla': return <SallaOrders />;
+        case 'cashregister': return <CashRegister />;
+        case 'reports': return <Reports />;
+        case 'journal': return <JournalEntries />;
+        case 'backup': return <Backup />;
+        case 'systemhealth': return <SystemHealth />;
+        case 'users': return <UserManagement />;
+        case 'settings': return <Settings />;
+        default: return <Dashboard />;
+      }
+    };
+
+    return (
+      <Suspense fallback={<SectionLoader />}>
+        {renderComponent()}
+      </Suspense>
+    );
   };
 
   return (
