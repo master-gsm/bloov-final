@@ -18,6 +18,15 @@ import {
   Rows3,
   Link,
   KeyRound,
+  Bug,
+  FileText,
+  User,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 
 interface HealthReport {
@@ -120,6 +129,49 @@ const FAILURE_TYPE_LABELS: Record<string, { label: string; labelAr: string; colo
   ok:            { label: 'OK',              labelAr: 'سليم',                color: 'bg-emerald-100 text-emerald-700' },
 };
 
+interface ErrorLogEntry {
+  id: string;
+  error_code: string | null;
+  error_message: string;
+  error_type: string;
+  severity: string;
+  component: string | null;
+  occurrence_count: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  is_resolved: boolean;
+  affected_user: string | null;
+  branch_name: string | null;
+}
+
+interface AuditLogEntry {
+  id: string;
+  created_at: string;
+  action: string;
+  table_name: string;
+  record_id: string;
+  user_name: string | null;
+  user_role: string | null;
+  branch_name: string | null;
+  severity: string;
+}
+
+interface AccountingPeriod {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_closed: boolean;
+  status: string;
+  closed_at: string | null;
+  closed_by_name: string | null;
+  total_entries: number;
+  posted_entries: number;
+  unposted_entries: number;
+  sales_count: number;
+  purchases_count: number;
+}
+
 export function SystemHealth() {
   const { isRTL } = useLanguage();
   const [loading, setLoading] = useState(true);
@@ -132,6 +184,15 @@ export function SystemHealth() {
   const [restoreReport, setRestoreReport] = useState<RestoreReport | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreExpanded, setRestoreExpanded] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<'health' | 'errors' | 'audit' | 'periods'>('health');
+  const [errorLogs, setErrorLogs] = useState<ErrorLogEntry[]>([]);
+  const [errorLogsLoading, setErrorLogsLoading] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const [periods, setPeriods] = useState<AccountingPeriod[]>([]);
+  const [periodsLoading, setPeriodsLoading] = useState(false);
+  const [closingPeriodId, setClosingPeriodId] = useState<string | null>(null);
 
   const runHealthCheck = useCallback(async () => {
     setLoading(true);
@@ -311,9 +372,98 @@ export function SystemHealth() {
     }
   }, []);
 
+  const loadErrorLogs = useCallback(async () => {
+    setErrorLogsLoading(true);
+    try {
+      const { data, error: err } = await supabase
+        .from('v_error_dashboard')
+        .select('*')
+        .order('last_seen_at', { ascending: false })
+        .limit(50);
+      if (err) throw err;
+      setErrorLogs((data || []) as ErrorLogEntry[]);
+    } catch (err) {
+      console.error('[SystemHealth] Error loading error logs:', err);
+    } finally {
+      setErrorLogsLoading(false);
+    }
+  }, []);
+
+  const loadAuditLogs = useCallback(async () => {
+    setAuditLogsLoading(true);
+    try {
+      const { data, error: err } = await supabase
+        .from('v_audit_logs_detailed')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (err) throw err;
+      setAuditLogs((data || []) as AuditLogEntry[]);
+    } catch (err) {
+      console.error('[SystemHealth] Error loading audit logs:', err);
+    } finally {
+      setAuditLogsLoading(false);
+    }
+  }, []);
+
+  const loadPeriods = useCallback(async () => {
+    setPeriodsLoading(true);
+    try {
+      const { data, error: err } = await supabase
+        .from('v_accounting_periods_status')
+        .select('*')
+        .order('start_date', { ascending: false });
+      if (err) throw err;
+      setPeriods((data || []) as AccountingPeriod[]);
+    } catch (err) {
+      console.error('[SystemHealth] Error loading periods:', err);
+    } finally {
+      setPeriodsLoading(false);
+    }
+  }, []);
+
+  const handleClosePeriod = async (periodId: string) => {
+    if (!confirm(isRTL ? 'هل تريد إغلاق هذه الفترة المحاسبية؟ لن يمكن تعديل القيود بعد الإغلاق.' : 'Are you sure you want to close this period? Journal entries cannot be modified after closing.')) {
+      return;
+    }
+    setClosingPeriodId(periodId);
+    try {
+      const { error: err } = await supabase.rpc('fn_close_accounting_period', {
+        p_period_id: periodId,
+        p_reason: 'Monthly close via System Health'
+      });
+      if (err) throw err;
+      await loadPeriods();
+    } catch (err) {
+      console.error('[SystemHealth] Error closing period:', err);
+      alert(isRTL ? 'فشل إغلاق الفترة' : 'Failed to close period');
+    } finally {
+      setClosingPeriodId(null);
+    }
+  };
+
+  const handleResolveError = async (errorId: string) => {
+    try {
+      const { error: err } = await supabase.rpc('fn_resolve_error', {
+        p_error_id: errorId,
+        p_resolution_notes: 'Resolved via System Health dashboard'
+      });
+      if (err) throw err;
+      await loadErrorLogs();
+    } catch (err) {
+      console.error('[SystemHealth] Error resolving error:', err);
+    }
+  };
+
   useEffect(() => {
     runHealthCheck();
   }, [runHealthCheck]);
+
+  useEffect(() => {
+    if (activeTab === 'errors') loadErrorLogs();
+    if (activeTab === 'audit') loadAuditLogs();
+    if (activeTab === 'periods') loadPeriods();
+  }, [activeTab, loadErrorLogs, loadAuditLogs, loadPeriods]);
 
   const overall = overallStatus(checks);
 
@@ -354,34 +504,76 @@ export function SystemHealth() {
 
   const failedRestoreChecks = restoreReport?.checks.filter(c => c.status === 'fail') ?? [];
 
+  const severityBadge = (severity: string) => {
+    const colors: Record<string, string> = {
+      critical: 'bg-red-100 text-red-700',
+      error: 'bg-red-100 text-red-700',
+      warning: 'bg-amber-100 text-amber-700',
+      info: 'bg-blue-100 text-blue-700',
+      success: 'bg-emerald-100 text-emerald-700',
+      danger: 'bg-red-100 text-red-700',
+    };
+    return colors[severity] || 'bg-gray-100 text-gray-700';
+  };
+
+  const tabs = [
+    { id: 'health', label: isRTL ? 'صحة النظام' : 'Health', icon: ShieldCheck },
+    { id: 'errors', label: isRTL ? 'سجل الأخطاء' : 'Errors', icon: Bug },
+    { id: 'audit', label: isRTL ? 'سجل التدقيق' : 'Audit Log', icon: FileText },
+    { id: 'periods', label: isRTL ? 'الفترات المحاسبية' : 'Periods', icon: Calendar },
+  ] as const;
+
   return (
-    <div className={`p-6 max-w-5xl mx-auto space-y-6 ${isRTL ? 'rtl' : 'ltr'}`}>
+    <div className={`p-6 max-w-6xl mx-auto space-y-6 ${isRTL ? 'rtl' : 'ltr'}`}>
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {isRTL ? 'فحص صحة النظام' : 'System Health Check'}
+            {isRTL ? 'مركز التحكم والمراقبة' : 'System Control Center'}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             {isRTL
-              ? 'نظرة عامة على سلامة قاعدة البيانات والبيانات المالية'
-              : 'Database and financial data integrity overview'}
+              ? 'مراقبة صحة النظام، الأخطاء، التدقيق، والفترات المحاسبية'
+              : 'Monitor system health, errors, audit trail, and accounting periods'}
           </p>
         </div>
-        <button
-          onClick={runHealthCheck}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition text-sm font-medium"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          {isRTL ? 'إعادة الفحص' : 'Re-run Checks'}
-        </button>
       </div>
 
-      {/* Overall Banner */}
-      <div className={`${overallBanner.bg} rounded-xl p-5 flex items-center gap-4 shadow`}>
-        {overallBanner.icon}
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab.id
+                ? 'bg-white text-teal-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Health Tab Content */}
+      {activeTab === 'health' && (
+        <>
+          {/* Overall Banner */}
+          <div className="flex items-center justify-end mb-4">
+            <button
+              onClick={runHealthCheck}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition text-sm font-medium"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              {isRTL ? 'إعادة الفحص' : 'Re-run Checks'}
+            </button>
+          </div>
+          <div className={`${overallBanner.bg} rounded-xl p-5 flex items-center gap-4 shadow`}>
+            {overallBanner.icon}
         <div>
           <p className="text-white font-bold text-lg leading-tight">{overallBanner.label}</p>
           {overallBanner.sub && <p className="text-white/80 text-sm">{overallBanner.sub}</p>}
@@ -623,6 +815,309 @@ export function SystemHealth() {
             : 'See scripts/export-database.sql for the full dependency order and verification steps.'}
         </p>
       </div>
+        </>
+      )}
+
+      {/* Errors Tab Content */}
+      {activeTab === 'errors' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">
+              {isRTL ? 'سجل الأخطاء' : 'Error Log'}
+            </h2>
+            <button
+              onClick={loadErrorLogs}
+              disabled={errorLogsLoading}
+              className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition text-xs font-medium"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${errorLogsLoading ? 'animate-spin' : ''}`} />
+              {isRTL ? 'تحديث' : 'Refresh'}
+            </button>
+          </div>
+
+          {errorLogsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : errorLogs.length === 0 ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-8 text-center">
+              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+              <p className="text-emerald-700 font-medium">
+                {isRTL ? 'لا توجد أخطاء مسجلة' : 'No errors recorded'}
+              </p>
+              <p className="text-emerald-600 text-sm mt-1">
+                {isRTL ? 'النظام يعمل بشكل طبيعي' : 'System is running smoothly'}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="divide-y divide-gray-100">
+                {errorLogs.map((err) => (
+                  <div key={err.id} className={`p-4 hover:bg-gray-50 ${err.is_resolved ? 'opacity-60' : ''}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${severityBadge(err.severity)}`}>
+                            {err.severity}
+                          </span>
+                          {err.component && (
+                            <span className="text-xs text-gray-500 font-mono">{err.component}</span>
+                          )}
+                          {err.occurrence_count > 1 && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                              x{err.occurrence_count}
+                            </span>
+                          )}
+                          {err.is_resolved && (
+                            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                              {isRTL ? 'تم الحل' : 'Resolved'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-900 font-medium truncate">{err.error_message}</p>
+                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {fmtDate(err.last_seen_at)}
+                          </span>
+                          {err.affected_user && (
+                            <span className="flex items-center gap-1">
+                              <User className="w-3 h-3" />
+                              {err.affected_user}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {!err.is_resolved && (
+                        <button
+                          onClick={() => handleResolveError(err.id)}
+                          className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition"
+                        >
+                          {isRTL ? 'تم الحل' : 'Resolve'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Audit Log Tab Content */}
+      {activeTab === 'audit' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">
+              {isRTL ? 'سجل التدقيق' : 'Audit Trail'}
+            </h2>
+            <button
+              onClick={loadAuditLogs}
+              disabled={auditLogsLoading}
+              className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition text-xs font-medium"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${auditLogsLoading ? 'animate-spin' : ''}`} />
+              {isRTL ? 'تحديث' : 'Refresh'}
+            </button>
+          </div>
+
+          {auditLogsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : auditLogs.length === 0 ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 font-medium">
+                {isRTL ? 'لا توجد سجلات تدقيق' : 'No audit records'}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">
+                        {isRTL ? 'التاريخ' : 'Date'}
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">
+                        {isRTL ? 'الإجراء' : 'Action'}
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">
+                        {isRTL ? 'الجدول' : 'Table'}
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">
+                        {isRTL ? 'المستخدم' : 'User'}
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">
+                        {isRTL ? 'الفرع' : 'Branch'}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                          {fmtDate(log.created_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${severityBadge(log.severity)}`}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 font-mono text-xs">
+                          {log.table_name}
+                        </td>
+                        <td className="px-4 py-3 text-gray-900">
+                          {log.user_name || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {log.branch_name || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Periods Tab Content */}
+      {activeTab === 'periods' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">
+              {isRTL ? 'الفترات المحاسبية' : 'Accounting Periods'}
+            </h2>
+            <button
+              onClick={loadPeriods}
+              disabled={periodsLoading}
+              className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition text-xs font-medium"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${periodsLoading ? 'animate-spin' : ''}`} />
+              {isRTL ? 'تحديث' : 'Refresh'}
+            </button>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <p className="font-medium mb-1">
+                  {isRTL ? 'تنبيه مهم' : 'Important Notice'}
+                </p>
+                <p>
+                  {isRTL
+                    ? 'إغلاق الفترة المحاسبية يمنع أي تعديل على المبيعات، المشتريات، المصروفات، والقيود المحاسبية في تلك الفترة. لا يمكن التراجع إلا بواسطة المسؤول الأعلى.'
+                    : 'Closing an accounting period prevents any modifications to sales, purchases, expenses, and journal entries within that period. Only super admin can reopen.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {periodsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : periods.length === 0 ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+              <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 font-medium">
+                {isRTL ? 'لا توجد فترات محاسبية' : 'No accounting periods'}
+              </p>
+              <p className="text-gray-500 text-sm mt-1">
+                {isRTL ? 'أنشئ فترات محاسبية من الإعدادات' : 'Create accounting periods from settings'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {periods.map((period) => (
+                <div
+                  key={period.id}
+                  className={`bg-white border rounded-xl p-5 ${
+                    period.is_closed ? 'border-gray-200' : 'border-emerald-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        {period.is_closed ? (
+                          <Lock className="w-5 h-5 text-gray-500" />
+                        ) : (
+                          <Unlock className="w-5 h-5 text-emerald-500" />
+                        )}
+                        <h3 className="font-semibold text-gray-900">{period.name}</h3>
+                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${
+                          period.is_closed
+                            ? 'bg-gray-100 text-gray-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {period.is_closed
+                            ? (isRTL ? 'مغلقة' : 'Closed')
+                            : (isRTL ? 'مفتوحة' : 'Open')}
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-600 mb-3">
+                        {new Date(period.start_date).toLocaleDateString()} - {new Date(period.end_date).toLocaleDateString()}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-500">{isRTL ? 'القيود' : 'Entries'}</span>
+                          <p className="font-semibold text-gray-900">{period.total_entries}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">{isRTL ? 'المعتمدة' : 'Posted'}</span>
+                          <p className="font-semibold text-emerald-600">{period.posted_entries}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">{isRTL ? 'المبيعات' : 'Sales'}</span>
+                          <p className="font-semibold text-gray-900">{period.sales_count}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">{isRTL ? 'المشتريات' : 'Purchases'}</span>
+                          <p className="font-semibold text-gray-900">{period.purchases_count}</p>
+                        </div>
+                      </div>
+                      {period.is_closed && period.closed_at && (
+                        <div className="mt-3 text-xs text-gray-500">
+                          {isRTL ? 'أُغلقت بواسطة' : 'Closed by'} {period.closed_by_name || '-'} {isRTL ? 'في' : 'on'} {fmtDate(period.closed_at)}
+                        </div>
+                      )}
+                    </div>
+                    {!period.is_closed && (
+                      <button
+                        onClick={() => handleClosePeriod(period.id)}
+                        disabled={closingPeriodId === period.id || period.unposted_entries > 0}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm font-medium"
+                        title={period.unposted_entries > 0 ? (isRTL ? 'يوجد قيود غير معتمدة' : 'Unposted entries exist') : ''}
+                      >
+                        {closingPeriodId === period.id ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Lock className="w-4 h-4" />
+                        )}
+                        {isRTL ? 'إغلاق الفترة' : 'Close Period'}
+                      </button>
+                    )}
+                  </div>
+                  {!period.is_closed && period.unposted_entries > 0 && (
+                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                      <AlertTriangle className="w-4 h-4 inline-block mr-2" />
+                      {isRTL
+                        ? `لا يمكن إغلاق الفترة: ${period.unposted_entries} قيد غير معتمد`
+                        : `Cannot close: ${period.unposted_entries} unposted entries`}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );

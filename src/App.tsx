@@ -12,7 +12,10 @@ import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { TestModeAlert } from './components/TestModeAlert';
 import { supabase } from './lib/supabase';
+import { initializeErrorMonitoring, captureError } from './lib/errorMonitoring';
 import type { Section } from './lib/permissions';
+
+initializeErrorMonitoring();
 
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const Products = lazy(() => import('./components/Products').then(m => ({ default: m.Products })));
@@ -53,6 +56,11 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[AppErrorBoundary] Caught error:', error, info);
+    captureError(error, {
+      component: 'AppErrorBoundary',
+      action: 'component_error',
+      additionalData: { componentStack: info.componentStack }
+    }, 'critical');
   }
 
   render() {
