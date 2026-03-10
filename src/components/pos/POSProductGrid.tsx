@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Search, Package } from 'lucide-react';
 import type { POSProduct } from './types';
 
@@ -52,16 +52,21 @@ export function POSProductGrid({ products, isRTL, onAddProduct }: POSProductGrid
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
 
-  const categories = ['all', ...Array.from(new Set(products.map(p => p.type).filter(Boolean)))];
+  const categories = useMemo(() =>
+    ['all', ...Array.from(new Set(products.map(p => p.type).filter(Boolean)))],
+    [products]
+  );
 
-  const filtered = products.filter(p => {
-    const matchesSearch = !search ||
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.name_ar.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = category === 'all' || p.type === category;
-    return matchesSearch && matchesCategory;
-  });
+  const filtered = useMemo(() => {
+    return products.filter(p => {
+      const matchesSearch = !search ||
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.name_ar.toLowerCase().includes(search.toLowerCase()) ||
+        p.sku.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = category === 'all' || p.type === category;
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, search, category]);
 
   return (
     <div className="flex flex-col h-full bg-gray-50">

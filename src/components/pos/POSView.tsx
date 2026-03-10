@@ -71,7 +71,14 @@ export function POSView({ onClose }: POSViewProps) {
   const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   useEffect(() => {
-    if (!productsLoading) setProducts(rawProducts.filter((p: any) => p.is_active !== false));
+    if (!productsLoading) {
+      const filtered = rawProducts.filter((p: any) => p.is_active !== false);
+      const sorted = [...filtered].sort((a, b) => {
+        if (a.name && b.name) return a.name.localeCompare(b.name);
+        return (a.id || '').localeCompare(b.id || '');
+      });
+      setProducts(sorted);
+    }
   }, [rawProducts, productsLoading]);
 
   useEffect(() => {
