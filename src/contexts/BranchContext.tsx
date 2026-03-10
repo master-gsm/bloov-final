@@ -141,6 +141,17 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const contextValue = useMemo(() => ({
+    currentBranch,
+    currentBranchId: currentBranchId as string,
+    isAdmin,
+    allBranches,
+    selectedBranchFilter,
+    setSelectedBranchFilter: handleSetSelectedBranchFilter,
+    loading,
+    refetch: loadBranchData,
+  }), [currentBranch, currentBranchId, isAdmin, allBranches, selectedBranchFilter, loading]);
+
   if (!loading && branchError) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -162,17 +173,6 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
-  const contextValue = useMemo(() => ({
-    currentBranch,
-    currentBranchId: currentBranchId as string,
-    isAdmin,
-    allBranches,
-    selectedBranchFilter,
-    setSelectedBranchFilter: handleSetSelectedBranchFilter,
-    loading,
-    refetch: loadBranchData,
-  }), [currentBranch, currentBranchId, isAdmin, allBranches, selectedBranchFilter, loading]);
 
   return (
     <BranchContext.Provider value={contextValue}>
