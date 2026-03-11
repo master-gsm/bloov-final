@@ -34,7 +34,7 @@ self.addEventListener('activate', function(event) {
           .filter(function(name) { return name !== CACHE_NAME; })
           .map(function(name) { return caches.delete(name); })
       );
-    }).then(function() { return self.clients.claim(); })
+    })
   );
 });
 
@@ -82,8 +82,3 @@ self.addEventListener('fetch', function(event) {
   );
 });
 
-self.addEventListener('message', function(event) {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
