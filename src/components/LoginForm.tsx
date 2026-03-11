@@ -43,19 +43,12 @@ export function LoginForm() {
       if (username.includes('@')) {
         emailToUse = username.toLowerCase();
       } else {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('id')
-          .eq('username', username.toLowerCase().trim())
-          .maybeSingle();
+        const { data: foundEmail } = await supabase.rpc('lookup_auth_email_by_username', {
+          p_username: username.trim()
+        });
 
-        if (userData) {
-          const { data: authUser } = await supabase.rpc('get_auth_email_by_user_id', { user_id: userData.id });
-          if (authUser) {
-            emailToUse = authUser;
-          } else {
-            emailToUse = `${username.toLowerCase().trim()}@bloov.local`;
-          }
+        if (foundEmail) {
+          emailToUse = foundEmail;
         } else {
           const slug = usernameToSlug(username);
           emailToUse = `${slug}@bloov.local`;
