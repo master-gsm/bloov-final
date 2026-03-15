@@ -34,6 +34,7 @@ export function viewOnlyPermissions(): PermissionsMap {
 }
 
 export const ROLE_TEMPLATES: Record<string, PermissionsMap> = {
+  super_admin: fullPermissions(),
   admin: fullPermissions(),
   accountant: {
     ...emptyPermissions(),
