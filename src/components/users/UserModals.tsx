@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { X, Save, Key, Trash2, AlertTriangle, UserPlus, Building2 } from 'lucide-react';
 import { PermissionsGrid } from './PermissionsGrid';
 import { ROLE_TEMPLATES, emptyPermissions } from '../../lib/permissions';
@@ -26,6 +27,8 @@ interface AddUserModalProps {
 
 export function AddUserModal({ branches, onClose, onSubmit }: AddUserModalProps) {
   const { isRTL } = useLanguage();
+  const { userRole } = useAuth();
+  const isSuperAdmin = userRole === 'super_admin';
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
@@ -112,18 +115,28 @@ export function AddUserModal({ branches, onClose, onSubmit }: AddUserModalProps)
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'قالب الصلاحية' : 'Role Template'}</label>
             <div className="flex gap-2 flex-wrap">
-              {(['viewer', 'observer', 'accountant', 'admin'] as const).map(r => {
+              {(isSuperAdmin
+                ? ['viewer', 'observer', 'accountant', 'admin', 'super_admin']
+                : ['viewer', 'observer', 'accountant', 'admin']
+              ).map(r => {
                 const labels: Record<string, { ar: string; en: string }> = {
+                  super_admin: { ar: 'سوبر أدمن', en: 'Super Admin' },
                   admin: { ar: 'مدير', en: 'Admin' },
                   accountant: { ar: 'محاسب', en: 'Accountant' },
                   observer: { ar: 'مطلع', en: 'Observer' },
                   viewer: { ar: 'مستخدم عادي', en: 'Viewer' },
                 };
+                const isSelected = role === r;
+                const isSuperAdminRole = r === 'super_admin';
                 return (
                   <button key={r} type="button"
                     onClick={() => handleRoleSelect(r)}
                     className={`px-4 py-2 text-sm border rounded-lg transition font-medium ${
-                      role === r ? 'border-teal-600 bg-teal-50 text-teal-700' : 'border-gray-300 hover:bg-gray-50 text-gray-600'
+                      isSelected
+                        ? isSuperAdminRole
+                          ? 'border-amber-600 bg-amber-50 text-amber-700'
+                          : 'border-teal-600 bg-teal-50 text-teal-700'
+                        : 'border-gray-300 hover:bg-gray-50 text-gray-600'
                     }`}>
                     {isRTL ? labels[r].ar : labels[r].en}
                   </button>
@@ -169,6 +182,8 @@ interface EditUserModalProps {
 
 export function EditUserModal({ user, branches, initialPermissions, onClose, onSubmit }: EditUserModalProps) {
   const { isRTL } = useLanguage();
+  const { userRole } = useAuth();
+  const isSuperAdmin = userRole === 'super_admin';
   const [fullName, setFullName] = useState(user.full_name);
   const [role, setRole] = useState(user.role);
   const [branchId, setBranchId] = useState(user.branch_id || '');
@@ -227,18 +242,28 @@ export function EditUserModal({ user, branches, initialPermissions, onClose, onS
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">{isRTL ? 'قالب الصلاحية' : 'Role Template'}</label>
             <div className="flex gap-2 flex-wrap">
-              {(['viewer', 'observer', 'accountant', 'admin'] as const).map(r => {
+              {(isSuperAdmin
+                ? ['viewer', 'observer', 'accountant', 'admin', 'super_admin']
+                : ['viewer', 'observer', 'accountant', 'admin']
+              ).map(r => {
                 const labels: Record<string, { ar: string; en: string }> = {
+                  super_admin: { ar: 'سوبر أدمن', en: 'Super Admin' },
                   admin: { ar: 'مدير', en: 'Admin' },
                   accountant: { ar: 'محاسب', en: 'Accountant' },
                   observer: { ar: 'مطلع', en: 'Observer' },
                   viewer: { ar: 'مستخدم عادي', en: 'Viewer' },
                 };
+                const isSelected = role === r;
+                const isSuperAdminRole = r === 'super_admin';
                 return (
                   <button key={r} type="button"
                     onClick={() => handleRoleSelect(r)}
                     className={`px-4 py-2 text-sm border rounded-lg transition font-medium ${
-                      role === r ? 'border-teal-600 bg-teal-50 text-teal-700' : 'border-gray-300 hover:bg-gray-50 text-gray-600'
+                      isSelected
+                        ? isSuperAdminRole
+                          ? 'border-amber-600 bg-amber-50 text-amber-700'
+                          : 'border-teal-600 bg-teal-50 text-teal-700'
+                        : 'border-gray-300 hover:bg-gray-50 text-gray-600'
                     }`}>
                     {isRTL ? labels[r].ar : labels[r].en}
                   </button>

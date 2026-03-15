@@ -233,6 +233,7 @@ export function UserManagement() {
   const getRoleLabel = (role: string) => {
     if (isRTL) {
       switch (role) {
+        case 'super_admin': return 'سوبر أدمن';
         case 'admin': return 'مدير';
         case 'accountant': return 'محاسب';
         case 'observer': return 'مطلع';
@@ -241,6 +242,7 @@ export function UserManagement() {
       }
     }
     switch (role) {
+      case 'super_admin': return 'Super Admin';
       case 'admin': return 'Admin';
       case 'accountant': return 'Accountant';
       case 'observer': return 'Observer';
@@ -251,6 +253,7 @@ export function UserManagement() {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
+      case 'super_admin': return <Shield className="w-4 h-4" />;
       case 'admin': return <Shield className="w-4 h-4" />;
       case 'accountant': return <Calculator className="w-4 h-4" />;
       default: return <Eye className="w-4 h-4" />;
@@ -259,6 +262,7 @@ export function UserManagement() {
 
   const getRoleColor = (role: string) => {
     switch (role) {
+      case 'super_admin': return 'bg-amber-100 text-amber-700';
       case 'admin': return 'bg-red-100 text-red-700';
       case 'accountant': return 'bg-blue-100 text-blue-700';
       case 'observer': return 'bg-teal-100 text-teal-700';
