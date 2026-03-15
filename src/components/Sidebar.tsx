@@ -22,6 +22,7 @@ import {
   BookOpen,
   ShieldCheck,
   HandCoins,
+  FolderTree,
 } from 'lucide-react';
 import type { Section } from '../lib/permissions';
 
@@ -52,6 +53,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
     { id: 'cashregister', icon: Wallet, label: isRTL ? 'الصندوق' : 'Cash Register' },
     { id: 'reports', icon: FileText, label: t('nav.reports') },
     { id: 'journal', icon: BookOpen, label: isRTL ? 'القيود اليومية' : 'Journal Entries' },
+    { id: 'chartofaccounts', icon: FolderTree, label: isRTL ? 'شجرة الحسابات' : 'Chart of Accounts' },
     { id: 'backup', icon: Database, label: isRTL ? 'النسخ الاحتياطي' : 'Backup' },
     { id: 'systemhealth', icon: ShieldCheck, label: isRTL ? 'صحة النظام' : 'System Health' },
     { id: 'users', icon: UserCog, label: t('nav.users') },

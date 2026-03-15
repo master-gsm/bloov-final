@@ -36,6 +36,7 @@ const Branches = lazy(() => import('./components/Branches'));
 const Backup = lazy(() => import('./components/Backup'));
 const FixedAssets = lazy(() => import('./components/FixedAssets'));
 const JournalEntries = lazy(() => import('./components/JournalEntries'));
+const ChartOfAccounts = lazy(() => import('./components/ChartOfAccounts'));
 const SystemHealth = lazy(() => import('./components/SystemHealth'));
 const EmployeeCustody = lazy(() => import('./components/EmployeeCustody'));
 
@@ -201,6 +202,7 @@ function AppContent() {
         case 'cashregister': return <CashRegister />;
         case 'reports': return <Reports />;
         case 'journal': return <JournalEntries />;
+        case 'chartofaccounts': return <ChartOfAccounts />;
         case 'backup': return <Backup />;
         case 'systemhealth': return <SystemHealth />;
         case 'users': return <UserManagement />;

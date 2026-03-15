@@ -2,7 +2,7 @@ export const SECTIONS = [
   'dashboard', 'sales', 'purchases', 'expenses', 'fixedassets',
   'products', 'inventory', 'customers', 'suppliers', 'partners',
   'employees', 'custody', 'branches', 'salla', 'cashregister', 'reports',
-  'journal', 'backup', 'systemhealth', 'users', 'settings',
+  'journal', 'chartofaccounts', 'backup', 'systemhealth', 'users', 'settings',
 ] as const;
 
 export type Section = typeof SECTIONS[number];
@@ -49,6 +49,7 @@ export const ROLE_TEMPLATES: Record<string, PermissionsMap> = {
     cashregister: { view: true, create: true, edit: true, delete: false },
     reports: { view: true, create: false, edit: false, delete: false },
     journal: { view: true, create: true, edit: true, delete: false },
+    chartofaccounts: { view: true, create: true, edit: true, delete: false },
     custody: { view: true, create: true, edit: true, delete: false },
   },
   observer: viewOnlyPermissions(),
@@ -80,6 +81,7 @@ export const SECTION_LABELS: Record<Section, { ar: string; en: string }> = {
   cashregister: { ar: 'الصندوق', en: 'Cash Register' },
   reports: { ar: 'التقارير', en: 'Reports' },
   journal: { ar: 'القيود اليومية', en: 'Journal Entries' },
+  chartofaccounts: { ar: 'شجرة الحسابات', en: 'Chart of Accounts' },
   backup: { ar: 'النسخ الاحتياطي', en: 'Backup' },
   systemhealth: { ar: 'صحة النظام', en: 'System Health' },
   users: { ar: 'المستخدمين', en: 'Users' },
