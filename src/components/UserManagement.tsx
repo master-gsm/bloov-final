@@ -71,7 +71,7 @@ export function UserManagement() {
   };
 
   const loadUserPermissions = async (userId: string, role: string): Promise<PermissionsMap> => {
-    if (role === 'admin') return ROLE_TEMPLATES['admin'];
+    if (role === 'admin' || role === 'super_admin') return ROLE_TEMPLATES['admin'];
 
     const { data } = await supabase
       .from('user_permissions')

@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!userProfile || userProfile.role !== 'admin') {
+    if (!userProfile || !['admin', 'super_admin'].includes(userProfile.role)) {
       return new Response(
         JSON.stringify({ success: false, error: "Only admins can reset database" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }

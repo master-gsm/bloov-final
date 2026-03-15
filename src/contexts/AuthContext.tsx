@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { PermissionsMap, emptyPermissions, ROLE_TEMPLATES, Section, Action } from '../lib/permissions';
 
 interface UserProfile {
-  role: 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier' | 'manager' | 'employee';
+  role: 'super_admin' | 'admin' | 'accountant' | 'viewer' | 'salesperson' | 'observer' | 'cashier' | 'manager' | 'employee';
   permissions: Record<string, boolean>;
   branch_id: string | null;
 }
@@ -155,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const isViewer = profile?.role === 'viewer';
   const branchId = profile?.branch_id ?? null;
 

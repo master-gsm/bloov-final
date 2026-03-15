@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Phone, User, Calendar, Building2, CheckCircle, Loader2, Settings2, DollarSign } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, MapPin, Phone, User, Calendar, Building2, CheckCircle, Loader2, Settings2, DollarSign } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -126,7 +126,7 @@ export default function Branches() {
         .from('users')
         .select('id, full_name, role')
         .eq('is_active', true)
-        .in('role', ['admin', 'manager'])
+        .in('role', ['admin', 'super_admin', 'manager'])
         .order('full_name');
 
       if (error) throw error;

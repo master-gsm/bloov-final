@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
 
     if (
       !adminProfile ||
-      adminProfile.role !== "admin" ||
+      !["admin", "super_admin"].includes(adminProfile.role) ||
       !adminProfile.is_active
     ) {
       return jsonResponse({ error: "Forbidden: Admin access required" }, 403);
@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
       if (newName) updates.full_name = newName;
       if (
         newRole &&
-        ["admin", "accountant", "viewer", "observer"].includes(newRole)
+        ["admin", "super_admin", "accountant", "viewer", "observer"].includes(newRole)
       )
         updates.role = newRole;
       if (branch_id !== undefined) updates.branch_id = branch_id || null;
