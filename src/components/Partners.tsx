@@ -822,13 +822,7 @@ export function Partners() {
 
   const exportToExcel = () => {
     const wb = XLSX.utils.book_new();
-    const colWidths = [{ wch: 18 }, { wch: 18 }, { wch: 35 }, { wch: 18 }];
-    const headerLabels = [
-      isRTL ? 'التاريخ' : 'Date',
-      isRTL ? 'النوع' : 'Type',
-      isRTL ? 'الوصف' : 'Description',
-      isRTL ? 'المبلغ' : 'Amount',
-    ];
+    const colWidths = [{ wch: 18 }, { wch: 22 }, { wch: 35 }, { wch: 18 }];
 
     const allExpensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
 
@@ -909,9 +903,155 @@ export function Partners() {
       }
     });
 
-    const buildSheet = (title: string, rows: SetupExpense[], partnerId?: string) => {
+    const buildPartnerSheet = (partnerName: string, rows: SetupExpense[], partnerId: string) => {
+      const partner = partners.find(p => p.id === partnerId);
+      const ownershipPct = partner ? Number(partner.ownership_percentage) : 0;
+      const expectedShare = allExpensesTotal * ownershipPct / 100;
+
       const data: any[][] = [
-        [title],
+        [isRTL ? `كشف حساب الشريك: ${partnerName}` : `Partner Account Statement: ${partnerName}`],
+        [],
+        [isRTL ? 'نسبة الملكية:' : 'Ownership:', `${ownershipPct}%`, '', isRTL ? 'الحصة المفترضة:' : 'Expected Share:', Math.round(expectedShare * 100) / 100],
+        [],
+        [isRTL ? '=== المصروفات الفعلية ===' : '=== Actual Expenses ==='],
+        [
+          isRTL ? 'التاريخ' : 'Date',
+          isRTL ? 'النوع' : 'Type',
+          isRTL ? 'الوصف' : 'Description',
+          isRTL ? 'المبلغ' : 'Amount',
+        ],
+      ];
+
+      let expensesTotal = 0;
+      rows.sort((a, b) => {
+        const dateA = a.expense_date ? new Date(a.expense_date).getTime() : 0;
+        const dateB = b.expense_date ? new Date(b.expense_date).getTime() : 0;
+        return dateA - dateB;
+      }).forEach(ex => {
+        const amt = Math.round(Number(ex.amount) * 100) / 100;
+        expensesTotal += amt;
+        data.push([
+          fmtDate(ex.expense_date, isRTL),
+          isRTL ? EXPENSE_TYPES[ex.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[ex.expense_type as keyof typeof EXPENSE_TYPES]?.en,
+          isRTL ? (ex.description_ar || ex.description) : ex.description,
+          amt,
+        ]);
+      });
+
+      data.push([]);
+      data.push([
+        '', '', isRTL ? 'إجمالي المصروفات الفعلية:' : 'Total Actual Expenses:',
+        Math.round(expensesTotal * 100) / 100,
+      ]);
+
+      const partnerSettlementsPaid = settlements.filter(s => s.from_partner_id === partnerId && s.status === 'active');
+      const partnerSettlementsReceived = settlements.filter(s => s.to_partner_id === partnerId && s.status === 'active');
+      const hasSettlements = partnerSettlementsPaid.length > 0 || partnerSettlementsReceived.length > 0;
+
+      if (hasSettlements) {
+        data.push([]);
+        data.push([isRTL ? '=== التسويات ===' : '=== Settlements ===']);
+        data.push([
+          isRTL ? 'التاريخ' : 'Date',
+          isRTL ? 'الاتجاه' : 'Direction',
+          isRTL ? 'الشريك الآخر / الوصف' : 'Other Partner / Description',
+          isRTL ? 'المبلغ' : 'Amount',
+        ]);
+
+        let settPaidTotal = 0;
+        let settReceivedTotal = 0;
+
+        partnerSettlementsPaid.sort((a, b) => {
+          const dateA = a.settlement_date ? new Date(a.settlement_date).getTime() : 0;
+          const dateB = b.settlement_date ? new Date(b.settlement_date).getTime() : 0;
+          return dateA - dateB;
+        }).forEach(s => {
+          const amt = Math.round(Number(s.amount) * 100) / 100;
+          settPaidTotal += amt;
+          const toPartnerName = s.to_partner ? (isRTL ? s.to_partner.name_ar : s.to_partner.name) : '';
+          data.push([
+            fmtDate(s.settlement_date, isRTL),
+            isRTL ? 'دفع إلى' : 'Paid to',
+            `${toPartnerName}${s.description ? ` - ${isRTL ? (s.description_ar || s.description) : s.description}` : ''}`,
+            -amt,
+          ]);
+        });
+
+        partnerSettlementsReceived.sort((a, b) => {
+          const dateA = a.settlement_date ? new Date(a.settlement_date).getTime() : 0;
+          const dateB = b.settlement_date ? new Date(b.settlement_date).getTime() : 0;
+          return dateA - dateB;
+        }).forEach(s => {
+          const amt = Math.round(Number(s.amount) * 100) / 100;
+          settReceivedTotal += amt;
+          const fromPartnerName = s.from_partner ? (isRTL ? s.from_partner.name_ar : s.from_partner.name) : '';
+          data.push([
+            fmtDate(s.settlement_date, isRTL),
+            isRTL ? 'استلم من' : 'Received from',
+            `${fromPartnerName}${s.description ? ` - ${isRTL ? (s.description_ar || s.description) : s.description}` : ''}`,
+            amt,
+          ]);
+        });
+
+        data.push([]);
+        if (settPaidTotal > 0) {
+          data.push(['', '', isRTL ? 'إجمالي التسويات المدفوعة:' : 'Total Settlements Paid:', -Math.round(settPaidTotal * 100) / 100]);
+        }
+        if (settReceivedTotal > 0) {
+          data.push(['', '', isRTL ? 'إجمالي التسويات المستلمة:' : 'Total Settlements Received:', Math.round(settReceivedTotal * 100) / 100]);
+        }
+        data.push(['', '', isRTL ? 'صافي التسويات:' : 'Net Settlements:', Math.round((settReceivedTotal - settPaidTotal) * 100) / 100]);
+      }
+
+      data.push([]);
+      data.push([isRTL ? '=== ملخص الحساب ===' : '=== Account Summary ===']);
+
+      const balancePreSettlement = expensesTotal - expectedShare;
+      const settPaid = settlementTotals[partnerId]?.paid || 0;
+      const settReceived = settlementTotals[partnerId]?.received || 0;
+      const finalBalance = balancePreSettlement - settReceived + settPaid;
+      const status = finalBalance > 0.01 ? (isRTL ? 'له' : 'Due to partner') : finalBalance < -0.01 ? (isRTL ? 'عليه' : 'Owes') : (isRTL ? 'متوازن' : 'Balanced');
+
+      data.push([isRTL ? 'البند' : 'Item', '', '', isRTL ? 'المبلغ' : 'Amount']);
+      data.push([isRTL ? 'الحصة المفترضة من إجمالي المصاريف' : 'Expected Share of Total Expenses', '', '', Math.round(expectedShare * 100) / 100]);
+      data.push([isRTL ? 'المدفوع فعلياً (فواتير)' : 'Actually Paid (Invoices)', '', '', Math.round(expensesTotal * 100) / 100]);
+      data.push([isRTL ? 'الرصيد قبل التسويات (دفع - حصة)' : 'Balance Pre-Settlement (Paid - Share)', '', '', Math.round(balancePreSettlement * 100) / 100]);
+      if (hasSettlements) {
+        data.push([isRTL ? 'التسويات المدفوعة' : 'Settlements Paid', '', '', Math.round(settPaid * 100) / 100]);
+        data.push([isRTL ? 'التسويات المستلمة' : 'Settlements Received', '', '', Math.round(settReceived * 100) / 100]);
+      }
+      data.push([]);
+      data.push([isRTL ? 'الرصيد النهائي (المستحق بعد التسوية)' : 'Final Balance (Due After Settlement)', '', '', Math.round(finalBalance * 100) / 100]);
+      data.push([isRTL ? 'الحالة' : 'Status', '', '', status]);
+
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = colWidths;
+
+      for (let r = 0; r < data.length; r++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c: 3 });
+        if (ws[cellRef] && typeof ws[cellRef].v === 'number') {
+          ws[cellRef].t = 'n';
+          ws[cellRef].z = '#,##0.00';
+        }
+        const cellRef4 = XLSX.utils.encode_cell({ r, c: 4 });
+        if (ws[cellRef4] && typeof ws[cellRef4].v === 'number') {
+          ws[cellRef4].t = 'n';
+          ws[cellRef4].z = '#,##0.00';
+        }
+      }
+
+      return ws;
+    };
+
+    const buildUnassignedSheet = (rows: SetupExpense[]) => {
+      const headerLabels = [
+        isRTL ? 'التاريخ' : 'Date',
+        isRTL ? 'النوع' : 'Type',
+        isRTL ? 'الوصف' : 'Description',
+        isRTL ? 'المبلغ' : 'Amount',
+      ];
+      const data: any[][] = [
+        [isRTL ? 'مصاريف بدون شريك' : 'Unassigned Expenses'],
         [],
         headerLabels,
       ];
@@ -927,56 +1067,28 @@ export function Partners() {
         ]);
       });
       data.push([]);
-      data.push([
-        '', '', isRTL ? 'إجمالي الفواتير' : 'Total Invoices',
-        Math.round(total * 100) / 100,
-      ]);
-
-      if (partnerId) {
-        const settPaid = settlementTotals[partnerId]?.paid || 0;
-        const settReceived = settlementTotals[partnerId]?.received || 0;
-        if (settPaid > 0 || settReceived > 0) {
-          data.push([]);
-          data.push([isRTL ? 'التسويات:' : 'Settlements:']);
-          if (settPaid > 0) {
-            data.push(['', isRTL ? 'مدفوعة لشركاء آخرين' : 'Paid to other partners', '', Math.round(settPaid * 100) / 100]);
-          }
-          if (settReceived > 0) {
-            data.push(['', isRTL ? 'مستلمة من شركاء آخرين' : 'Received from other partners', '', Math.round(settReceived * 100) / 100]);
-          }
-        }
-      }
+      data.push(['', '', isRTL ? 'الإجمالي' : 'Total', Math.round(total * 100) / 100]);
 
       const ws = XLSX.utils.aoa_to_sheet(data);
       ws['!cols'] = colWidths;
-
-      const amountCol = 3;
       for (let r = 3; r < data.length; r++) {
-        const cellRef = XLSX.utils.encode_cell({ r, c: amountCol });
+        const cellRef = XLSX.utils.encode_cell({ r, c: 3 });
         if (ws[cellRef] && typeof ws[cellRef].v === 'number') {
           ws[cellRef].t = 'n';
           ws[cellRef].z = '#,##0.00';
         }
       }
-
       return ws;
     };
 
     partnerGroups.forEach((group) => {
       const sheetName = group.name.substring(0, 31);
-      const ws = buildSheet(
-        `${isRTL ? 'مصاريف' : 'Expenses'}: ${group.name}`,
-        group.rows,
-        group.partnerId
-      );
+      const ws = buildPartnerSheet(group.name, group.rows, group.partnerId);
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
     });
 
     if (unassigned.length > 0) {
-      const ws = buildSheet(
-        isRTL ? 'مصاريف بدون شريك' : 'Unassigned Expenses',
-        unassigned
-      );
+      const ws = buildUnassignedSheet(unassigned);
       XLSX.utils.book_append_sheet(wb, ws, isRTL ? 'بدون شريك' : 'Unassigned');
     }
 
