@@ -29,6 +29,15 @@ function fmtDate(date: string | null, isRTL: boolean) {
   if (!date) return isRTL ? 'بدون تاريخ' : 'No date';
   return new Date(date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
+function translateError(msg: string, isRTL: boolean): string {
+  if (!isRTL) return msg;
+  if (/PERIOD.LOCKED|Cannot post to closed period|Accounting period is locked/i.test(msg)) {
+    const periodMatch = msg.match(/"([^"]+)"/);
+    const periodName = periodMatch ? periodMatch[1] : '';
+    return `الفترة المحاسبية مغلقة${periodName ? ` (${periodName})` : ''}. تواصل مع المسؤول لفتح الفترة.`;
+  }
+  return msg;
+}
 
 function Section({
   title, subtitle, icon: Icon, children, defaultOpen = true,
@@ -361,7 +370,7 @@ export function Partners() {
       await loadData();
       showToast(isRTL ? 'تم تحديث المبالغ بنجاح' : 'Amounts updated successfully', 'success');
     } catch (err: any) {
-      setError(err.message || (isRTL ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'));
+      setError(translateError(err.message, isRTL) || (isRTL ? 'خطأ في تحديث المبالغ' : 'Error updating amounts'));
     } finally {
       setSubmitting(false);
     }
@@ -647,7 +656,7 @@ export function Partners() {
       resetExpenseForm();
       await loadData();
     } catch (err: any) {
-      setError(err.message);
+      setError(translateError(err.message, isRTL));
     } finally {
       setSubmitting(false);
     }
@@ -756,7 +765,7 @@ export function Partners() {
       await loadData();
       showToast(isRTL ? 'تم تحديث العملية بنجاح' : 'Expense updated successfully', 'success');
     } catch (err: any) {
-      showToast(err.message, 'error');
+      showToast(translateError(err.message, isRTL), 'error');
     } finally {
       setInlineEditSaving(false);
     }
