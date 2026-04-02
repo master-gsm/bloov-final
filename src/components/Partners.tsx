@@ -822,24 +822,100 @@ export function Partners() {
 
   const exportToExcel = () => {
     const wb = XLSX.utils.book_new();
-    const data: any[][] = [
-      [isRTL ? 'تقرير مصاريف التأسيس' : 'Setup Expenses Report'],
-      [],
-      [isRTL ? 'التاريخ' : 'Date', isRTL ? 'الشريك' : 'Partner', isRTL ? 'النوع' : 'Type', isRTL ? 'الوصف' : 'Description', isRTL ? 'المبلغ' : 'Amount'],
+    const colWidths = [{ wch: 18 }, { wch: 18 }, { wch: 35 }, { wch: 18 }];
+    const headerLabels = [
+      isRTL ? 'التاريخ' : 'Date',
+      isRTL ? 'النوع' : 'Type',
+      isRTL ? 'الوصف' : 'Description',
+      isRTL ? 'المبلغ' : 'Amount',
     ];
+
+    const partnerGroups = new Map<string, { name: string; rows: SetupExpense[] }>();
+    const unassigned: SetupExpense[] = [];
+
     expenses.forEach(ex => {
-      const p = partners.find(p => p.id === ex.partner_id);
-      data.push([
-        fmtDate(ex.expense_date, isRTL),
-        p ? (isRTL ? p.name_ar : p.name) : '-',
-        isRTL ? EXPENSE_TYPES[ex.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[ex.expense_type as keyof typeof EXPENSE_TYPES]?.en,
-        isRTL ? (ex.description_ar || ex.description) : ex.description,
-        Number(ex.amount).toFixed(2),
-      ]);
+      if (!ex.partner_id) {
+        unassigned.push(ex);
+        return;
+      }
+      const group = partnerGroups.get(ex.partner_id);
+      if (group) {
+        group.rows.push(ex);
+      } else {
+        const p = partners.find(p => p.id === ex.partner_id);
+        partnerGroups.set(ex.partner_id, {
+          name: p ? (isRTL ? p.name_ar : p.name) : ex.partner_id,
+          rows: [ex],
+        });
+      }
     });
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    ws['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, ws, isRTL ? 'المصاريف' : 'Expenses');
+
+    const buildSheet = (title: string, rows: SetupExpense[]) => {
+      const data: any[][] = [
+        [title],
+        [],
+        headerLabels,
+      ];
+      let total = 0;
+      rows.forEach(ex => {
+        const amt = Math.round(Number(ex.amount) * 100) / 100;
+        total += amt;
+        data.push([
+          fmtDate(ex.expense_date, isRTL),
+          isRTL ? EXPENSE_TYPES[ex.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[ex.expense_type as keyof typeof EXPENSE_TYPES]?.en,
+          isRTL ? (ex.description_ar || ex.description) : ex.description,
+          amt,
+        ]);
+      });
+      data.push([]);
+      data.push([
+        '', '', isRTL ? 'الإجمالي' : 'Total',
+        Math.round(total * 100) / 100,
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = colWidths;
+
+      const amountCol = 3;
+      for (let r = 3; r < 3 + rows.length; r++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c: amountCol });
+        if (ws[cellRef]) {
+          ws[cellRef].t = 'n';
+          ws[cellRef].z = '#,##0.00';
+        }
+      }
+      const totalRowIdx = 3 + rows.length + 1;
+      const totalCellRef = XLSX.utils.encode_cell({ r: totalRowIdx, c: amountCol });
+      if (ws[totalCellRef]) {
+        ws[totalCellRef].t = 'n';
+        ws[totalCellRef].z = '#,##0.00';
+      }
+
+      return ws;
+    };
+
+    partnerGroups.forEach((group) => {
+      const sheetName = group.name.substring(0, 31);
+      const ws = buildSheet(
+        `${isRTL ? 'مصاريف' : 'Expenses'}: ${group.name}`,
+        group.rows
+      );
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    if (unassigned.length > 0) {
+      const ws = buildSheet(
+        isRTL ? 'مصاريف بدون شريك' : 'Unassigned Expenses',
+        unassigned
+      );
+      XLSX.utils.book_append_sheet(wb, ws, isRTL ? 'بدون شريك' : 'Unassigned');
+    }
+
+    if (wb.SheetNames.length === 0) {
+      const ws = XLSX.utils.aoa_to_sheet([[isRTL ? 'لا توجد مصاريف' : 'No expenses']]);
+      XLSX.utils.book_append_sheet(wb, ws, isRTL ? 'فارغ' : 'Empty');
+    }
+
     XLSX.writeFile(wb, `Partners_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
