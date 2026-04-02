@@ -63,6 +63,7 @@ export default function SetupExpenses() {
   const { language } = useLanguage();
   const { isAdmin, can, profile } = useAuth();
   const isSuperAdmin = profile?.role === 'super_admin';
+  const canEditFinancials = isSuperAdmin;
   const canEdit = isAdmin || can('partners', 'edit');
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -184,8 +185,8 @@ export default function SetupExpenses() {
       };
 
       if (editingExpense) {
-        if (isSuperAdmin) {
-          const { data, error } = await supabase.rpc('fn_super_admin_update_setup_expense', {
+        if (canEditFinancials) {
+          const { error } = await supabase.rpc('fn_super_admin_update_setup_expense', {
             p_expense_id: editingExpense.id,
             p_amount: parseFloat(formData.amount),
             p_expense_date: formData.expense_date,
@@ -469,7 +470,7 @@ export default function SetupExpenses() {
                 : language === 'ar' ? 'إضافة مصروف تأسيس' : 'Add Setup Expense'}
             </h3>
 
-            {editingExpense && isSuperAdmin && (
+            {editingExpense && canEditFinancials && (
               <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
                 <Shield className="w-5 h-5 text-amber-600" />
                 <span className="text-sm text-amber-800">
@@ -485,7 +486,7 @@ export default function SetupExpenses() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {language === 'ar' ? 'الفئة' : 'Category'} *
-                    {editingExpense && !isSuperAdmin && (
+                    {editingExpense && !canEditFinancials && (
                       <span className="text-xs text-red-500 mr-2">
                         ({language === 'ar' ? 'مجمد' : 'Frozen'})
                       </span>
@@ -495,11 +496,11 @@ export default function SetupExpenses() {
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className={`w-full px-3 py-2 border rounded-md ${
-                      editingExpense && !isSuperAdmin
+                      editingExpense && !canEditFinancials
                         ? 'border-gray-200 bg-gray-50 text-gray-500'
                         : 'border-gray-300'
                     }`}
-                    disabled={editingExpense !== null && !isSuperAdmin}
+                    disabled={editingExpense !== null && !canEditFinancials}
                     required
                   >
                     <option value="">{language === 'ar' ? 'اختر فئة' : 'Select Category'}</option>
@@ -545,7 +546,7 @@ export default function SetupExpenses() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {language === 'ar' ? 'المبلغ' : 'Amount'} *
-                    {editingExpense && !isSuperAdmin && (
+                    {editingExpense && !canEditFinancials && (
                       <span className="text-xs text-red-500 mr-2">
                         ({language === 'ar' ? 'مجمد' : 'Frozen'})
                       </span>
@@ -557,11 +558,11 @@ export default function SetupExpenses() {
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                     className={`w-full px-3 py-2 border rounded-md ${
-                      editingExpense && !isSuperAdmin
+                      editingExpense && !canEditFinancials
                         ? 'border-gray-200 bg-gray-50 text-gray-500'
                         : 'border-gray-300'
                     }`}
-                    disabled={editingExpense !== null && !isSuperAdmin}
+                    disabled={editingExpense !== null && !canEditFinancials}
                     required
                   />
                 </div>
@@ -569,7 +570,7 @@ export default function SetupExpenses() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {language === 'ar' ? 'التاريخ' : 'Date'} *
-                    {editingExpense && !isSuperAdmin && (
+                    {editingExpense && !canEditFinancials && (
                       <span className="text-xs text-red-500 mr-2">
                         ({language === 'ar' ? 'مجمد' : 'Frozen'})
                       </span>
@@ -580,11 +581,11 @@ export default function SetupExpenses() {
                     value={formData.expense_date}
                     onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
                     className={`w-full px-3 py-2 border rounded-md ${
-                      editingExpense && !isSuperAdmin
+                      editingExpense && !canEditFinancials
                         ? 'border-gray-200 bg-gray-50 text-gray-500'
                         : 'border-gray-300'
                     }`}
-                    disabled={editingExpense !== null && !isSuperAdmin}
+                    disabled={editingExpense !== null && !canEditFinancials}
                     required
                   />
                 </div>
