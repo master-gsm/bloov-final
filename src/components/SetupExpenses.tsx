@@ -63,7 +63,7 @@ export default function SetupExpenses() {
   const { language } = useLanguage();
   const { isAdmin, can, profile } = useAuth();
   const isSuperAdmin = profile?.role === 'super_admin';
-  const canEditFinancials = isSuperAdmin;
+  const canEditFinancials = isSuperAdmin || isAdmin;
   const canEdit = isAdmin || can('partners', 'edit');
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
