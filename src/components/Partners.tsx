@@ -101,6 +101,7 @@ export function Partners() {
   const [inlineEditDesc, setInlineEditDesc] = useState('');
   const [inlineEditDescAr, setInlineEditDescAr] = useState('');
   const [inlineEditAmount, setInlineEditAmount] = useState('');
+  const [inlineEditType, setInlineEditType] = useState('');
   const [inlineEditSaving, setInlineEditSaving] = useState(false);
   const [voidSettlementConfirm, setVoidSettlementConfirm] = useState<string | null>(null);
 
@@ -692,6 +693,7 @@ export function Partners() {
     setInlineEditDesc(expense.description || '');
     setInlineEditDescAr(expense.description_ar || '');
     setInlineEditAmount(String(expense.amount));
+    setInlineEditType(expense.expense_type || 'capital');
     setEditingExpenseDateId(null);
     setEditingExpenseDateVal('');
   };
@@ -702,6 +704,7 @@ export function Partners() {
     setInlineEditDesc('');
     setInlineEditDescAr('');
     setInlineEditAmount('');
+    setInlineEditType('');
     setInlineEditSaving(false);
   };
 
@@ -726,6 +729,7 @@ export function Partners() {
           expense_date: inlineEditDate || null,
           description: inlineEditDesc,
           description_ar: inlineEditDescAr,
+          expense_type: inlineEditType,
         })
         .eq('id', inlineEditId);
       if (descErr) throw descErr;
@@ -1455,9 +1459,23 @@ export function Partners() {
                       </td>
                       <td className="px-4 py-2.5 text-sm font-medium">{p ? (isRTL ? p.name_ar : p.name) : '-'}</td>
                       <td className="px-4 py-2.5">
-                        <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">
-                          {isRTL ? EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.en}
-                        </span>
+                        {isEditing ? (
+                          <select
+                            value={inlineEditType}
+                            onChange={e => setInlineEditType(e.target.value)}
+                            className="border border-blue-300 rounded px-1.5 py-1 text-xs w-full focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                          >
+                            {Object.entries(EXPENSE_TYPES).map(([key, labels]) => (
+                              <option key={key} value={key}>
+                                {isRTL ? labels.ar : labels.en}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">
+                            {isRTL ? EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.ar : EXPENSE_TYPES[expense.expense_type as keyof typeof EXPENSE_TYPES]?.en}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
                         {isEditing ? (
