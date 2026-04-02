@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, CreditCard as Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload, X, Check, AlertTriangle } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, DollarSign, Calendar, FileText, Building2, Paperclip, Upload, X, Check, AlertTriangle, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -61,7 +61,8 @@ export default function SetupExpenses() {
   const [editingExpense, setEditingExpense] = useState<SetupExpense | null>(null);
   const [partnerTotals, setPartnerTotals] = useState<Record<string, number>>({});
   const { language } = useLanguage();
-  const { isAdmin, can } = useAuth();
+  const { isAdmin, can, profile } = useAuth();
+  const isSuperAdmin = profile?.role === 'super_admin';
   const canEdit = isAdmin || can('partners', 'edit');
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -183,12 +184,25 @@ export default function SetupExpenses() {
       };
 
       if (editingExpense) {
-        const { error } = await supabase
-          .from('setup_expenses')
-          .update(expenseData)
-          .eq('id', editingExpense.id);
-
-        if (error) throw error;
+        if (isSuperAdmin) {
+          const { data, error } = await supabase.rpc('fn_super_admin_update_setup_expense', {
+            p_expense_id: editingExpense.id,
+            p_amount: parseFloat(formData.amount),
+            p_expense_date: formData.expense_date,
+            p_category: formData.category,
+            p_description: formData.description,
+            p_notes: formData.notes || null,
+            p_partner_id: formData.partner_id || null,
+            p_reason: 'Updated via UI by super_admin'
+          });
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('setup_expenses')
+            .update(expenseData)
+            .eq('id', editingExpense.id);
+          if (error) throw error;
+        }
         alert(language === 'ar' ? 'تم تحديث المصروف بنجاح' : 'Expense updated successfully');
       } else {
         const { error } = await supabase
@@ -455,16 +469,37 @@ export default function SetupExpenses() {
                 : language === 'ar' ? 'إضافة مصروف تأسيس' : 'Add Setup Expense'}
             </h3>
 
+            {editingExpense && isSuperAdmin && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+                <Shield className="w-5 h-5 text-amber-600" />
+                <span className="text-sm text-amber-800">
+                  {language === 'ar'
+                    ? 'وضع المشرف: يمكنك تعديل جميع الحقول بما في ذلك المبلغ والتاريخ والنوع'
+                    : 'Admin Mode: You can edit all fields including amount, date, and category'}
+                </span>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {language === 'ar' ? 'الفئة' : 'Category'} *
+                    {editingExpense && !isSuperAdmin && (
+                      <span className="text-xs text-red-500 mr-2">
+                        ({language === 'ar' ? 'مجمد' : 'Frozen'})
+                      </span>
+                    )}
                   </label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className={`w-full px-3 py-2 border rounded-md ${
+                      editingExpense && !isSuperAdmin
+                        ? 'border-gray-200 bg-gray-50 text-gray-500'
+                        : 'border-gray-300'
+                    }`}
+                    disabled={editingExpense !== null && !isSuperAdmin}
                     required
                   >
                     <option value="">{language === 'ar' ? 'اختر فئة' : 'Select Category'}</option>
@@ -510,13 +545,23 @@ export default function SetupExpenses() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {language === 'ar' ? 'المبلغ' : 'Amount'} *
+                    {editingExpense && !isSuperAdmin && (
+                      <span className="text-xs text-red-500 mr-2">
+                        ({language === 'ar' ? 'مجمد' : 'Frozen'})
+                      </span>
+                    )}
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className={`w-full px-3 py-2 border rounded-md ${
+                      editingExpense && !isSuperAdmin
+                        ? 'border-gray-200 bg-gray-50 text-gray-500'
+                        : 'border-gray-300'
+                    }`}
+                    disabled={editingExpense !== null && !isSuperAdmin}
                     required
                   />
                 </div>
@@ -524,12 +569,22 @@ export default function SetupExpenses() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {language === 'ar' ? 'التاريخ' : 'Date'} *
+                    {editingExpense && !isSuperAdmin && (
+                      <span className="text-xs text-red-500 mr-2">
+                        ({language === 'ar' ? 'مجمد' : 'Frozen'})
+                      </span>
+                    )}
                   </label>
                   <input
                     type="date"
                     value={formData.expense_date}
                     onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className={`w-full px-3 py-2 border rounded-md ${
+                      editingExpense && !isSuperAdmin
+                        ? 'border-gray-200 bg-gray-50 text-gray-500'
+                        : 'border-gray-300'
+                    }`}
+                    disabled={editingExpense !== null && !isSuperAdmin}
                     required
                   />
                 </div>
