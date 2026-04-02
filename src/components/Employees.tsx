@@ -2,11 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import {
-  Users, Plus, Edit2, Trash2, DollarSign, TrendingUp, Calendar,
-  Search, X, Save, Loader2, AlertCircle, CheckCircle, Clock,
-  CalendarDays, FileText, UserX, ShieldAlert,
-} from 'lucide-react';
+import { Users, Plus, CreditCard as Edit2, Trash2, DollarSign, TrendingUp, Calendar, Search, X, Save, Loader2, AlertCircle, CheckCircle, Clock, CalendarDays, FileText, UserX, ShieldAlert, RefreshCw } from 'lucide-react';
 import { LeavesTab } from './hr/LeavesTab';
 import { SettlementsTab } from './hr/SettlementsTab';
 import { PayrollTab } from './hr/PayrollTab';
@@ -67,6 +63,15 @@ export function Employees() {
   };
 
   const [formData, setFormData] = useState(defaultForm);
+
+  const [renewalModal, setRenewalModal] = useState<{ employee: Employee; resStatus: any } | null>(null);
+  const [renewalMode, setRenewalMode] = useState<'preset' | 'custom'>('preset');
+  const [renewalMonths, setRenewalMonths] = useState<number>(12);
+  const [renewalCustomDate, setRenewalCustomDate] = useState('');
+  const [renewalSubmitting, setRenewalSubmitting] = useState(false);
+  const [renewalResult, setRenewalResult] = useState<any>(null);
+
+  const canRenewIqama = userProfile && ((userProfile as any).role === 'super_admin' || (userProfile as any).role === 'admin');
 
   useEffect(() => {
     loadData();
@@ -247,6 +252,48 @@ export function Employees() {
 
   const getResidenceStatus = (empId: string) => {
     return residenceStatuses.find(s => s.employee_id === empId);
+  };
+
+  const openRenewalModal = (employee: Employee) => {
+    const resStatus = getResidenceStatus(employee.id);
+    setRenewalModal({ employee, resStatus });
+    setRenewalMode('preset');
+    setRenewalMonths(12);
+    setRenewalCustomDate('');
+    setRenewalResult(null);
+  };
+
+  const calculateNewExpiry = () => {
+    if (!renewalModal) return null;
+    const oldExpiry = renewalModal.resStatus?.iqama_expiry_date;
+    if (renewalMode === 'custom' && renewalCustomDate) {
+      return renewalCustomDate;
+    }
+    const baseDate = oldExpiry ? new Date(oldExpiry) : new Date();
+    baseDate.setMonth(baseDate.getMonth() + renewalMonths);
+    return baseDate.toISOString().split('T')[0];
+  };
+
+  const handleRenewIqama = async () => {
+    if (!renewalModal) return;
+    setRenewalSubmitting(true);
+    setRenewalResult(null);
+    try {
+      const params: any = { p_employee_id: renewalModal.employee.id };
+      if (renewalMode === 'custom' && renewalCustomDate) {
+        params.p_custom_date = renewalCustomDate;
+      } else {
+        params.p_duration_months = renewalMonths;
+      }
+      const { data, error } = await supabase.rpc('fn_renew_iqama', params);
+      if (error) throw error;
+      setRenewalResult(data);
+      loadData();
+    } catch (err: any) {
+      setRenewalResult({ success: false, message: err.message });
+    } finally {
+      setRenewalSubmitting(false);
+    }
   };
 
   // Server-side search is applied, but residence filter needs client-side filtering
@@ -448,10 +495,25 @@ export function Employees() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <button onClick={() => openEditModal(emp)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded">
+                          <button onClick={() => openEditModal(emp)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title={isRTL ? 'تعديل' : 'Edit'}>
                             <Edit2 className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleDeleteEmployee(emp.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded">
+                          {canRenewIqama && resStatus?.iqama_expiry_date && (
+                            <button
+                              onClick={() => openRenewalModal(emp)}
+                              className={`p-1.5 rounded transition ${
+                                resStatus.residence_status === 'expired'
+                                  ? 'text-red-600 hover:bg-red-50 animate-pulse'
+                                  : resStatus.residence_status === 'expiring_soon'
+                                    ? 'text-amber-600 hover:bg-amber-50'
+                                    : 'text-teal-600 hover:bg-teal-50'
+                              }`}
+                              title={isRTL ? 'تجديد الإقامة' : 'Renew Iqama'}
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button onClick={() => handleDeleteEmployee(emp.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title={isRTL ? 'حذف' : 'Delete'}>
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -680,6 +742,201 @@ export function Employees() {
                 {isRTL ? 'حفظ' : 'Save'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {renewalModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-teal-600" />
+                {isRTL ? 'تجديد الإقامة' : 'Renew Residence Permit'}
+              </h3>
+              <button onClick={() => setRenewalModal(null)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">{isRTL ? 'الموظف' : 'Employee'}</span>
+                <span className="font-semibold text-gray-900">{renewalModal.employee.full_name}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">{isRTL ? 'رقم الإقامة' : 'Iqama #'}</span>
+                <span className="font-mono text-gray-700" dir="ltr">{renewalModal.resStatus?.iqama_number || '-'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">{isRTL ? 'تاريخ الانتهاء الحالي' : 'Current Expiry'}</span>
+                <span className="font-semibold text-gray-900">
+                  {renewalModal.resStatus?.iqama_expiry_date
+                    ? new Date(renewalModal.resStatus.iqama_expiry_date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')
+                    : '-'
+                  }
+                </span>
+              </div>
+              {renewalModal.resStatus?.residence_status === 'expired' && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">
+                  <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                  <span className="text-sm text-red-700 font-medium">
+                    {isRTL
+                      ? `منتهية منذ ${Math.abs(renewalModal.resStatus.days_to_expiry)} يوم`
+                      : `Expired ${Math.abs(renewalModal.resStatus.days_to_expiry)} days ago`
+                    }
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {!renewalResult && (
+              <>
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">{isRTL ? 'طريقة التجديد' : 'Renewal Method'}</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setRenewalMode('preset')}
+                      className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition border-2 ${
+                        renewalMode === 'preset'
+                          ? 'border-teal-600 bg-teal-50 text-teal-700'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      {isRTL ? 'مدة محددة' : 'Preset Duration'}
+                    </button>
+                    <button
+                      onClick={() => setRenewalMode('custom')}
+                      className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition border-2 ${
+                        renewalMode === 'custom'
+                          ? 'border-teal-600 bg-teal-50 text-teal-700'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      {isRTL ? 'تاريخ محدد' : 'Custom Date'}
+                    </button>
+                  </div>
+                </div>
+
+                {renewalMode === 'preset' ? (
+                  <div className="grid grid-cols-3 gap-3">
+                    {[3, 6, 12].map(months => (
+                      <button
+                        key={months}
+                        onClick={() => setRenewalMonths(months)}
+                        className={`py-3 rounded-lg text-sm font-semibold transition border-2 ${
+                          renewalMonths === months
+                            ? 'border-teal-600 bg-teal-600 text-white shadow-md'
+                            : 'border-gray-200 text-gray-700 hover:border-teal-300 hover:bg-teal-50'
+                        }`}
+                      >
+                        {months} {isRTL ? 'أشهر' : 'Months'}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{isRTL ? 'تاريخ الانتهاء الجديد' : 'New Expiry Date'}</label>
+                    <input
+                      type="date"
+                      value={renewalCustomDate}
+                      onChange={e => setRenewalCustomDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                )}
+
+                {calculateNewExpiry() && (
+                  <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-teal-700">{isRTL ? 'تاريخ الانتهاء الجديد' : 'New Expiry Date'}</span>
+                      <span className="font-bold text-teal-800 text-lg">
+                        {new Date(calculateNewExpiry()!).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </span>
+                    </div>
+                    {renewalModal.resStatus?.iqama_expiry_date && renewalMode === 'preset' && (
+                      <p className="text-xs text-teal-600 mt-1">
+                        {isRTL
+                          ? `يُحسب من تاريخ الانتهاء الأصلي (${new Date(renewalModal.resStatus.iqama_expiry_date).toLocaleDateString('ar-SA')})`
+                          : `Calculated from original expiry (${new Date(renewalModal.resStatus.iqama_expiry_date).toLocaleDateString('en-US')})`
+                        }
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setRenewalModal(null)}
+                    className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+                  >
+                    {isRTL ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    onClick={handleRenewIqama}
+                    disabled={renewalSubmitting || (renewalMode === 'custom' && !renewalCustomDate)}
+                    className="flex-1 px-4 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {renewalSubmitting ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-5 h-5" />
+                    )}
+                    {isRTL ? 'تجديد الإقامة' : 'Renew Iqama'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {renewalResult && (
+              <div className={`rounded-lg p-4 ${renewalResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  {renewalResult.success ? (
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                  )}
+                  <span className={`font-semibold ${renewalResult.success ? 'text-green-800' : 'text-red-800'}`}>
+                    {renewalResult.success
+                      ? (isRTL ? 'تم تجديد الإقامة بنجاح' : 'Iqama renewed successfully')
+                      : (isRTL ? 'فشل التجديد' : 'Renewal failed')
+                    }
+                  </span>
+                </div>
+                {renewalResult.success ? (
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-green-600">{isRTL ? 'التاريخ القديم' : 'Old Expiry'}</span>
+                      <span className="font-medium text-green-800 line-through">
+                        {renewalResult.old_expiry_date
+                          ? new Date(renewalResult.old_expiry_date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')
+                          : '-'
+                        }
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-600">{isRTL ? 'التاريخ الجديد' : 'New Expiry'}</span>
+                      <span className="font-bold text-green-800">
+                        {new Date(renewalResult.new_expiry_date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-600">{isRTL ? 'الأيام المتبقية' : 'Days Remaining'}</span>
+                      <span className="font-bold text-green-800">{renewalResult.days_remaining} {isRTL ? 'يوم' : 'days'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-red-700">{renewalResult.message}</p>
+                )}
+                <button
+                  onClick={() => setRenewalModal(null)}
+                  className="w-full mt-4 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+                >
+                  {isRTL ? 'إغلاق' : 'Close'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
