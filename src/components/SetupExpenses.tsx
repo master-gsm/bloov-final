@@ -486,21 +486,11 @@ export default function SetupExpenses() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {language === 'ar' ? 'الفئة' : 'Category'} *
-                    {editingExpense && !canEditFinancials && (
-                      <span className="text-xs text-red-500 mr-2">
-                        ({language === 'ar' ? 'مجمد' : 'Frozen'})
-                      </span>
-                    )}
                   </label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-md ${
-                      editingExpense && !canEditFinancials
-                        ? 'border-gray-200 bg-gray-50 text-gray-500'
-                        : 'border-gray-300'
-                    }`}
-                    disabled={editingExpense !== null && !canEditFinancials}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     required
                   >
                     <option value="">{language === 'ar' ? 'اختر فئة' : 'Select Category'}</option>
