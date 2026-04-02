@@ -830,7 +830,65 @@ export function Partners() {
       isRTL ? 'المبلغ' : 'Amount',
     ];
 
-    const partnerGroups = new Map<string, { name: string; rows: SetupExpense[] }>();
+    const allExpensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
+
+    const summaryData: any[][] = [
+      [isRTL ? 'ملخص حسابات الشركاء' : 'Partner Accounts Summary'],
+      [],
+      [
+        isRTL ? 'الشريك' : 'Partner',
+        isRTL ? 'نسبة الملكية' : 'Ownership %',
+        isRTL ? 'الحصة المفترضة' : 'Expected Share',
+        isRTL ? 'المدفوع فعلياً (فواتير)' : 'Actually Paid (Invoices)',
+        isRTL ? 'التسويات المدفوعة' : 'Settlements Paid',
+        isRTL ? 'التسويات المستلمة' : 'Settlements Received',
+        isRTL ? 'الرصيد قبل التسويات' : 'Balance Pre-Settlement',
+        isRTL ? 'الرصيد النهائي' : 'Final Balance',
+        isRTL ? 'الحالة' : 'Status',
+      ],
+    ];
+
+    activePartners.forEach(p => {
+      const actualPaid = partnerTotals[p.id] || 0;
+      const expectedShare = allExpensesTotal * Number(p.ownership_percentage) / 100;
+      const settPaid = settlementTotals[p.id]?.paid || 0;
+      const settReceived = settlementTotals[p.id]?.received || 0;
+      const balancePre = actualPaid - expectedShare;
+      const finalBalance = balancePre - settReceived + settPaid;
+      const status = finalBalance > 0.01 ? (isRTL ? 'له' : 'Due to partner') : finalBalance < -0.01 ? (isRTL ? 'عليه' : 'Owes') : (isRTL ? 'متوازن' : 'Balanced');
+
+      summaryData.push([
+        isRTL ? p.name_ar : p.name,
+        Number(p.ownership_percentage),
+        Math.round(expectedShare * 100) / 100,
+        Math.round(actualPaid * 100) / 100,
+        Math.round(settPaid * 100) / 100,
+        Math.round(settReceived * 100) / 100,
+        Math.round(balancePre * 100) / 100,
+        Math.round(finalBalance * 100) / 100,
+        status,
+      ]);
+    });
+
+    summaryData.push([]);
+    summaryData.push([isRTL ? 'إجمالي المصاريف:' : 'Total Expenses:', '', Math.round(allExpensesTotal * 100) / 100]);
+
+    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+    summaryWs['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 14 }];
+
+    for (let r = 3; r < 3 + activePartners.length; r++) {
+      for (let c = 1; c <= 7; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        if (summaryWs[cellRef] && typeof summaryWs[cellRef].v === 'number') {
+          summaryWs[cellRef].t = 'n';
+          summaryWs[cellRef].z = c === 1 ? '0.00%' : '#,##0.00';
+        }
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, summaryWs, isRTL ? 'ملخص' : 'Summary');
+
+    const partnerGroups = new Map<string, { name: string; rows: SetupExpense[]; partnerId: string }>();
     const unassigned: SetupExpense[] = [];
 
     expenses.forEach(ex => {
@@ -846,11 +904,12 @@ export function Partners() {
         partnerGroups.set(ex.partner_id, {
           name: p ? (isRTL ? p.name_ar : p.name) : ex.partner_id,
           rows: [ex],
+          partnerId: ex.partner_id,
         });
       }
     });
 
-    const buildSheet = (title: string, rows: SetupExpense[]) => {
+    const buildSheet = (title: string, rows: SetupExpense[], partnerId?: string) => {
       const data: any[][] = [
         [title],
         [],
@@ -869,26 +928,35 @@ export function Partners() {
       });
       data.push([]);
       data.push([
-        '', '', isRTL ? 'الإجمالي' : 'Total',
+        '', '', isRTL ? 'إجمالي الفواتير' : 'Total Invoices',
         Math.round(total * 100) / 100,
       ]);
+
+      if (partnerId) {
+        const settPaid = settlementTotals[partnerId]?.paid || 0;
+        const settReceived = settlementTotals[partnerId]?.received || 0;
+        if (settPaid > 0 || settReceived > 0) {
+          data.push([]);
+          data.push([isRTL ? 'التسويات:' : 'Settlements:']);
+          if (settPaid > 0) {
+            data.push(['', isRTL ? 'مدفوعة لشركاء آخرين' : 'Paid to other partners', '', Math.round(settPaid * 100) / 100]);
+          }
+          if (settReceived > 0) {
+            data.push(['', isRTL ? 'مستلمة من شركاء آخرين' : 'Received from other partners', '', Math.round(settReceived * 100) / 100]);
+          }
+        }
+      }
 
       const ws = XLSX.utils.aoa_to_sheet(data);
       ws['!cols'] = colWidths;
 
       const amountCol = 3;
-      for (let r = 3; r < 3 + rows.length; r++) {
+      for (let r = 3; r < data.length; r++) {
         const cellRef = XLSX.utils.encode_cell({ r, c: amountCol });
-        if (ws[cellRef]) {
+        if (ws[cellRef] && typeof ws[cellRef].v === 'number') {
           ws[cellRef].t = 'n';
           ws[cellRef].z = '#,##0.00';
         }
-      }
-      const totalRowIdx = 3 + rows.length + 1;
-      const totalCellRef = XLSX.utils.encode_cell({ r: totalRowIdx, c: amountCol });
-      if (ws[totalCellRef]) {
-        ws[totalCellRef].t = 'n';
-        ws[totalCellRef].z = '#,##0.00';
       }
 
       return ws;
@@ -898,7 +966,8 @@ export function Partners() {
       const sheetName = group.name.substring(0, 31);
       const ws = buildSheet(
         `${isRTL ? 'مصاريف' : 'Expenses'}: ${group.name}`,
-        group.rows
+        group.rows,
+        group.partnerId
       );
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
     });
@@ -911,8 +980,8 @@ export function Partners() {
       XLSX.utils.book_append_sheet(wb, ws, isRTL ? 'بدون شريك' : 'Unassigned');
     }
 
-    if (wb.SheetNames.length === 0) {
-      const ws = XLSX.utils.aoa_to_sheet([[isRTL ? 'لا توجد مصاريف' : 'No expenses']]);
+    if (wb.SheetNames.length === 1) {
+      const ws = XLSX.utils.aoa_to_sheet([[isRTL ? 'لا توجد مصاريف تفصيلية' : 'No detailed expenses']]);
       XLSX.utils.book_append_sheet(wb, ws, isRTL ? 'فارغ' : 'Empty');
     }
 
@@ -1141,57 +1210,73 @@ export function Partners() {
                           <span className="text-xs text-gray-400">{isRTL ? 'المدفوع فعلياً' : 'Actually Paid'}</span>
                         </div>
                         {(() => {
-                          const baseCapital = Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0);
-                          const settPaid = settlementTotals[partner.id]?.paid || 0;
-                          const actualPaid = baseCapital + settPaid;
+                          const actualPaid = partnerTotals[partner.id] || 0;
                           return <p className="text-sm font-bold text-gray-900">{fmt(actualPaid)}</p>;
                         })()}
                       </div>
                       <div className="bg-gray-50 rounded-lg p-2.5">
                         <div className="flex items-center gap-1 mb-0.5">
                           <DollarSign className="w-3 h-3 text-emerald-500" />
-                          <span className="text-xs text-gray-400">{isRTL ? 'الحساب الجاري' : 'Current Acc.'}</span>
+                          <span className="text-xs text-gray-400">{isRTL ? 'الرصيد (قبل التسويات)' : 'Balance (Pre-Settle)'}</span>
                         </div>
                         {(() => {
-                          const baseCapital = Number(account?.capital_contribution ?? partnerTotals[partner.id] ?? 0);
-                          const settPaid = settlementTotals[partner.id]?.paid || 0;
-                          const settReceived = settlementTotals[partner.id]?.received || 0;
-                          const totalWithdrawals = withdrawals
-                            .filter(w => w.partner_id === partner.id)
-                            .reduce((sum, w) => sum + Number(w.amount), 0);
-                          const totalDistributions = distributions
-                            .filter(d => d.partner_id === partner.id)
-                            .reduce((sum, d) => sum + Number(d.amount), 0);
-                          const currentBalance = baseCapital + settReceived - settPaid - totalWithdrawals + totalDistributions;
+                          const actualPaid = partnerTotals[partner.id] || 0;
+                          const expectedShare = totalExpenses * Number(partner.ownership_percentage) / 100;
+                          const balancePreSettlement = actualPaid - expectedShare;
                           return (
-                            <p className={`text-sm font-bold ${currentBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              {currentBalance >= 0 ? '+' : ''}{fmt(currentBalance)}
+                            <p className={`text-sm font-bold ${balancePreSettlement >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {balancePreSettlement >= 0 ? '+' : ''}{fmt(balancePreSettlement)}
                             </p>
                           );
                         })()}
                       </div>
                     </div>
 
-                    {/* Settlement summary row */}
-                    {(settlementTotals[partner.id]?.paid > 0 || settlementTotals[partner.id]?.received > 0) && (
-                      <div className="mt-2 pt-2 border-t border-gray-100">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500">{isRTL ? 'التسويات:' : 'Settlements:'}</span>
-                          <div className="flex items-center gap-3">
-                            {settlementTotals[partner.id]?.paid > 0 && (
-                              <span className="text-red-600">
-                                {isRTL ? 'دفع' : 'Paid'}: {fmt(settlementTotals[partner.id].paid)}
-                              </span>
-                            )}
-                            {settlementTotals[partner.id]?.received > 0 && (
-                              <span className="text-green-600">
-                                {isRTL ? 'استلم' : 'Rcvd'}: {fmt(settlementTotals[partner.id].received)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    {/* Settlement summary and final balance */}
+                    {(() => {
+                      const actualPaid = partnerTotals[partner.id] || 0;
+                      const expectedShare = totalExpenses * Number(partner.ownership_percentage) / 100;
+                      const settPaid = settlementTotals[partner.id]?.paid || 0;
+                      const settReceived = settlementTotals[partner.id]?.received || 0;
+                      const balancePreSettlement = actualPaid - expectedShare;
+                      const finalBalance = balancePreSettlement - settReceived + settPaid;
+                      const hasSettlements = settPaid > 0 || settReceived > 0;
+
+                      return (
+                        <>
+                          {hasSettlements && (
+                            <div className="mt-2 pt-2 border-t border-gray-100">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-500">{isRTL ? 'التسويات:' : 'Settlements:'}</span>
+                                <div className="flex items-center gap-3">
+                                  {settPaid > 0 && (
+                                    <span className="text-red-600">
+                                      {isRTL ? 'دفع' : 'Paid'}: {fmt(settPaid)}
+                                    </span>
+                                  )}
+                                  {settReceived > 0 && (
+                                    <span className="text-green-600">
+                                      {isRTL ? 'استلم' : 'Rcvd'}: {fmt(settReceived)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {hasSettlements && (
+                            <div className="mt-2 pt-2 border-t border-gray-100">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-gray-700">{isRTL ? 'الرصيد النهائي (بعد التسويات):' : 'Final Balance (After Settlements):'}</span>
+                                <span className={`text-sm font-bold ${finalBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                  {finalBalance >= 0 ? '+' : ''}{fmt(finalBalance)}
+                                  <span className="text-xs text-gray-500 mx-1">{finalBalance >= 0 ? (isRTL ? 'له' : 'Due') : (isRTL ? 'عليه' : 'Owes')}</span>
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {/* View operations button */}
                     <button
