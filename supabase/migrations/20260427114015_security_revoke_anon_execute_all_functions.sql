@@ -1,0 +1,286 @@
+/*
+  # Security Fix: Revoke anon EXECUTE on all SECURITY DEFINER functions
+
+  All SECURITY DEFINER functions in public schema should not be callable
+  by the anon role. This migration revokes EXECUTE from anon on every
+  affected function, and also revokes from authenticated where the function
+  is internal (trigger functions, helper utilities not meant for direct RPC calls).
+
+  Functions intentionally callable by authenticated users (RPC endpoints used
+  by the frontend) retain their authenticated EXECUTE grant.
+*/
+
+-- ============================================================
+-- 1. REVOKE anon EXECUTE from ALL affected functions
+-- ============================================================
+
+-- Internal/trigger functions - revoke from both anon AND authenticated
+REVOKE EXECUTE ON FUNCTION public._get_je_net_amount(uuid) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public._refresh_invoice_payment_status(uuid) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public._refresh_purchase_payment_status(uuid) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public._vat_derive_rate(public.vat_category_enum) FROM anon, authenticated;
+
+-- Trigger functions (should never be called via RPC)
+REVOKE EXECUTE ON FUNCTION public.apply_leave_approval() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.auto_create_purchase_receipt_journal() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.auto_post_expense_entry() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.calculate_base_currency_amounts() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.calculate_commission_on_sale() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.calculate_sale_commission() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.check_period_lock() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.compute_operating_expense_vat() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.compute_partner_contribution_vat() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.compute_purchase_item_vat() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.compute_setup_expense_vat() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.create_expense_from_partner_contribution() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.create_expense_on_payroll_posted() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.create_journal_entry_on_payroll_paid() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.create_product_costing_on_insert() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.deduct_wastage_from_inventory() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.enforce_optimistic_lock() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.enforce_strict_balance() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.ensure_optimistic_lock() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_audit_trigger() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_auto_audit_log() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_auto_create_employee_for_user() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_guard_sale_immutability() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_period_lock_journal_lines() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_period_lock_purchases() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_period_lock_sales() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_refresh_gl_monthly_balances() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_sync_user_changes_to_employee() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.fn_zatca_stamp_invoice() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_cash_transactions_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_expenses_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_inventory_movements_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_operating_expenses_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_partner_contributions_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_partner_settlements_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_purchase_items_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_purchases_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_sale_items_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_sales_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.freeze_setup_expenses_financials() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.generate_custody_number() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.generate_entry_number() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.generate_expense_number() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.generate_journal_entry_number() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.generate_shift_number() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.generate_wastage_number() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.guard_finalize_reconciliation() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.guard_finalized_reconciliation() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.guard_invoice_payment_allocation() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.guard_purchase_payment_allocation() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.guard_reconciliation_match() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.handle_sale_status_change() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.increment_version() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.initialize_new_branch_stock() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.log_audit_trail() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.post_operating_expense_gl() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.prevent_closed_period_modifications() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.prevent_commission_delete() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.prevent_financial_delete() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.prevent_hard_delete_allocation() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.prevent_hard_delete_recon() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.prevent_self_branch_change() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.prevent_terminated_employee_salary() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.process_sale_inventory_out() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_audit_logs() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_cash_transactions_closed_periods() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_closed_periods() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_expenses_closed_periods() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_journal_entries_closed_periods() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_posted_entries() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_posted_entry_lines() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_purchases_closed_periods() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.protect_sales_closed_periods() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.recalculate_loyalty_on_sale_change() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.recalculate_payroll_totals() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_expense_cash_movement() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_sale_cash_movement() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_vat_tx_from_operating_expense() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_vat_tx_from_partner_contribution() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_vat_tx_from_purchase() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_vat_tx_from_sale() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_vat_tx_from_setup_expense() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.restore_wastage_to_inventory() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.set_commission_branch_id() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.set_purchase_item_branch_id() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.set_sale_item_branch_id() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.set_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.sync_bsl_is_matched() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.sync_costing_from_inventory() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.sync_inventory_from_costing() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.sync_salla_order_to_inventory() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.touch_cfm_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.touch_updated_at_bank_recon() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.trg_partner_settlement_post_gl() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.trg_setup_expense_post_gl() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_branch_settings_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_cash_shifts_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_companies_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_custody_totals() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_customer_classification_tags() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_customer_metrics_on_sale() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_customer_metrics_on_sale_change() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_customer_stats_after_sale() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_employees_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_hr_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_moving_average_on_purchase() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_sale_profit_trigger() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_salla_orders_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_settings_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_updated_at_column() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_users_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.validate_partner_ownership_total() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.void_commission_on_sale_cancel() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.void_sale_commission() FROM anon, authenticated;
+
+-- ============================================================
+-- 2. REVOKE anon only from RPC functions (keep authenticated)
+-- ============================================================
+
+REVOKE EXECUTE ON FUNCTION public.add_custody_settlement_atomic(uuid, text, numeric, text, text, text, date, text, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.add_loyalty_points_transaction(uuid, uuid, integer, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.allocate_customer_payment(uuid, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.allocate_supplier_payment(uuid, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.approve_payroll_run(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.assign_branch_to_user(uuid, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.auto_match_bank_transactions(uuid, date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.auto_post_cogs_on_sale(uuid, uuid, uuid, numeric, date, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_customer_tier(numeric, integer, timestamptz) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_customer_tier(numeric, integer, integer) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_end_of_service(uuid, date, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_monthly_depreciation(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_sale_profit(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_salla_sales(date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_shift_expected_balance(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_valid_loyalty_points(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.calculate_wastage_cost(date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.cancel_draft_payroll_run(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.check_user_permission(text, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.create_employee_custody_atomic(uuid, uuid, numeric, text, uuid, text, text, text, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.create_payroll_run(integer, integer, uuid, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.create_purchase_receipt_journal_entry(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.create_sale_atomic(jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.create_sale_journal_entry_test(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.delete_draft_payroll_run(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.execute_sql_as_admin(text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.finalize_bank_reconciliation(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fix_customer_metrics_for_existing_data() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_add_user_to_company(uuid, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_can_bypass_period_lock() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_can_manage_company_data(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_check_period_open(date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_cleanup_old_errors(integer) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_close_accounting_period(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_create_company(text, text, text, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_distribute_monthly_profit(integer, integer, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_enqueue_zatca_retry(uuid, text, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_alerts(text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_audit_summary(date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_company_from_branch(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_error_stats(integer) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_locked_period_name(date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_my_role() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_user_company_id() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_user_company_ids() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_get_user_company_role(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_is_admin_or_super() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_is_company_admin(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_is_company_manager(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_is_current_user_super_admin() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_is_period_locked(date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_is_period_locked_for_user(date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_is_super_admin() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_log_audit(text, text, uuid, jsonb, jsonb, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_log_closed_period_modification(text, uuid, text, jsonb, jsonb, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_log_error(text, text, text, text, text, text, text, text, jsonb, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_next_invoice_number(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_record_partner_withdrawal(uuid, numeric, text, text, text, date, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_remove_user_from_company(uuid, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_renew_iqama(uuid, integer, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_reopen_accounting_period(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_resolve_error(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_super_admin_update_setup_expense(uuid, numeric, date, text, text, text, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_switch_primary_company(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_update_company_member_role(uuid, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_update_zatca_hash(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_user_has_branch_access(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.fn_user_has_company_access(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.generate_depreciation_entries(date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.generate_payroll_run(uuid, integer, integer) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_active_compensation_plan(uuid, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_ap_aging(uuid, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_ar_aging(uuid, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_auth_email_by_user_id(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_balance_sheet(uuid, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_balance_sheet_v2(uuid, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_bank_reconciliation_summary(uuid, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_branch_stock_summary(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_cash_flow_statement(uuid, date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_consolidated_sales_summary(date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_db_health_report() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_dso(uuid, date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_employee_open_custodies(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_financial_summary(date, date, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_financial_summary_secure(date, date, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_gl_monthly_balances(uuid, date, date, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_income_statement(uuid, date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_income_statement_v2(uuid, date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_my_role() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_open_cash_register() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_register_current_balance(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_total_depreciation_for_period(date, date, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_trial_balance(uuid, date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_trial_balance(date, date, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_trial_balance_v2(uuid, date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_user_branch_id() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_user_permissions(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_user_role() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_vat_summary(uuid, integer, integer) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.import_bank_statement(uuid, date, date, numeric, numeric, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.initialize_branch_onboarding() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.is_super_admin() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.log_security_event(text, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.manual_match_bank_transaction(uuid, uuid, numeric, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.pay_payroll_run(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.perform_atomic_restore(jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.post_partner_operation_atomic(jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.post_partner_settlement_atomic(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.process_purchase_receipt_atomic(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.recalculate_all_customer_metrics() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.recalculate_all_customer_stats() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.recalculate_all_valid_loyalty_points() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.safe_delete_user(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.settle_vat_period(uuid, integer, integer, text, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.test_partner_operation_integrity(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.test_purchase_receipt_integrity(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.trusted_change_purchase_status(uuid, text, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.trusted_change_sale_status(uuid, text, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.trusted_void_expense(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.trusted_void_operating_expense(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.trusted_void_purchase(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.trusted_void_sale(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.trusted_void_setup_expense(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.unmatch_bank_transaction(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.update_purchase_status(uuid, text, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.update_sale_status(uuid, text, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.update_setup_expense_amount(uuid, numeric) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.upsert_user_permissions(uuid, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.validate_restore_readiness() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.verify_gl_balance(uuid, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_expense(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_invoice_payment(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_journal_entry(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_operating_expense(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_partner_operation_atomic(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_partner_settlement(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_purchase(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_purchase_payment(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_sale(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.void_setup_expense(uuid, text) FROM anon;
+
+-- lookup_auth_email_by_username is needed for login flow - keep anon for this one
+-- but revoke all others that are truly internal
+REVOKE EXECUTE ON FUNCTION public.fn_log_error(text, text, text, text, text, text, text, text, jsonb, jsonb) FROM anon;

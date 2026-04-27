@@ -111,6 +111,7 @@ export function Partners() {
   const [inlineEditDescAr, setInlineEditDescAr] = useState('');
   const [inlineEditAmount, setInlineEditAmount] = useState('');
   const [inlineEditType, setInlineEditType] = useState('');
+  const [inlineEditPartnerId, setInlineEditPartnerId] = useState('');
   const [inlineEditSaving, setInlineEditSaving] = useState(false);
   const [voidSettlementConfirm, setVoidSettlementConfirm] = useState<string | null>(null);
 
@@ -703,6 +704,7 @@ export function Partners() {
     setInlineEditDescAr(expense.description_ar || '');
     setInlineEditAmount(String(expense.amount));
     setInlineEditType(expense.expense_type || 'capital');
+    setInlineEditPartnerId(expense.partner_id || '');
     setEditingExpenseDateId(null);
     setEditingExpenseDateVal('');
   };
@@ -714,6 +716,7 @@ export function Partners() {
     setInlineEditDescAr('');
     setInlineEditAmount('');
     setInlineEditType('');
+    setInlineEditPartnerId('');
     setInlineEditSaving(false);
   };
 
@@ -739,6 +742,7 @@ export function Partners() {
           description: inlineEditDesc,
           description_ar: inlineEditDescAr,
           expense_type: inlineEditType,
+          partner_id: inlineEditPartnerId || null,
         })
         .eq('id', inlineEditId);
       if (descErr) throw descErr;
@@ -1739,7 +1743,24 @@ export function Partners() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-sm font-medium">{p ? (isRTL ? p.name_ar : p.name) : '-'}</td>
+                      <td className="px-4 py-2.5 text-sm font-medium">
+                        {isEditing ? (
+                          <select
+                            value={inlineEditPartnerId}
+                            onChange={e => setInlineEditPartnerId(e.target.value)}
+                            className="border border-blue-300 rounded px-1.5 py-1 text-xs w-full focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                          >
+                            <option value="">{isRTL ? '— بدون —' : '— None —'}</option>
+                            {partners.filter(pp => pp.is_active).map(pp => (
+                              <option key={pp.id} value={pp.id}>
+                                {isRTL ? pp.name_ar : pp.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          p ? (isRTL ? p.name_ar : p.name) : '-'
+                        )}
+                      </td>
                       <td className="px-4 py-2.5">
                         {isEditing ? (
                           <select
